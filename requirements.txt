@@ -1,0 +1,9 @@
+feedparser
+argon2-cffi
+beautifulsoup4 
+selenium 
+webdriver-manager 
+playwright 
+cloudscraper 
+nest_asyncio 
+tabulate
