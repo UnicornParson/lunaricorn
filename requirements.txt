@@ -7,3 +7,4 @@ playwright
 cloudscraper 
 nest_asyncio 
 tabulate
+markdownify

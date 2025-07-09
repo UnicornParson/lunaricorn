@@ -1,0 +1,12 @@
+libatk1.0-0
+libnss3-dev
+libatk-bridge2.0-0
+libcups2
+libgbm1
+libpangocairo-1.0-0
+libgtk-3-0
+libxshmfence1
+libasound2
+libxcomposite1
+libxdamage1
+libxi6
