@@ -1,0 +1,6 @@
+discover:
+  alive_timeout: 10
+  required_nodes:
+    - "sinaling"
+    - "orb"
+    - "state_storage"
