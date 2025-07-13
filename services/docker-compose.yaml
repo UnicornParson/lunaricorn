@@ -1,0 +1,51 @@
+services:
+  leader:
+    build:
+      context: ./leader
+      dockerfile: Dockerfile
+    container_name: lunaricorn-leader
+    ports:
+      - "8001:8000"
+    volumes:
+      - ${LUNARICORN_HOME}/leader_data:/opt/lunaricorn/leader_data
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - lunaricorn-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  portal:
+    build:
+      context: ./portal
+      dockerfile: Dockerfile
+    container_name: lunaricorn-portal
+    ports:
+      - "8002:8000"
+    volumes:
+      - ${LUNARICORN_HOME}/portal_data:/opt/lunaricorn/portal_data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CLUSTER_LEADER_URL=http://leader:8000/v1
+    networks:
+      - lunaricorn-network
+    depends_on:
+      leader:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  lunaricorn-network:
+    driver: bridge
+    name: lunaricorn-network

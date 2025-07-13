@@ -5,8 +5,71 @@ import uvicorn
 import logging
 from fastapi.responses import FileResponse, JSONResponse
 from datetime import datetime
+import yaml
+from api.cluster import ClusterEngine
+import asyncio
+import threading
+import time
+import signal
+import sys
+import os
+from pathlib import Path
 
-logger = logging.getLogger(__name__)
+
+# Initialize logging system
+def setup_logging():
+    """Initialize logging system with file and console handlers"""
+    # Create logs directory
+    logs_dir = Path("/opt/lunaricorn/portal_data/logs")
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Configure root logger
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    # Clear any existing handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
+    # Create formatters
+    detailed_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s - %(message)s'
+    )
+    simple_formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s'
+    )
+    
+    # File handler with rotation (10MB max size, keep 5 backup files)
+    file_handler = logging.handlers.RotatingFileHandler(
+        logs_dir / "portal_api.log",
+        maxBytes=100*1024*1024,  # 100 MB
+        backupCount=10,
+        encoding='utf-8'
+    )
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(detailed_formatter)
+    
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(simple_formatter)
+    
+    # Add handlers to root logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    # Create specific logger for this application
+    app_logger = logging.getLogger("portal_api")
+    app_logger.info("Logging system initialized")
+    
+    return app_logger
+
+# Initialize logging
+logger = setup_logging()
+
+# Global shutdown flag for graceful termination
+shutdown_event = threading.Event()
+retry_thread = None
 
 app = FastAPI()
 
@@ -18,7 +81,7 @@ app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 async def root():
     """Serve the main HTML page"""
     return FileResponse("static/index.html")
-    
+
 @app.get("/favicon.ico", tags=["Root"])
 async def favicon():
     return FileResponse("static/favicon.ico")
@@ -48,12 +111,111 @@ async def internal_error_handler(request: Request, exc):
         content={"detail": f"Internal server error: {request.url.path}"}
     )
 
+def load_config():
+    with open("cfg/config.yaml", "r") as f:
+        config = yaml.safe_load(f)
+    
+    # Check for environment variable override for cluster leader
+    env_leader_url = os.environ.get('CLUSTER_LEADER_URL')
+    if env_leader_url:
+        logger.info(f"Using environment variable CLUSTER_LEADER_URL: {env_leader_url}")
+        if 'cluster' not in config:
+            config['cluster'] = {}
+        config['cluster']['leader'] = env_leader_url
+    else:
+        logger.info("Using cluster leader URL from config file")
+    
+    return config
+
+def init_components(config):
+    ClusterEngine.config = config
+    try:
+        ClusterEngine.cluster = ClusterEngine()
+        logger.info("Portal components initialized successfully")
+        return True
+    except Exception as e:
+        logger.info(f"Failed to initialize cluster connection: {e}. Portal will operate in standalone mode.")
+        ClusterEngine.cluster = None
+        return False
+
+def retry_cluster_connection():
+    """Background thread function to retry cluster connection every 2 seconds"""
+    global shutdown_event
+    while not shutdown_event.is_set():
+        try:
+            if ClusterEngine.cluster is None:
+                logger.info("Retrying cluster connection...")
+                ClusterEngine.cluster = ClusterEngine()
+                logger.info("Cluster connection established successfully after retry")
+                break
+            else:
+                # Cluster is already connected, no need to retry
+                break
+        except Exception as e:
+            logger.info(f"Cluster connection retry failed: {e}. Will retry in 2 seconds.")
+            # Check for shutdown every 0.5 seconds during sleep
+            for _ in range(4):  # 2 seconds / 0.5 seconds = 4 checks
+                if shutdown_event.is_set():
+                    logger.info("Shutdown detected, stopping retry thread")
+                    return
+                time.sleep(0.5)
+    
+    if shutdown_event.is_set():
+        logger.info("Shutdown detected, stopping retry thread")
+    else:
+        logger.info("Cluster connection established, retry thread stopping")
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    global shutdown_event, retry_thread
+    logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+    shutdown_event.set()
+    
+    # Wait for retry thread to finish (max 5 seconds)
+    if retry_thread and retry_thread.is_alive():
+        logger.info("Waiting for retry thread to finish...")
+        retry_thread.join(timeout=5)
+        if retry_thread.is_alive():
+            logger.warning("Retry thread did not finish within timeout")
+    
+    logger.info("Graceful shutdown completed")
+    sys.exit(0)
+
 if __name__ == "__main__":
     logger.info("Starting Portal API with uvicorn")
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    
+    # Set up signal handlers for graceful shutdown
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    # Initialize components
+    config = load_config()
+    init_success = init_components(config)
+    
+    # If initial initialization failed, start retry thread
+    if not init_success:
+        logger.info("Starting background retry thread for cluster connection")
+        retry_thread = threading.Thread(target=retry_cluster_connection, daemon=True)
+        retry_thread.start()
+    
+    try:
+        
+
+        portal_config = config.get("portal", {})
+        host = portal_config.get("host", "0.0.0.0")
+        port = portal_config.get("port", 8000)
+
+        # Run uvicorn with values from config.yaml
+        uvicorn.run(
+            "main:app",
+            host=host,
+            port=port,
+            reload=True,
+            log_level="info"
+        )
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt, shutting down...")
+        signal_handler(signal.SIGINT, None)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        signal_handler(signal.SIGTERM, None)

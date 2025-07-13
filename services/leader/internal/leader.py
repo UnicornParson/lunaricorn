@@ -81,3 +81,19 @@ class Leader:
         if not self.ready():
             raise NotReadyException("Leader is not ready to start")
         return self._get_alive()
+
+    def detailed_status(self):
+        alive_nodes = self.get_active_nodes()
+        required_nodes = self._get_required_nodes()
+        
+        # Get names of alive nodes
+        alive_node_names = {node['name'] for node in alive_nodes}
+        nodes_summary = {}
+        for node in required_nodes:
+            nodes_summary[node['name']] = "off"
+        for node in alive_node_names:
+            nodes_summary[node['name']] = "on"
+        return {
+            "nodes_summary": nodes_summary,
+            "required_nodes": {node['name'] for node in required_nodes},
+        }

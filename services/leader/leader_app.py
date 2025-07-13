@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uvicorn
@@ -11,9 +12,67 @@ from pathlib import Path
 import logging
 import logging.handlers
 import sys
-from internal import *
+from contextlib import asynccontextmanager
+from internal.leader import Leader, NotReadyException
 
 leader = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown"""
+    # Startup
+    logger.info("Starting Leader API service")
+    
+    initial_data_path = Path("/opt/lunaricorn/leader/app/initial_data")
+    target_data_path = Path("/opt/lunaricorn/leader_data")
+    
+    # Create target directory if it doesn't exist
+    target_data_path.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Ensured target data directory exists: {target_data_path}")
+    
+    # Check if initial data directory exists
+    if not initial_data_path.exists():
+        logger.warning(f"Initial data directory {initial_data_path} does not exist")
+    else:
+        logger.info(f"Checking initial data in {initial_data_path}")
+        logger.info(f"Target data directory: {target_data_path}")
+        
+        # Copy files and directories recursively
+        copied_count = 0
+        skipped_count = 0
+        
+        for item in initial_data_path.rglob("*"):
+            if item.is_file():
+                # Calculate relative path from initial_data directory
+                relative_path = item.relative_to(initial_data_path)
+                target_file = target_data_path / relative_path
+                
+                # Create parent directories if they don't exist
+                target_file.parent.mkdir(parents=True, exist_ok=True)
+                
+                # Copy file only if it doesn't exist in target
+                if not target_file.exists():
+                    try:
+                        shutil.copy2(item, target_file)
+                        logger.info(f"Copied: {relative_path}")
+                        copied_count += 1
+                    except Exception as e:
+                        logger.error(f"Error copying {relative_path}: {e}")
+                else:
+                    logger.debug(f"Skipped (exists): {relative_path}")
+                    skipped_count += 1
+        
+        logger.info(f"Startup complete: {copied_count} files copied, {skipped_count} files skipped")
+    
+    logger.info("Leader API service started successfully")
+    global leader
+    leader = Leader()
+    logger.info("Leader initialized")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down Leader API service")
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -21,7 +80,8 @@ app = FastAPI(
     description="API for service discovery and health monitoring",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan
 )
 
 # Add CORS middleware
@@ -99,60 +159,7 @@ class DiscoverRequest(BaseModel):
     """Model for /v1/discover endpoint - service discovery query"""
     query: str = Field(..., description="Discovery query string")
 
-# Startup event handler
-@app.on_event("startup")
-async def startup_event():
-    """
-    Startup event handler that copies initial data to the data directory
-    without overwriting existing files.
-    """
-    logger.info("Starting Leader API service")
-    
-    initial_data_path = Path("/opt/lunaricorn/leader/app/initial_data")
-    target_data_path = Path("/opt/lunaricorn/leader_data")
-    
-    # Create target directory if it doesn't exist
-    target_data_path.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Ensured target data directory exists: {target_data_path}")
-    
-    # Check if initial data directory exists
-    if not initial_data_path.exists():
-        logger.warning(f"Initial data directory {initial_data_path} does not exist")
-        return
-    
-    logger.info(f"Checking initial data in {initial_data_path}")
-    logger.info(f"Target data directory: {target_data_path}")
-    
-    # Copy files and directories recursively
-    copied_count = 0
-    skipped_count = 0
-    
-    for item in initial_data_path.rglob("*"):
-        if item.is_file():
-            # Calculate relative path from initial_data directory
-            relative_path = item.relative_to(initial_data_path)
-            target_file = target_data_path / relative_path
-            
-            # Create parent directories if they don't exist
-            target_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Copy file only if it doesn't exist in target
-            if not target_file.exists():
-                try:
-                    shutil.copy2(item, target_file)
-                    logger.info(f"Copied: {relative_path}")
-                    copied_count += 1
-                except Exception as e:
-                    logger.error(f"Error copying {relative_path}: {e}")
-            else:
-                logger.debug(f"Skipped (exists): {relative_path}")
-                skipped_count += 1
-    
-    logger.info(f"Startup complete: {copied_count} files copied, {skipped_count} files skipped")
-    logger.info("Leader API service started successfully")
-    global leader
-    leader = Leader()
-    logger.info("Leader initialized")
+
 
 # API Endpoints
 
@@ -260,6 +267,17 @@ async def discover_services(request: DiscoverRequest):
     logger.debug(f"Discover services response: {response}")
     return response
 
+@app.get("/v1/clusterinfo", tags=["Environment"])
+async def get_cluster_info():
+    """
+    Get cluster information.
+    """
+    logger.info("Received request for cluster information")
+    if leader is None:
+        logger.error("Leader is not ready to start")
+        raise HTTPException(status_code=500, detail="Leader is not ready to start")
+    return leader.detailed_status()
+
 @app.get("/v1/getenv", tags=["Environment"])
 async def get_environment():
     """
@@ -304,18 +322,22 @@ async def health_check():
     logger.debug("Health check endpoint accessed")
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
-# Error handlers
-@app.exception_handler(404)
-async def not_found_handler(request, exc):
-    """Custom 404 error handler"""
-    logger.warning(f"404 error for path: {request.url.path}")
-    return {"detail": "Resource not found"}
-
-@app.exception_handler(500)
-async def internal_error_handler(request, exc):
-    """Custom 500 error handler"""
-    logger.error(f"500 error for path: {request.url.path}, error: {exc}")
-    return {"detail": "Internal server error"}
+@app.get("/v1", tags=["API"])
+async def api_root():
+    """API root endpoint"""
+    logger.debug("API root endpoint accessed")
+    return {
+        "message": "Leader API v1",
+        "version": "1.0.0",
+        "endpoints": {
+            "imalive": "/v1/imalive",
+            "list": "/v1/list", 
+            "discover": "/v1/discover",
+            "getenv": "/v1/getenv",
+            "clusterinfo": "/v1/clusterinfo"
+        },
+        "status": "healthy"
+    }
 
 # Run the application
 if __name__ == "__main__":
@@ -323,7 +345,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "leader_app:app",
         host="0.0.0.0",
-        port=8000,
+        port=8001,
         reload=True,
         log_level="info"
     )

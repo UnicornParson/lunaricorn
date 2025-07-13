@@ -537,3 +537,45 @@ button:focus,
 .warning {
     color: #ffd93d;
 }
+
+/* Animated shimmering mist glow for Lunaricorn text */
+.lunaricorn-glow-text {
+    position: relative;
+    color: var(--unicorn-horn);
+    z-index: 1;
+    /* fallback for browsers with no pseudo support */
+}
+
+.lunaricorn-glow-text::before {
+    content: '';
+    position: absolute;
+    left: -20%;
+    top: -40%;
+    width: 140%;
+    height: 180%;
+    pointer-events: none;
+    z-index: -1;
+    background: radial-gradient(ellipse at 40% 40%, rgba(110,240,255,0.25) 0%, rgba(195,161,255,0.18) 40%, rgba(186,129,255,0.10) 70%, transparent 100%);
+    opacity: 0.85;
+    filter: blur(8px);
+    animation: mist-glow-move 3.5s linear infinite alternate;
+}
+
+@keyframes mist-glow-move {
+    0% {
+        transform: translateX(0px) translateY(0px) scale(1,1);
+        opacity: 0.7;
+    }
+    40% {
+        transform: translateX(4px) translateY(-2px) scale(1.04,1.02);
+        opacity: 0.9;
+    }
+    60% {
+        transform: translateX(-3px) translateY(3px) scale(1.02,1.05);
+        opacity: 0.8;
+    }
+    100% {
+        transform: translateX(2px) translateY(-1px) scale(1.06,1.03);
+        opacity: 0.7;
+    }
+}

@@ -1,5 +1,5 @@
 cluster:
-  leader: http://localhost:8000/v1
+  leader: http://localhost:8001/v1
 
 portal:
   name: "portal"

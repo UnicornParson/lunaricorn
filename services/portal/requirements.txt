@@ -3,3 +3,13 @@ uvicorn[standard]
 pydantic
 python-multipart
 pyyaml
+feedparser
+requests
+beautifulsoup4
+selenium
+webdriver-manager
+playwright
+cloudscraper
+tabulate
+argon2-cffi
+markdownify

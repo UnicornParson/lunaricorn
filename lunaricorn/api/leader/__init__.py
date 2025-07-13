@@ -1,3 +1,3 @@
 from .connector import *
 
-__all__ = ["LeaderConnector"]
+__all__ = ["LeaderConnector", "ConnectorUtils"]

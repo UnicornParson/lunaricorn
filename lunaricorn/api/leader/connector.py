@@ -279,6 +279,19 @@ class LeaderConnector:
             logger.error(f"Failed to get environment: {e}")
             raise
     
+    def get_cluster_info(self) -> Dict:
+        """
+        Get detailed cluster information.
+        
+        Returns:
+            Detailed cluster status and information
+        """
+        try:
+            return self._make_request('GET', '/v1/clusterinfo')
+        except Exception as e:
+            logger.error(f"Failed to get cluster info: {e}")
+            raise
+    
     def is_ready(self) -> bool:
         """
         Check if the leader service is ready to handle requests.
@@ -389,31 +402,29 @@ class LeaderConnector:
             self.session.close()
         logger.info("LeaderConnector closed")
 
-# Convenience functions for common operations
-def create_leader_connector(base_url: str = "http://localhost:8001") -> LeaderConnector:
-    """
-    Create a new LeaderConnector instance.
-    
-    Args:
-        base_url: Base URL of the leader API
-        
-    Returns:
-        LeaderConnector instance
-    """
-    return LeaderConnector(base_url)
+class ConnectorUtils:
+    @staticmethod
+    def create_leader_connector(base_url: str = "http://localhost:8001") -> LeaderConnector:
+        return LeaderConnector(base_url)
 
-def quick_health_check(base_url: str = "http://localhost:8001") -> bool:
-    """
-    Quick health check of the leader service.
-    
-    Args:
-        base_url: Base URL of the leader API
-        
-    Returns:
-        True if healthy, False otherwise
-    """
-    try:
-        connector = LeaderConnector(base_url)
-        return connector.is_ready()
-    except Exception:
-        return False
+    @staticmethod
+    def quick_health_check(base_url: str = "http://localhost:8001") -> bool:
+        try:
+            connector = LeaderConnector(base_url)
+            return connector.is_ready()
+        except Exception:
+            return False
+
+    @staticmethod
+    def test_connection(base_url: str = "http://localhost:8001") -> bool:
+        try:
+            if not base_url:
+                return False
+            # Try to send a GET request to the base_url using requests
+            response = requests.get(base_url, timeout=5)
+            # Consider connection successful if status code is 200
+            return response.status_code == 200
+        except Exception as e:
+            # Log the exception if needed
+            logger.error(f"Failed to connect to {base_url}: {e}")
+            return False

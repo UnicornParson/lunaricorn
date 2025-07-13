@@ -15,8 +15,12 @@
             <aside class="sidebar" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
                 <div class="sidebar-header">
                     <div class="logo">
-                        <i class="fas fa-moon"></i>
-                        <span v-if="!sidebarCollapsed">Lunaricorn</span>
+                        <i class="fas fa-moon" :style="{ color: clusterReady ? '#6ef0ff' : '#e74c3c' }"></i>
+                        <!-- Animated shimmering translucent mist glow for the Lunaricorn logo text -->
+                        <span 
+                            v-if="!sidebarCollapsed" 
+                            class="lunaricorn-glow-text"
+                        >Lunaricorn</span>
                     </div>
                     <button class="sidebar-toggle" @click="toggleSidebar">
                         <i class="fas fa-bars"></i>
