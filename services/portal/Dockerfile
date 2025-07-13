@@ -4,37 +4,33 @@ FROM python:3.13.5
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 USER root
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt update && apt install -y \
     gcc \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create necessary directories
-RUN mkdir -p /opt/lunaricorn/leader_data/logs \
-    && mkdir -p /opt/lunaricorn/leader/app/initial_data
+RUN mkdir -p /opt/lunaricorn/portal/logs
+COPY cfg/config.yaml /opt/lunaricorn/portal/data/config.yaml
+COPY requirements.txt /opt/lunaricorn/portal/app/   
 
-# Copy requirements file
-COPY requirements.txt /opt/lunaricorn/leader/app/
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r /opt/lunaricorn/leader/app/requirements.txt
+RUN pip install --no-cache-dir -r /opt/lunaricorn/portal/app/requirements.txt
 
 # Copy application code to the specified directory
-COPY . /opt/lunaricorn/leader/app/
-
+COPY . /opt/lunaricorn/portal/app/
+ADD tmp/lunaricorn.tgz /opt/lunaricorn/portal/app
+RUN ls -la /opt/lunaricorn/portal/app/lunaricorn
 # Set working directory to the application directory
-WORKDIR /opt/lunaricorn/leader/app
+WORKDIR /opt/lunaricorn/portal/app
 
 # Expose port
 EXPOSE 8000
 
 # Set volume for persistent data
-VOLUME ["/opt/lunaricorn/leader_data"]
+VOLUME ["/opt/lunaricorn/portal/data"]
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the application
-CMD ["python", "leader_app.py"]
+CMD ["python", "main.py"]

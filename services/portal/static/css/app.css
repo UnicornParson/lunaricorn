@@ -1,0 +1,539 @@
+/* Cosmic Color Palette Variables */
+:root {
+    --deep-cosmic: #0a0a14;
+    --nebula-layer: #121226;
+    --lunar-silver: #d0d7ff;
+    --unicorn-horn: #b381ff;
+    --stardust-spark: #6ef0ff;
+    --midnight-velvet: #1e1e3a;
+    --galaxy-edge: #2a1b52;
+    --mystic-lavender: #c9a1ff;
+    --crater-gray: #8a8ab0;
+}
+
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--deep-cosmic);
+    color: var(--lunar-silver);
+    overflow-x: hidden;
+}
+
+/* Dashboard Layout */
+.dashboard {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Sidebar Styles */
+.sidebar {
+    width: 280px;
+    background: var(--nebula-layer);
+    border-right: 1px solid var(--galaxy-edge);
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease;
+    position: relative;
+    z-index: 1000;
+}
+
+.sidebar-collapsed {
+    width: 70px;
+}
+
+.sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--galaxy-edge);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--unicorn-horn);
+}
+
+.logo i {
+    font-size: 1.8rem;
+    color: var(--stardust-spark);
+}
+
+.sidebar-toggle {
+    background: none;
+    border: none;
+    color: var(--lunar-silver);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.sidebar-toggle:hover {
+    background: var(--midnight-velvet);
+    color: var(--stardust-spark);
+}
+
+/* Navigation */
+.sidebar-nav {
+    flex: 1;
+    padding: 20px 0;
+}
+
+.nav-list {
+    list-style: none;
+}
+
+.nav-item {
+    margin-bottom: 4px;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    color: var(--lunar-silver);
+    text-decoration: none;
+    transition: all 0.3s ease;
+    border-left: 3px solid transparent;
+}
+
+.nav-link:hover {
+    background: var(--midnight-velvet);
+    color: var(--stardust-spark);
+    border-left-color: var(--stardust-spark);
+}
+
+.nav-link.active {
+    background: var(--midnight-velvet);
+    color: var(--unicorn-horn);
+    border-left-color: var(--unicorn-horn);
+}
+
+.nav-link i {
+    font-size: 1.1rem;
+    width: 20px;
+    text-align: center;
+}
+
+/* Sidebar Footer */
+.sidebar-footer {
+    padding: 20px;
+    border-top: 1px solid var(--galaxy-edge);
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 15px;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    background: var(--unicorn-horn);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--deep-cosmic);
+    font-size: 1.2rem;
+}
+
+.user-details {
+    flex: 1;
+}
+
+.user-name {
+    font-weight: 600;
+    color: var(--lunar-silver);
+    font-size: 0.9rem;
+}
+
+.user-role {
+    color: var(--crater-gray);
+    font-size: 0.8rem;
+}
+
+.logout-btn {
+    width: 100%;
+    background: none;
+    border: 1px solid var(--galaxy-edge);
+    color: var(--lunar-silver);
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+.logout-btn:hover {
+    background: var(--midnight-velvet);
+    border-color: var(--unicorn-horn);
+    color: var(--unicorn-horn);
+}
+
+/* Main Content */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--deep-cosmic);
+}
+
+/* Top Header */
+.top-header {
+    background: var(--nebula-layer);
+    border-bottom: 1px solid var(--galaxy-edge);
+    padding: 20px 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.page-title {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: var(--lunar-silver);
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.action-btn {
+    background: none;
+    border: none;
+    color: var(--lunar-silver);
+    font-size: 1.1rem;
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.action-btn:hover {
+    background: var(--midnight-velvet);
+    color: var(--stardust-spark);
+}
+
+.notification-badge {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: var(--unicorn-horn);
+    color: var(--deep-cosmic);
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: bold;
+}
+
+/* Content Area */
+.content-area {
+    flex: 1;
+    padding: 30px;
+    overflow-y: auto;
+}
+
+/* Dashboard Overview */
+.dashboard-overview {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.stat-card {
+    background: var(--nebula-layer);
+    border: 1px solid var(--galaxy-edge);
+    border-radius: 12px;
+    padding: 25px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    border-color: var(--unicorn-horn);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(179, 129, 255, 0.15);
+}
+
+.stat-icon {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, var(--unicorn-horn), var(--stardust-spark));
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: var(--deep-cosmic);
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    color: var(--lunar-silver);
+    margin-bottom: 5px;
+}
+
+.stat-label {
+    color: var(--crater-gray);
+    font-size: 0.9rem;
+}
+
+/* Dashboard Widgets */
+.dashboard-widgets {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 30px;
+}
+
+.widget {
+    background: var(--nebula-layer);
+    border: 1px solid var(--galaxy-edge);
+    border-radius: 12px;
+    padding: 25px;
+}
+
+.widget-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--lunar-silver);
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--galaxy-edge);
+    padding-bottom: 10px;
+}
+
+/* Activity List */
+.activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.activity-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    background: var(--midnight-velvet);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.activity-item:hover {
+    background: var(--galaxy-edge);
+}
+
+.activity-icon {
+    width: 40px;
+    height: 40px;
+    background: var(--unicorn-horn);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--deep-cosmic);
+    font-size: 1rem;
+}
+
+.activity-content {
+    flex: 1;
+}
+
+.activity-text {
+    color: var(--lunar-silver);
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+.activity-time {
+    color: var(--crater-gray);
+    font-size: 0.8rem;
+}
+
+/* Status List */
+.status-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.status-label {
+    min-width: 100px;
+    color: var(--lunar-silver);
+    font-weight: 500;
+}
+
+.status-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--midnight-velvet);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.status-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--unicorn-horn), var(--stardust-spark));
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.status-value {
+    min-width: 50px;
+    text-align: right;
+    color: var(--stardust-spark);
+    font-weight: 600;
+}
+
+/* Page Content */
+.page-content {
+    background: var(--nebula-layer);
+    border: 1px solid var(--galaxy-edge);
+    border-radius: 12px;
+    padding: 30px;
+}
+
+.page-content h2 {
+    color: var(--lunar-silver);
+    margin-bottom: 20px;
+}
+
+.page-content p {
+    color: var(--crater-gray);
+    line-height: 1.6;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        left: -280px;
+        height: 100vh;
+        z-index: 1000;
+    }
+    
+    .sidebar-collapsed {
+        left: 0;
+        width: 280px;
+    }
+    
+    .main-content {
+        margin-left: 0;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .dashboard-widgets {
+        grid-template-columns: 1fr;
+    }
+    
+    .top-header {
+        padding: 15px 20px;
+    }
+    
+    .content-area {
+        padding: 20px;
+    }
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--deep-cosmic);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--galaxy-edge);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--unicorn-horn);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.dashboard-overview {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Focus States */
+button:focus,
+.nav-link:focus {
+    outline: 2px solid var(--stardust-spark);
+    outline-offset: 2px;
+}
+
+/* Loading States */
+.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* Success/Error States */
+.success {
+    color: var(--stardust-spark);
+}
+
+.error {
+    color: #ff6b6b;
+}
+
+.warning {
+    color: #ffd93d;
+}

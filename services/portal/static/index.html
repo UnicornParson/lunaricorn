@@ -1,14 +1,193 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SPA with FastAPI</title>
-    <link rel="stylesheet" href="/css/styles.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunaricorn Portal</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <link href="https://use.fontawesome.com/releases/v6.4.0/css/all.css" rel="stylesheet">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 </head>
 <body>
     <div id="app">
-        <div id="content"></div>
+        <div class="dashboard">
+            <!-- Sidebar -->
+            <aside class="sidebar" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+                <div class="sidebar-header">
+                    <div class="logo">
+                        <i class="fas fa-moon"></i>
+                        <span v-if="!sidebarCollapsed">Lunaricorn</span>
+                    </div>
+                    <button class="sidebar-toggle" @click="toggleSidebar">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                </div>
+                
+                <nav class="sidebar-nav">
+                    <ul class="nav-list">
+                        <li v-for="item in menuItems" :key="item.id" class="nav-item">
+                            <a :href="item.href" 
+                               class="nav-link" 
+                               :class="{ 'active': currentPage === item.id }"
+                               @click.prevent="setCurrentPage(item.id)">
+                                <i :class="item.icon"></i>
+                                <span v-if="!sidebarCollapsed">{{ item.title }}</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+                
+                <div class="sidebar-footer">
+                    <div class="user-info" v-if="!sidebarCollapsed">
+                        <div class="user-avatar">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="user-details">
+                            <div class="user-name">Admin User</div>
+                            <div class="user-role">Administrator</div>
+                        </div>
+                    </div>
+                    <button class="logout-btn" @click="logout">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span v-if="!sidebarCollapsed">Logout</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <header class="top-header">
+                    <div class="header-left">
+                        <h1 class="page-title">{{ getCurrentPageTitle() }}</h1>
+                    </div>
+                    <div class="header-right">
+                        <div class="header-actions">
+                            <button class="action-btn">
+                                <i class="fas fa-bell"></i>
+                                <span class="notification-badge">3</span>
+                            </button>
+                            <button class="action-btn">
+                                <i class="fas fa-cog"></i>
+                            </button>
+                        </div>
+                    </div>
+                </header>
+
+                <div class="content-area">
+                    <!-- Dashboard Overview -->
+                    <div v-if="currentPage === 'dashboard'" class="dashboard-overview">
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-server"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3 class="stat-number">24</h3>
+                                    <p class="stat-label">Active Nodes</p>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-chart-line"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3 class="stat-number">98.5%</h3>
+                                    <p class="stat-label">Uptime</p>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-database"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3 class="stat-number">1.2TB</h3>
+                                    <p class="stat-label">Data Processed</p>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3 class="stat-number">156</h3>
+                                    <p class="stat-label">Active Users</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="dashboard-widgets">
+                            <div class="widget">
+                                <h3 class="widget-title">Recent Activity</h3>
+                                <div class="activity-list">
+                                    <div class="activity-item">
+                                        <div class="activity-icon">
+                                            <i class="fas fa-plus"></i>
+                                        </div>
+                                        <div class="activity-content">
+                                            <p class="activity-text">New node connected</p>
+                                            <span class="activity-time">2 minutes ago</span>
+                                        </div>
+                                    </div>
+                                    <div class="activity-item">
+                                        <div class="activity-icon">
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                        </div>
+                                        <div class="activity-content">
+                                            <p class="activity-text">High CPU usage detected</p>
+                                            <span class="activity-time">5 minutes ago</span>
+                                        </div>
+                                    </div>
+                                    <div class="activity-item">
+                                        <div class="activity-icon">
+                                            <i class="fas fa-check"></i>
+                                        </div>
+                                        <div class="activity-content">
+                                            <p class="activity-text">Backup completed successfully</p>
+                                            <span class="activity-time">10 minutes ago</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="widget">
+                                <h3 class="widget-title">System Status</h3>
+                                <div class="status-list">
+                                    <div class="status-item">
+                                        <span class="status-label">CPU Usage</span>
+                                        <div class="status-bar">
+                                            <div class="status-fill" style="width: 65%"></div>
+                                        </div>
+                                        <span class="status-value">65%</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Memory Usage</span>
+                                        <div class="status-bar">
+                                            <div class="status-fill" style="width: 42%"></div>
+                                        </div>
+                                        <span class="status-value">42%</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Disk Usage</span>
+                                        <div class="status-bar">
+                                            <div class="status-fill" style="width: 78%"></div>
+                                        </div>
+                                        <span class="status-value">78%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Other pages content -->
+                    <div v-else class="page-content">
+                        <h2>{{ getCurrentPageTitle() }}</h2>
+                        <p>This is the {{ getCurrentPageTitle() }} page content.</p>
+                    </div>
+                </div>
+            </main>
+        </div>
     </div>
     
-    <script src="/js/app.js"></script>
+    <script src="/static/js/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,9 @@
+cluster:
+  leader: http://localhost:8000/v1
+
+portal:
+  name: "portal"
+  port: 8000
+  host: "0.0.0.0"
+  key: "06d12d72-2ea1-4c56-9f49-b621589f3fda"
+  type: "ui"
