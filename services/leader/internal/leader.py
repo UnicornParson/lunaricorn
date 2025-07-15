@@ -89,11 +89,11 @@ class Leader:
         # Get names of alive nodes
         alive_node_names = {node['name'] for node in alive_nodes}
         nodes_summary = {}
-        for node in required_nodes:
-            nodes_summary[node['name']] = "off"
-        for node in alive_node_names:
-            nodes_summary[node['name']] = "on"
+        for node_name in required_nodes:
+            nodes_summary[node_name] = "off"
+        for node_name in alive_node_names:
+            nodes_summary[node_name] = "on"
         return {
             "nodes_summary": nodes_summary,
-            "required_nodes": {node['name'] for node in required_nodes},
+            "required_nodes": set(required_nodes),
         }

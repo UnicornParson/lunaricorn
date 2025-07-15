@@ -276,7 +276,8 @@ async def get_cluster_info():
     if leader is None:
         logger.error("Leader is not ready to start")
         raise HTTPException(status_code=500, detail="Leader is not ready to start")
-    return leader.detailed_status()
+    return JSONResponse(content={"status": "healthy", "timestamp": datetime.now().isoformat()})
+    #return leader.detailed_status()
 
 @app.get("/v1/getenv", tags=["Environment"])
 async def get_environment():

@@ -231,3 +231,34 @@ def extract_xml(html_str: str) -> str:
         xml_escaped = html_str[start_idx:end_idx + len(end_marker)]
     
     return xml_escaped
+
+def extract_rss(html_str: str) -> str:
+    """
+    Extracts RSS content from HTML-wrapped RSS.
+    
+    This function attempts to extract clean RSS content from HTML pages
+    that contain embedded RSS.
+    
+    Args:
+        html_str (str): HTML string that may contain RSS content
+            
+    Returns:
+        str: Extracted RSS content, or empty string if no RSS found
+    """
+    html_str = html.unescape(html_str)
+    start_marker = "<rss"
+    end_marker = "</rss>"
+
+    start_idx = html_str.find(start_marker)
+    if start_idx == -1:
+        return ""
+
+    end_idx = html_str.find(end_marker, start_idx)
+    
+    # Extract substring (including end_marker length)
+    if end_idx == -1:
+        xml_escaped = html_str[start_idx:]  # To end of string
+    else:
+        xml_escaped = html_str[start_idx:end_idx + len(end_marker)]
+    
+    return xml_escaped
