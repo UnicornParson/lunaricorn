@@ -6,15 +6,15 @@ mkdir -p tmp
 # Set error handling
 set -e
     
-echo "Starting Docker build for lunaricorn/leader..."
+echo "Starting Docker build for lunaricorn_leader..."
 
 # Build the Docker image with detailed output
-docker build --no-cache--progress=plain -t lunaricorn/leader . 2>&1 | tee -i tmp/build.log
+docker build --no-cache --progress=plain -t lunaricorn_leader . 2>&1 | tee -i tmp/build.log
 
 # Check if build was successful
 if [ $? -eq 0 ]; then
     echo "Build completed successfully!"
-    echo "Image: lunaricorn/leader"
+    echo "Image: lunaricorn_leader"
 else
     echo "Build failed! Check tmp/build.log for details."
     exit 1

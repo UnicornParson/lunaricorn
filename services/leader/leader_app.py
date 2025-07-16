@@ -1,352 +1,195 @@
-from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-import uvicorn
+from flask import Flask, jsonify, request, make_response
+from werkzeug.exceptions import HTTPException
 from datetime import datetime
-import uuid
-import os
-import shutil
-from pathlib import Path
 import logging
-import logging.handlers
-import sys
-from contextlib import asynccontextmanager
+from pathlib import Path
 from internal.leader import Leader, NotReadyException
 
-leader = None
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifespan event handler for startup and shutdown"""
-    # Startup
-    logger.info("Starting Leader API service")
-    
-    initial_data_path = Path("/opt/lunaricorn/leader/app/initial_data")
-    target_data_path = Path("/opt/lunaricorn/leader_data")
-    
-    # Create target directory if it doesn't exist
-    target_data_path.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Ensured target data directory exists: {target_data_path}")
-    
-    # Check if initial data directory exists
-    if not initial_data_path.exists():
-        logger.warning(f"Initial data directory {initial_data_path} does not exist")
-    else:
-        logger.info(f"Checking initial data in {initial_data_path}")
-        logger.info(f"Target data directory: {target_data_path}")
-        
-        # Copy files and directories recursively
-        copied_count = 0
-        skipped_count = 0
-        
-        for item in initial_data_path.rglob("*"):
-            if item.is_file():
-                # Calculate relative path from initial_data directory
-                relative_path = item.relative_to(initial_data_path)
-                target_file = target_data_path / relative_path
-                
-                # Create parent directories if they don't exist
-                target_file.parent.mkdir(parents=True, exist_ok=True)
-                
-                # Copy file only if it doesn't exist in target
-                if not target_file.exists():
-                    try:
-                        shutil.copy2(item, target_file)
-                        logger.info(f"Copied: {relative_path}")
-                        copied_count += 1
-                    except Exception as e:
-                        logger.error(f"Error copying {relative_path}: {e}")
-                else:
-                    logger.debug(f"Skipped (exists): {relative_path}")
-                    skipped_count += 1
-        
-        logger.info(f"Startup complete: {copied_count} files copied, {skipped_count} files skipped")
-    
-    logger.info("Leader API service started successfully")
-    global leader
-    leader = Leader()
-    logger.info("Leader initialized")
-    
-    yield
-    
-    # Shutdown
-    logger.info("Shutting down Leader API service")
-
-# Create FastAPI app instance
-app = FastAPI(
-    title="Leader API",
-    description="API for service discovery and health monitoring",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan
-)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configure this properly for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Initialize logging system
+# --- Logging setup ---
 def setup_logging():
-    """Initialize logging system with file and console handlers"""
-    # Create logs directory
     logs_dir = Path("/opt/lunaricorn/leader_data/logs")
     logs_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Configure root logger
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
-    
-    # Clear any existing handlers
-    for handler in logger.handlers[:]:
-        logger.removeHandler(handler)
-    
-    # Create formatters
-    detailed_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s - %(message)s'
-    )
-    simple_formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s'
-    )
-    
-    # File handler with rotation (10MB max size, keep 5 backup files)
-    file_handler = logging.handlers.RotatingFileHandler(
-        logs_dir / "leader_api.log",
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5,
-        encoding='utf-8'
-    )
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(detailed_formatter)
-    
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(simple_formatter)
-    
-    # Add handlers to root logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    
-    # Create specific logger for this application
-    app_logger = logging.getLogger("leader_api")
-    app_logger.info("Logging system initialized")
-    
-    return app_logger
+    fh = logging.FileHandler(logs_dir / "leader_api.log")
+    fh.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    return logger
 
-# Initialize logging
 logger = setup_logging()
+logger.error("@@ Leader API started")
 
-# Pydantic models for input data parsing
+# --- Flask app setup ---
+app = Flask(__name__)
 
-class ImAliveRequest(BaseModel):
-    """Model for /v1/imalive endpoint - service health notification"""
-    node_name: str = Field(..., description="Name of the service node")
-    node_type: str = Field(..., description="Type of the service node")
-    instance_key: str = Field(..., description="Unique instance identifier")
-    host: Optional[str] = Field(default=None, description="Host address")
-    port: Optional[int] = Field(default=0, description="Port number")
-    additional: Optional[Dict[str, Any]] = Field(default=None, description="Additional JSON data")
+# --- Leader instance ---
+try:
+    leader = Leader()
+except Exception as e:
+    logger.error(f"Failed to initialize Leader: {e}")
+    leader = None
 
-class DiscoverRequest(BaseModel):
-    """Model for /v1/discover endpoint - service discovery query"""
-    query: str = Field(..., description="Discovery query string")
+# --- Endpoints ---
 
+@app.route("/v1/imalive", methods=["POST"])
+def im_alive():
+    data = request.get_json(force=True)
+    node_name = data.get("node_name")
+    node_type = data.get("node_type")
+    instance_key = data.get("instance_key")
+    host = data.get("host", None)
+    port = data.get("port", 0)
+    additional = data.get("additional", None)
 
-
-# API Endpoints
-
-@app.post("/v1/imalive", tags=["Health"])
-async def im_alive(request: ImAliveRequest):
-    """
-    Service health notification endpoint.
-    Other services use this to notify about their existence.
-    """
-    logger.info(f"Received im_alive notification from {request.node_name} (type: {request.node_type})")
+    logger.info(f"Received im_alive notification from {node_name} (type: {node_type})")
     if not leader:
         logger.error("Leader is not initialized")
-        raise HTTPException(status_code=500, detail="Leader is not initialized")
-    
-    # Input data parsing is handled by Pydantic model validation
-    # The request object contains all validated and parsed data:
-    # - request.node_name: str
-    # - request.node_type: str  
-    # - request.instance_key: str
-    # - request.host: Optional[str]
-    # - request.port: Optional[int]
-    # - request.additional: Optional[Dict[str, Any]]
+        return make_response(jsonify({"message": "Leader is not initialized"}), 500)
 
-    # Check node_name
-    if not request.node_name or not isinstance(request.node_name, str):
+    # Input validation (mimics Pydantic)
+    if not node_name or not isinstance(node_name, str):
         logger.error("Invalid or missing node_name in im_alive request")
-        raise HTTPException(status_code=500, detail="Invalid or missing node_name")
-
-    # Check node_type
-    if not request.node_type or not isinstance(request.node_type, str):
+        return make_response(jsonify({"message": "Invalid or missing node_name"}), 500)
+    if not node_type or not isinstance(node_type, str):
         logger.error("Invalid or missing node_type in im_alive request")
-        raise HTTPException(status_code=500, detail="Invalid or missing node_type")
-
-    # Check instance_key
-    if not request.instance_key or not isinstance(request.instance_key, str):
+        return make_response(jsonify({"message": "Invalid or missing node_type"}), 500)
+    if not instance_key or not isinstance(instance_key, str):
         logger.error("Invalid or missing instance_key in im_alive request")
-        raise HTTPException(status_code=500, detail="Invalid or missing instance_key")
-
-    # Check host (optional)
-    if request.host is not None and not isinstance(request.host, str):
+        return make_response(jsonify({"message": "Invalid or missing instance_key"}), 500)
+    if host is not None and not isinstance(host, str):
         logger.error("Invalid host field in im_alive request: must be a string")
-        raise HTTPException(status_code=500, detail="Invalid host field: must be a string")
-
-    # Check port (optional)
-    if request.port is not None and not isinstance(request.port, int):
+        return make_response(jsonify({"message": "Invalid host field: must be a string"}), 500)
+    if port is not None and not isinstance(port, int):
         logger.error("Invalid port field in im_alive request: must be an integer")
-        raise HTTPException(status_code=500, detail="Invalid port field: must be an integer")
-
-    # Check additional (if present, must be a dict)
-    if request.additional is not None and not isinstance(request.additional, dict):
+        return make_response(jsonify({"message": "Invalid port field: must be an integer"}), 500)
+    if additional is not None and not isinstance(additional, dict):
         logger.error("Invalid additional field in im_alive request: must be a dictionary")
-        raise HTTPException(status_code=500, detail="Invalid additional field: must be a dictionary")
+        return make_response(jsonify({"message": "Invalid additional field: must be a dictionary"}), 500)
 
-    rc = leader.update_node(request.node_name, request.node_type, request.instance_key, request.host, request.port)
+    rc = leader.update_node(node_name, node_type, instance_key, host, port)
     if rc:
         response = {"status": "received"}
     else:
-        raise HTTPException(status_code=500, detail="Failed to update node")
+        return make_response(jsonify({"message": "Failed to update node"}), 500)
 
     logger.debug(f"Im_alive response: {response}")
-    return response
+    return jsonify(response)
 
-@app.get("/v1/list", tags=["Discovery"])
-async def list_services():
-    """
-    List all registered services.
-    """
+@app.route("/v1/list", methods=["GET"])
+def list_services():
     logger.info("Received request to list services")
     if not leader:
         logger.error("Leader is not initialized")
-        raise HTTPException(status_code=500, detail="Leader is not initialized")
-    
+        return make_response(jsonify({"message": "Leader is not initialized"}), 500)
     try:
-        response = leader.get_list()
+        services = leader.get_list()
     except NotReadyException as e:
         logger.error(f"Leader is not ready to start: {e}")
-        raise HTTPException(status_code=500, detail="Leader is not ready to start")
-    
+        return make_response(jsonify({"message": f"Leader is not ready to start {datetime.now().isoformat()}"}), 500)
     response = {
-        "services": response,
-        "total_count": len(response),
+        "services": services,
+        "total_count": len(services),
         "timestamp": datetime.now().isoformat()
     }
-    return response
+    return jsonify(response)
 
-@app.post("/v1/discover", tags=["Discovery"])
-async def discover_services(request: DiscoverRequest):
-    """
-    Discover services based on query.
-    """
-    logger.info(f"Received discovery request with query: {request.query}")
-    
-    # Input data parsing is handled by Pydantic model validation
-    # The request object contains the validated query string:
-    # - request.query: str
-    
-    # TODO: Implement service discovery logic here
+@app.route("/v1/discover", methods=["POST"])
+def discover_services():
+    data = request.get_json(force=True)
+    query = data.get("query", "")
+    logger.info(f"Received discovery request with query: {query}")
+    # TODO: Implement real discovery logic if needed
     response = {
-        "query": request.query,
+        "query": query,
         "results": [],
         "total_count": 0,
         "timestamp": datetime.now().isoformat()
     }
-    
     logger.debug(f"Discover services response: {response}")
-    return response
+    return jsonify(response)
 
-@app.get("/v1/clusterinfo", tags=["Environment"])
-async def get_cluster_info():
-    """
-    Get cluster information.
-    """
+@app.route("/v1/test", methods=["GET"])
+def test():
+    return jsonify({"message": "Hello, World!"})
+
+@app.route("/v1/clusterinfo", methods=["GET"])
+def get_cluster_info():
     logger.info("Received request for cluster information")
-    if leader is None:
-        logger.error("Leader is not ready to start")
-        raise HTTPException(status_code=500, detail="Leader is not ready to start")
-    return JSONResponse(content={"status": "healthy", "timestamp": datetime.now().isoformat()})
-    #return leader.detailed_status()
+    if leader is None or not hasattr(leader, 'detailed_status'):
+        logger.error("Leader is not initialized or missing required method")
+        return make_response(jsonify({"message": "Leader service is initializing"}), 503)
+    return jsonify(leader.detailed_status())
 
-@app.get("/v1/getenv", tags=["Environment"])
-async def get_environment():
-    """
-    Get environment information.
-    """
+@app.route("/v1/getenv", methods=["GET"])
+def get_environment():
     logger.info("Received request for environment information")
     if leader is None or not leader.ready():
         logger.error("Leader is not ready to start")
-        raise HTTPException(status_code=500, detail="Leader is not ready to start")
-    
+        return make_response(jsonify({"message": "Leader is not ready to start"}), 500)
     try:
         cluster_config = leader.get_cluster_config()
     except Exception as e:
         logger.error(f"Error getting cluster configuration: {e}")
-        raise HTTPException(status_code=500, detail="Error getting cluster configuration")
-    
-    
+        return make_response(jsonify({"message": "Error getting cluster configuration"}), 500)
     response = {
         "cfg": cluster_config,
         "core": "1.0.0",
         "timestamp": datetime.now().isoformat()
     }
-    
     logger.debug(f"Get environment response: {response}")
-    return response
+    return jsonify(response)
 
-# Health check endpoint
-@app.get("/", tags=["Health"])
-async def root():
-    """Root endpoint with API information"""
+@app.route("/", methods=["GET"])
+def root():
     logger.debug("Root endpoint accessed")
-    return {
+    return jsonify({
         "message": "Leader API - Service Discovery and Health Monitoring",
         "version": "1.0.0",
         "docs": "/docs",
         "status": "healthy"
-    }
+    })
 
-@app.get("/health", tags=["Health"])
-async def health_check():
-    """Health check endpoint"""
+@app.route("/health", methods=["GET"])
+def health_check():
     logger.debug("Health check endpoint accessed")
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
-@app.get("/v1", tags=["API"])
-async def api_root():
-    """API root endpoint"""
+@app.route("/v1", methods=["GET"])
+def api_root():
     logger.debug("API root endpoint accessed")
-    return {
+    return jsonify({
         "message": "Leader API v1",
         "version": "1.0.0",
         "endpoints": {
             "imalive": "/v1/imalive",
-            "list": "/v1/list", 
+            "list": "/v1/list",
             "discover": "/v1/discover",
             "getenv": "/v1/getenv",
             "clusterinfo": "/v1/clusterinfo"
         },
         "status": "healthy"
-    }
+    })
 
-# Run the application
+# --- Error handlers ---
+
+@app.errorhandler(404)
+def not_found_handler(e):
+    return make_response(jsonify({"message": "Endpoint not found"}), 404)
+
+@app.errorhandler(Exception)
+def general_exception_handler(e):
+    logger.exception("Unhandled exception occurred")
+    code = 500
+    if isinstance(e, HTTPException):
+        code = e.code
+    return make_response(jsonify({"message": f"Internal server error: {e}"}), code)
+
+# --- Run app ---
 if __name__ == "__main__":
-    logger.info("Starting Leader API with uvicorn")
-    uvicorn.run(
-        "leader_app:app",
-        host="0.0.0.0",
-        port=8001,
-        reload=True,
-        log_level="info"
-    )
+    app.run(host="0.0.0.0", port=8000, debug=True)

@@ -95,5 +95,5 @@ class Leader:
             nodes_summary[node_name] = "on"
         return {
             "nodes_summary": nodes_summary,
-            "required_nodes": set(required_nodes),
+            "required_nodes": list(set(required_nodes))
         }

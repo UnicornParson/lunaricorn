@@ -4,3 +4,4 @@ discover:
     - "sinaling"
     - "orb"
     - "state_storage"
+    - "portal"

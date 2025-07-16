@@ -13,3 +13,4 @@ cloudscraper
 tabulate
 argon2-cffi
 markdownify
+tqdm
