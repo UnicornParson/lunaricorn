@@ -425,6 +425,117 @@ body {
     font-weight: 600;
 }
 
+/* Nodes List */
+.nodes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.node-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    background: var(--midnight-velvet);
+    border-radius: 8px;
+    border-left: 4px solid var(--crater-gray);
+    transition: all 0.3s ease;
+}
+
+.node-item:hover {
+    background: var(--galaxy-edge);
+    transform: translateX(2px);
+}
+
+.node-item.node-online {
+    border-left-color: var(--stardust-spark);
+    background: rgba(110, 240, 255, 0.1);
+}
+
+.node-item.node-offline {
+    border-left-color: #ff6b6b;
+    background: rgba(255, 107, 107, 0.1);
+}
+
+.node-icon {
+    width: 40px;
+    height: 40px;
+    background: var(--unicorn-horn);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--deep-cosmic);
+    font-size: 1rem;
+}
+
+.node-item.node-online .node-icon {
+    background: var(--stardust-spark);
+}
+
+.node-item.node-offline .node-icon {
+    background: #ff6b6b;
+}
+
+.node-content {
+    flex: 1;
+}
+
+.node-name {
+    color: var(--lunar-silver);
+    font-weight: 600;
+    margin-bottom: 5px;
+    font-size: 0.95rem;
+}
+
+.node-details {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    font-size: 0.85rem;
+}
+
+.node-type {
+    color: var(--crater-gray);
+    background: var(--deep-cosmic);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+
+.node-status {
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+
+.status-online {
+    color: var(--stardust-spark);
+    background: rgba(110, 240, 255, 0.2);
+}
+
+.status-offline {
+    color: #ff6b6b;
+    background: rgba(255, 107, 107, 0.2);
+}
+
+.nodes-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 30px;
+    color: var(--crater-gray);
+    font-size: 0.9rem;
+}
+
+.nodes-empty i {
+    font-size: 2rem;
+    opacity: 0.5;
+}
+
 /* Page Content */
 .page-content {
     background: var(--nebula-layer);

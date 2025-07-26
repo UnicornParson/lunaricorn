@@ -121,35 +121,26 @@
 
                         <div class="dashboard-widgets">
                             <div class="widget">
-                                <h3 class="widget-title">Recent Activity</h3>
-                                <div class="activity-list">
-                                    <div class="activity-item">
-                                        <div class="activity-icon">
-                                            <i class="fas fa-plus"></i>
+                                <h3 class="widget-title">Nodes</h3>
+                                <div class="nodes-list" v-if="nodes.length > 0">
+                                    <div v-for="node in nodes" :key="node.key" class="node-item" :class="{ 'node-online': node.status === 'online', 'node-offline': node.status === 'offline' }">
+                                        <div class="node-icon">
+                                            <i class="fas fa-server"></i>
                                         </div>
-                                        <div class="activity-content">
-                                            <p class="activity-text">New node connected</p>
-                                            <span class="activity-time">2 minutes ago</span>
-                                        </div>
-                                    </div>
-                                    <div class="activity-item">
-                                        <div class="activity-icon">
-                                            <i class="fas fa-exclamation-triangle"></i>
-                                        </div>
-                                        <div class="activity-content">
-                                            <p class="activity-text">High CPU usage detected</p>
-                                            <span class="activity-time">5 minutes ago</span>
+                                        <div class="node-content">
+                                            <div class="node-name">{{ node.name }}</div>
+                                            <div class="node-details">
+                                                <span class="node-type">{{ node.type }}</span>
+                                                <span class="node-status" :class="{ 'status-online': node.status === 'online', 'status-offline': node.status === 'offline' }">
+                                                    {{ node.status === 'online' ? 'Online' : 'Offline' }}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div class="activity-item">
-                                        <div class="activity-icon">
-                                            <i class="fas fa-check"></i>
-                                        </div>
-                                        <div class="activity-content">
-                                            <p class="activity-text">Backup completed successfully</p>
-                                            <span class="activity-time">10 minutes ago</span>
-                                        </div>
-                                    </div>
+                                </div>
+                                <div v-else class="nodes-empty">
+                                    <i class="fas fa-info-circle"></i>
+                                    <span>No nodes available</span>
                                 </div>
                             </div>
 

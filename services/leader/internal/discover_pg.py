@@ -7,69 +7,53 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from .db_manager import db_manager
+
 class DiscoverManagerPG:
     """
-    Manager for discovering and updating node information in a PostgreSQL database using a connection pool.
+    Manager for discovering and updating node information in a PostgreSQL database.
+    Uses the global database manager for connection management.
     """
     def __init__(self, host: str, port: int, user: str, password: str, dbname: str, minconn: int = 1, maxconn: int = 5):
         """
         Initialize the manager.
-        Establishes a connection pool and ensures the table exists.
+        Uses the global database manager for connection management.
         """
-        self.conn_params = {
-            'host': host,
-            'port': port,
-            'user': user,
-            'password': password,
-            'dbname': dbname,
-            'connect_timeout': 10,
-            'application_name': 'lunaricorn_leader',
-            'options': '-c statement_timeout=30000'  # 30 second statement timeout
-        }
+        # Store connection parameters for reference
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.dbname = dbname
         self.minconn = minconn
         self.maxconn = maxconn
-        self.pool = SimpleConnectionPool(minconn, maxconn, **self.conn_params)
-        logger.info(f"PostgreSQL connection pool created with {minconn}-{maxconn} connections")
-        self._ensure_table_exists()
+        
+        logger.info("DiscoverManagerPG initialized with global database manager")
+
+    def _create_pool(self):
+        """Create a new connection pool."""
+        try:
+            if self.pool:
+                self.pool.closeall()
+            self.pool = SimpleConnectionPool(self.minconn, self.maxconn, **self.conn_params)
+            logger.info("Connection pool created successfully")
+        except Exception as e:
+            logger.error(f"Failed to create connection pool: {e}")
+            raise
 
     def _get_conn(self):
-        """Get a connection from the pool."""
-        try:
-            conn = self.pool.getconn()
-            logger.debug("Connection acquired from pool")
-            return conn
-        except Exception as e:
-            if "connection pool exhausted" in str(e).lower():
-                logger.warning("Connection pool exhausted, attempting to reset")
-                self._reset_pool()
-                conn = self.pool.getconn()
-                logger.debug("Connection acquired from reset pool")
-                return conn
-            else:
-                logger.error(f"Failed to get connection from pool: {e}")
-                raise
+        """Get a connection from the global database manager."""
+        return db_manager.get_connection()
 
     def _put_conn(self, conn):
-        """Return a connection to the pool."""
-        try:
-            if conn:
-                self.pool.putconn(conn)
-                logger.debug("Connection returned to pool")
-        except Exception as e:
-            logger.error(f"Failed to return connection to pool: {e}")
-            # Try to close the connection if we can't return it to the pool
-            try:
-                conn.close()
-                logger.debug("Connection closed due to pool return failure")
-            except:
-                pass
+        """Return a connection to the global database manager."""
+        db_manager.return_connection(conn)
 
     def _reset_pool(self):
         """Reset the connection pool when it gets exhausted."""
         try:
             logger.warning("Resetting connection pool due to exhaustion")
-            self.pool.closeall()
-            self.pool = SimpleConnectionPool(self.minconn, self.maxconn, **self.conn_params)
+            self._create_pool()
             logger.info("Connection pool reset successfully")
         except Exception as e:
             logger.error(f"Failed to reset connection pool: {e}")
@@ -100,69 +84,17 @@ class DiscoverManagerPG:
             logger.error(f"Error getting pool status: {e}")
             return {}
 
+    def _is_pool_valid(self):
+        """Check if the global database manager is valid."""
+        return db_manager.validate_connection()
+
     def _validate_connection(self):
-        """Validate that a connection can be acquired from the pool."""
-        conn = None
-        try:
-            conn = self._get_conn()
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
-            return True
-        except Exception as e:
-            logger.error(f"Connection pool validation failed: {e}")
-            return False
-        finally:
-            if conn:
-                self._put_conn(conn)
+        """Validate that a connection can be acquired from the global database manager."""
+        return db_manager.validate_connection()
 
     def _ensure_table_exists(self):
-        """Create the last_seen table if it does not exist."""
-        if not self._validate_connection():
-            raise Exception("Cannot ensure table - no valid database connection")
-        conn = self._get_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute('''
-                    CREATE TABLE IF NOT EXISTS last_seen (
-                        i SERIAL PRIMARY KEY,
-                        name VARCHAR(128) NOT NULL,
-                        type VARCHAR(32) NOT NULL,
-                        key VARCHAR(128) NOT NULL,
-                        last_update BIGINT NOT NULL DEFAULT 0
-                    )
-                ''')
-                # Create unique index on key
-                cur.execute('''
-                    CREATE UNIQUE INDEX IF NOT EXISTS idx_last_seen_key ON last_seen(key)
-                ''')
-                # Create index on last_update
-                cur.execute('''
-                    CREATE INDEX IF NOT EXISTS idx_last_seen_last_update ON last_seen(last_update)
-                ''')
-                # Create composite index on (type, last_update)
-                cur.execute('''
-                    CREATE INDEX IF NOT EXISTS idx_last_seen_type_last_update ON last_seen(type, last_update)
-                ''')
-                cur.execute('''
-                    CREATE TABLE IF NOT EXISTS cluster_state
-                    (
-                        key character varying(64) NOT NULL,
-                        i bigint DEFAULT NULL,
-                        j jsonb DEFAULT NULL,
-                        PRIMARY KEY (key)
-                    );
-                ''')
-                cur.execute('''
-                    ALTER TABLE IF EXISTS cluster_state  OWNER to lunaricorn;
-                ''')
-
-                logger.info("Ensured last_seen table and indexes exist")
-            conn.commit()
-        except Exception as e:
-            logger.error(f"Error ensuring table exists: {e}")
-            raise
-        finally:
-            self._put_conn(conn)
+        """Ensure all required tables exist using the global database manager."""
+        db_manager.ensure_tables_exist()
 
     def update(self, node_name: str, node_type: str, instance_key: str, host: Optional[str] = None, port: Optional[int] = 0) -> bool:
         """
@@ -173,35 +105,37 @@ class DiscoverManagerPG:
         if not self._validate_connection():
             logger.error("Cannot update node - no valid database connection")
             return False
+        
         current_timestamp = int(time.time())
-        conn = self._get_conn()
+        
         try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT i FROM last_seen WHERE key = %s",
-                    (instance_key,)
-                )
-                existing_record = cur.fetchone()
-                if existing_record:
-                    cur.execute('''
-                        UPDATE last_seen 
-                        SET name = %s, type = %s, last_update = %s, key = %s
-                        WHERE key = %s
-                    ''', (node_name, node_type, current_timestamp, instance_key, instance_key))
-                    logger.debug(f"Updated existing node: {node_name} ({instance_key})")
-                else:
-                    cur.execute('''
-                        INSERT INTO last_seen (name, type, key, last_update)
-                        VALUES (%s, %s, %s, %s)
-                    ''', (node_name, node_type, instance_key, current_timestamp))
-                    logger.debug(f"Added new node: {node_name} ({instance_key})")
-            conn.commit()
+            # Check if record exists
+            existing_record = db_manager.execute_query(
+                "SELECT i FROM last_seen WHERE key = %s",
+                (instance_key,),
+                fetch_one=True
+            )
+            
+            if existing_record:
+                # Update existing record
+                db_manager.execute_query('''
+                    UPDATE last_seen 
+                    SET name = %s, type = %s, last_update = %s, key = %s
+                    WHERE key = %s
+                ''', (node_name, node_type, current_timestamp, instance_key, instance_key))
+                logger.debug(f"Updated existing node: {node_name} ({instance_key})")
+            else:
+                # Insert new record
+                db_manager.execute_query('''
+                    INSERT INTO last_seen (name, type, key, last_update)
+                    VALUES (%s, %s, %s, %s)
+                ''', (node_name, node_type, instance_key, current_timestamp))
+                logger.debug(f"Added new node: {node_name} ({instance_key})")
+            
             return True
         except Exception as e:
             logger.error(f"Error updating node {node_name}: {e}")
             return False
-        finally:
-            self._put_conn(conn)
 
     def list(self, offset: int) -> List[Dict]:
         """
@@ -210,35 +144,33 @@ class DiscoverManagerPG:
         if not self._validate_connection():
             logger.error("Cannot list nodes - no valid database connection")
             return []
+        
         current_timestamp = int(time.time())
         cutoff_timestamp = current_timestamp - offset
-        conn = self._get_conn()
+        
         try:
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                cur.execute('''
-                    SELECT i, name, type, key, last_update
-                    FROM last_seen
-                    WHERE last_update >= %s
-                    ORDER BY last_update DESC
-                ''', (cutoff_timestamp,))
-                records = cur.fetchall()
-                result = []
-                for record in records:
-                    result.append({
-                        'id': record['i'],
-                        'name': record['name'],
-                        'type': record['type'],
-                        'key': record['key'],
-                        'last_update': record['last_update'],
-                        'age_seconds': current_timestamp - record['last_update']
-                    })
-                logger.debug(f"Retrieved {len(result)} active nodes (offset: {offset}s)")
-                return result
+            records = db_manager.execute_query('''
+                SELECT i, name, type, key, last_update
+                FROM last_seen
+                WHERE last_update >= %s
+                ORDER BY last_update DESC
+            ''', (cutoff_timestamp,), fetch_all=True)
+            
+            result = []
+            for record in records:
+                result.append({
+                    'id': record['i'],
+                    'name': record['name'],
+                    'type': record['type'],
+                    'key': record['key'],
+                    'last_update': record['last_update'],
+                    'age_seconds': current_timestamp - record['last_update']
+                })
+            logger.debug(f"Retrieved {len(result)} active nodes (offset: {offset}s)")
+            return result
         except Exception as e:
             logger.error(f"Error listing nodes: {e}")
             return []
-        finally:
-            self._put_conn(conn)
 
     def get_by_key(self, instance_key: str) -> Optional[Dict]:
         """
@@ -247,29 +179,26 @@ class DiscoverManagerPG:
         if not self._validate_connection():
             logger.error("Cannot get node by key - no valid database connection")
             return None
-        conn = self._get_conn()
+        
         try:
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                cur.execute('''
-                    SELECT i, name, type, key, last_update
-                    FROM last_seen
-                    WHERE key = %s
-                ''', (instance_key,))
-                record = cur.fetchone()
-                if record:
-                    return {
-                        'id': record['i'],
-                        'name': record['name'],
-                        'type': record['type'],
-                        'key': record['key'],
-                        'last_update': record['last_update']
-                    }
-                return None
+            record = db_manager.execute_query('''
+                SELECT i, name, type, key, last_update
+                FROM last_seen
+                WHERE key = %s
+            ''', (instance_key,), fetch_one=True)
+            
+            if record:
+                return {
+                    'id': record['i'],
+                    'name': record['name'],
+                    'type': record['type'],
+                    'key': record['key'],
+                    'last_update': record['last_update']
+                }
+            return None
         except Exception as e:
             logger.error(f"Error getting node by key {instance_key}: {e}")
             return None
-        finally:
-            self._put_conn(conn)
 
     def delete_old_records(self, max_age_seconds: int) -> int:
         """
@@ -278,24 +207,21 @@ class DiscoverManagerPG:
         if not self._validate_connection():
             logger.error("Cannot delete old records - no valid database connection")
             return 0
+        
         current_timestamp = int(time.time())
         cutoff_timestamp = current_timestamp - max_age_seconds
-        conn = self._get_conn()
+        
         try:
-            with conn.cursor() as cur:
-                cur.execute('''
-                    DELETE FROM last_seen
-                    WHERE last_update < %s
-                ''', (cutoff_timestamp,))
-                deleted_count = cur.rowcount
-                logger.info(f"Deleted {deleted_count} old records (older than {max_age_seconds}s)")
-                conn.commit()
-                return deleted_count
+            deleted_count = db_manager.execute_query('''
+                DELETE FROM last_seen
+                WHERE last_update < %s
+            ''', (cutoff_timestamp,))
+            
+            logger.info(f"Deleted {deleted_count} old records (older than {max_age_seconds}s)")
+            return deleted_count
         except Exception as e:
             logger.error(f"Error deleting old records: {e}")
             return 0
-        finally:
-            self._put_conn(conn)
 
     def get_statistics(self) -> Dict:
         """
@@ -304,27 +230,32 @@ class DiscoverManagerPG:
         if not self._validate_connection():
             logger.error("Cannot get statistics - no valid database connection")
             return {}
-        conn = self._get_conn()
+        
         try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM last_seen")
-                total_records = cur.fetchone()[0]
-                cur.execute("SELECT type, COUNT(*) FROM last_seen GROUP BY type")
-                records_by_type = dict(cur.fetchall())
-                cur.execute("SELECT MIN(last_update), MAX(last_update) FROM last_seen")
-                min_time, max_time = cur.fetchone()
-                return {
-                    'total_records': total_records,
-                    'records_by_type': records_by_type,
-                    'oldest_timestamp': min_time,
-                    'newest_timestamp': max_time,
-                    'current_timestamp': int(time.time())
-                }
+            total_records = db_manager.execute_query("SELECT COUNT(*) FROM last_seen", fetch_one=True)[0]
+            
+            records_by_type_result = db_manager.execute_query(
+                "SELECT type, COUNT(*) FROM last_seen GROUP BY type", 
+                fetch_all=True
+            )
+            records_by_type = dict(records_by_type_result) if records_by_type_result else {}
+            
+            time_range = db_manager.execute_query(
+                "SELECT MIN(last_update), MAX(last_update) FROM last_seen", 
+                fetch_one=True
+            )
+            min_time, max_time = time_range if time_range else (None, None)
+            
+            return {
+                'total_records': total_records,
+                'records_by_type': records_by_type,
+                'oldest_timestamp': min_time,
+                'newest_timestamp': max_time,
+                'current_timestamp': int(time.time())
+            }
         except Exception as e:
             logger.error(f"Error getting statistics: {e}")
             return {}
-        finally:
-            self._put_conn(conn)
 
     def get_object_id(self) -> Optional[int]:
         """
@@ -334,19 +265,17 @@ class DiscoverManagerPG:
         if not self._validate_connection():
             logger.error("Cannot get OBJECT_ID - no valid database connection")
             return 0
-        conn = self._get_conn()
+        
         try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT i FROM cluster_state WHERE key = %s", ('OBJECT_ID',))
-                result = cur.fetchone()
-                if result:
-                    return result[0]
-                return 0
+            result = db_manager.execute_query(
+                "SELECT i FROM cluster_state WHERE key = %s", 
+                ('OBJECT_ID',), 
+                fetch_one=True
+            )
+            return result[0] if result else 0
         except Exception as e:
             logger.error(f"Error getting OBJECT_ID: {e}")
             return 0
-        finally:
-            self._put_conn(conn)
 
     def update_object_id(self, object_id: int) -> bool:
         """
@@ -356,23 +285,20 @@ class DiscoverManagerPG:
         if not self._validate_connection():
             logger.error("Cannot update OBJECT_ID - no valid database connection")
             return False
-        conn = self._get_conn()
+        
         try:
-            with conn.cursor() as cur:
-                cur.execute('''
-                    INSERT INTO cluster_state (key, i) 
-                    VALUES (%s, %s) 
-                    ON CONFLICT (key) 
-                    DO UPDATE SET i = EXCLUDED.i
-                ''', ('OBJECT_ID', object_id))
-                conn.commit()
-                logger.debug(f"Updated OBJECT_ID to: {object_id}")
-                return True
+            db_manager.execute_query('''
+                INSERT INTO cluster_state (key, i) 
+                VALUES (%s, %s) 
+                ON CONFLICT (key) 
+                DO UPDATE SET i = EXCLUDED.i
+            ''', ('OBJECT_ID', object_id))
+            
+            logger.debug(f"Updated OBJECT_ID to: {object_id}")
+            return True
         except Exception as e:
             logger.error(f"Error updating OBJECT_ID: {e}")
             return False
-        finally:
-            self._put_conn(conn)
 
     def get_message_id(self) -> Optional[int]:
         """
@@ -382,19 +308,17 @@ class DiscoverManagerPG:
         if not self._validate_connection():
             logger.error("Cannot get MESSAGE_ID - no valid database connection")
             return 0
-        conn = self._get_conn()
+        
         try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT i FROM cluster_state WHERE key = %s", ('MESSAGE_ID',))
-                result = cur.fetchone()
-                if result:
-                    return result[0]
-                return 0
+            result = db_manager.execute_query(
+                "SELECT i FROM cluster_state WHERE key = %s", 
+                ('MESSAGE_ID',), 
+                fetch_one=True
+            )
+            return result[0] if result else 0
         except Exception as e:
             logger.error(f"Error getting MESSAGE_ID: {e}")
             return 0
-        finally:
-            self._put_conn(conn)
 
     def update_message_id(self, message_id: int) -> bool:
         """
@@ -404,30 +328,22 @@ class DiscoverManagerPG:
         if not self._validate_connection():
             logger.error("Cannot update MESSAGE_ID - no valid database connection")
             return False
-        conn = self._get_conn()
+        
         try:
-            with conn.cursor() as cur:
-                cur.execute('''
-                    INSERT INTO cluster_state (key, i) 
-                    VALUES (%s, %s) 
-                    ON CONFLICT (key) 
-                    DO UPDATE SET i = EXCLUDED.i
-                ''', ('MESSAGE_ID', message_id))
-                conn.commit()
-                logger.debug(f"Updated MESSAGE_ID to: {message_id}")
-                return True
+            db_manager.execute_query('''
+                INSERT INTO cluster_state (key, i) 
+                VALUES (%s, %s) 
+                ON CONFLICT (key) 
+                DO UPDATE SET i = EXCLUDED.i
+            ''', ('MESSAGE_ID', message_id))
+            
+            logger.debug(f"Updated MESSAGE_ID to: {message_id}")
+            return True
         except Exception as e:
             logger.error(f"Error updating MESSAGE_ID: {e}")
             return False
-        finally:
-            self._put_conn(conn)
 
     def __del__(self):
-        """Cleanup method to close the connection pool."""
-        try:
-            if hasattr(self, 'pool'):
-                self.pool.closeall()
-                logger.info("PostgreSQL connection pool closed")
-        except Exception as e:
-            logger.error(f"Error closing PostgreSQL connection pool: {e}")
+        """Cleanup method - no longer needed as we use global database manager."""
+        pass
 

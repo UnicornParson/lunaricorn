@@ -99,3 +99,19 @@ async def get_cluster_info():
     except Exception as e:
         logger.error(f"Cluster info request failed: {str(e)}")
         return {"status": "error", "error": str(e)}
+
+@router.get("/nodes")
+async def get_nodes():
+    if ClusterEngine.cluster is None:
+        logger.info("Nodes request: Cluster not initialized")
+        return {"status": "error", "error": "Cluster not initialized"}
+    
+    try:
+        cluster_info = ClusterEngine.cluster.connector.get_cluster_info()
+        logger.info("Nodes request: Successfully retrieved nodes information")
+        return {"status": "success", "data": cluster_info}
+    except Exception as e:
+        logger.error(f"Nodes request failed: {str(e)}")
+        return {"status": "error", "error": str(e)}
+
+

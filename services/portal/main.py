@@ -241,7 +241,8 @@ if __name__ == "__main__":
     # If initial initialization failed, start retry thread
     if not init_success:
         logger.info("Starting background retry thread for cluster connection")
-        retry_cluster_connection()
+        retry_thread = threading.Thread(target=retry_cluster_connection, name="RetryClusterConnection", daemon=True)
+        retry_thread.start()
         
     # Start the periodic registration in a background thread
     register_thread = threading.Thread(target=periodic_register_service, name="PeriodicRegisterService", daemon=True)

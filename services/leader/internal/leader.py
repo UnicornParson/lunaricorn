@@ -4,6 +4,20 @@ import yaml
 import logging
 import os
 
+from .discover_pg import DiscoverManagerPG
+from .db_manager import db_manager
+from typing import Optional
+import yaml
+import logging
+import os
+
+from .discover_pg import DiscoverManagerPG
+from .db_manager import db_manager
+from typing import Optional
+import yaml
+import logging
+import os
+
 class NotReadyException(Exception):
     pass
 
@@ -37,7 +51,18 @@ class Leader:
         if "db_name" in os.environ:
             db_dbname = os.environ["db_name"]
 
+        # Initialize global database manager
+        db_manager.initialize(
+            host=db_host,
+            port=db_port,
+            user=db_user,
+            password=db_password,
+            dbname=db_dbname,
+            minconn=1,
+            maxconn=3
+        )
 
+        # Initialize discover manager (now uses global database manager)
         self.discover_manager = DiscoverManagerPG(
             host=db_host,
             port=db_port,
@@ -47,7 +72,7 @@ class Leader:
             minconn=1,
             maxconn=3
         )
-        self.logger.info("Leader initialized")
+        self.logger.info("Leader initialized with global database manager")
     
     def _load_config(self) -> dict:
         """Load configuration from YAML file."""

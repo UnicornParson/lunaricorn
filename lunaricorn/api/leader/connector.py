@@ -402,6 +402,56 @@ class LeaderConnector:
             self.session.close()
         logger.info("LeaderConnector closed")
 
+    def get_next_message_id(self) -> int:
+        """
+        Get the next message id.
+        """
+        try:
+            return self._make_request('GET', '/v1/utils/get_mid')
+        except Exception as e:
+            logger.error(f"Failed to get next message id: {e}")
+            return 0
+
+    def get_next_object_id(self) -> int:
+
+        """
+        Get the next object id.
+        """
+        try:
+            return self._make_request('GET', '/v1/utils/get_oid')
+        except Exception as e:
+            logger.error(f"Failed to get next object id: {e}")
+            raise
+
+    def get_cluster_info(self) -> Dict:
+        """
+        Get the cluster info.
+        """
+        try:
+            response = self._make_request('GET', '/v1/clusterinfo')
+            # Ensure the result is in the required format
+            if (
+                isinstance(response, dict)
+                and "nodes_summary" in response
+                and "required_nodes" in response
+            ):
+                return response
+            nodes_summary = response.get("nodes_summary", {})
+            required_nodes = response.get("required_nodes", [])
+            if not nodes_summary and "nodes" in response:
+                nodes_summary = response["nodes"]
+            if not required_nodes and "required" in response:
+                required_nodes = response["required"]
+            return {
+                "nodes_summary": nodes_summary,
+                "required_nodes": required_nodes
+            }
+        except Exception as e:
+            logger.error(f"Failed to get cluster info: {e}")
+            raise e
+
+
+            
 class ConnectorUtils:
     @staticmethod
     def create_leader_connector(base_url: str = "http://localhost:8001") -> LeaderConnector:
