@@ -1,6 +1,8 @@
-from .discover import *
+from .discover_pg import DiscoverManagerPG
+from typing import Optional
 import yaml
 import logging
+import os
 
 class NotReadyException(Exception):
     pass
@@ -9,9 +11,40 @@ class Leader:
     CONFIG_PATH = "/opt/lunaricorn/leader_data/leader_config.yaml"
     CLUSTER_CONFIG_PATH = "/opt/lunaricorn/leader_data/cluster_config.yaml"
     def __init__(self) -> None:
-        self.discover_manager = DiscoverManager()
+        
         self.config = self._load_config()
         self.logger = logging.getLogger(__name__)
+
+        # Read config file values first
+        db_type = self.config.get("discover", {}).get("db_type", "postgresql")
+        db_host = self.config.get("discover", {}).get("db_host", "localhost")
+        db_port = self.config.get("discover", {}).get("db_port", 5432)
+        db_user = self.config.get("discover", {}).get("db_user", "postgres")
+        db_password = self.config.get("discover", {}).get("db_password", "postgres")
+        db_dbname = self.config.get("discover", {}).get("dbname", "lunaricorn")
+
+        # Environment variables override config file values only if they are set
+        if "db_type" in os.environ:
+            db_type = os.environ["db_type"]
+        if "db_host" in os.environ:
+            db_host = os.environ["db_host"]
+        if "db_port" in os.environ:
+            db_port = int(os.environ["db_port"])
+        if "db_user" in os.environ:
+            db_user = os.environ["db_user"]
+        if "db_password" in os.environ:
+            db_password = os.environ["db_password"]
+        if "db_name" in os.environ:
+            db_dbname = os.environ["db_name"]
+
+
+        self.discover_manager = DiscoverManagerPG(
+            host=db_host,
+            port=db_port,
+            user=db_user,
+            password=db_password,
+            dbname=db_dbname
+        )
         self.logger.info("Leader initialized")
     
     def _load_config(self) -> dict:

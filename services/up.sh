@@ -1,5 +1,15 @@
 #!/bin/bash
 # This script starts the services defined in docker-compose.yaml
+if [ ! -f ".env" ]; then
+    echo "Error: .env file not found"
+    exit 1
+fi
+
+source .env
+mkdir -p ${LUNARICORN_HOME}
+mkdir -p ${LUNARICORN_HOME}/leader_data
+mkdir -p ${LUNARICORN_HOME}/portal_data
+mkdir -p ${LUNARICORN_HOME}/pg_data
 
 # Exit immediately if a command exits with a non-zero status
 set -e

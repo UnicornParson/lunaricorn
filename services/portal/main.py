@@ -14,7 +14,7 @@ import signal
 import sys
 import os
 from pathlib import Path
-
+from lunaricorn.api.leader import ConnectorUtils
 
 # Initialize logging system
 def setup_logging():
@@ -25,7 +25,7 @@ def setup_logging():
     
     # Configure root logger
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     
     # Clear any existing handlers
     for handler in logger.handlers[:]:
@@ -51,7 +51,7 @@ def setup_logging():
     
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(simple_formatter)
     
     # Add handlers to root logger
@@ -128,6 +128,7 @@ def load_config():
     return config
 
 def init_components(config):
+    logger.info(f"init_components started: {config}")
     ClusterEngine.config = config
     try:
         ClusterEngine.cluster = ClusterEngine()
@@ -164,6 +165,39 @@ def retry_cluster_connection():
         logger.info("Shutdown detected, stopping retry thread")
     else:
         logger.info("Cluster connection established, retry thread stopping")
+    logger.info("retry_cluster_connection finished")
+
+def register_service():
+    logger.info("register_service started")
+    # Register the portal service with the leader using parameters from config
+    portal_cfg = ClusterEngine.config.get("portal", {})
+    cluster_cfg = ClusterEngine.config.get("cluster", {})
+    leader_url = cluster_cfg.get("leader")
+
+    # Extract registration parameters from config
+    node_name = portal_cfg.get("name")
+    node_type = portal_cfg.get("type")
+    instance_key = portal_cfg.get("key")
+    host = portal_cfg.get("host")
+    port = portal_cfg.get("port")
+
+    # Create the connector (if not already provided)
+    connector = ConnectorUtils.create_leader_connector(base_url=leader_url)
+
+    try:
+        # Register the service with the leader
+        response = connector.register_service(
+            node_name=node_name,
+            node_type=node_type,
+            instance_key=instance_key,
+            host=host,
+            port=port
+        )
+        logger.info(f"Service registered with leader: {response}")
+        return response
+    except Exception as e:
+        logger.error(f"Failed to register service with leader: {e}")
+        return None
 
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully"""
@@ -181,6 +215,17 @@ def signal_handler(signum, frame):
     logger.info("Graceful shutdown completed")
     sys.exit(0)
 
+def periodic_register_service():
+    """Periodically call register_service every 5 seconds until shutdown_event is set."""
+    while not shutdown_event.is_set():
+        try:
+            register_service()
+        except Exception as e:
+            logger.error(f"Error during periodic service registration: {e}")
+        # Wait for 5 seconds or until shutdown_event is set
+        if shutdown_event.wait(5):
+            break
+
 if __name__ == "__main__":
     logger.info("Starting Portal API with uvicorn")
     
@@ -191,16 +236,20 @@ if __name__ == "__main__":
     # Initialize components
     config = load_config()
     init_success = init_components(config)
+    logger.info(f"init_components finished: {init_success}")
     
     # If initial initialization failed, start retry thread
     if not init_success:
         logger.info("Starting background retry thread for cluster connection")
-        retry_thread = threading.Thread(target=retry_cluster_connection, daemon=True)
-        retry_thread.start()
+        retry_cluster_connection()
+        
+    # Start the periodic registration in a background thread
+    register_thread = threading.Thread(target=periodic_register_service, name="PeriodicRegisterService", daemon=True)
+    register_thread.start()
+    
+    logger.info("Starting uvicorn portal")
     
     try:
-        
-
         portal_config = config.get("portal", {})
         host = portal_config.get("host", "0.0.0.0")
         port = portal_config.get("port", 8000)

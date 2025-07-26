@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class DiscoverManager:
+class DiscoverManagerLocal:
     
     # Static constant for database path
     DB_PATH = "/opt/lunaricorn/leader_data/known_nodes.db"

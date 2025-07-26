@@ -10,9 +10,19 @@ services:
       - ${LUNARICORN_HOME}/leader_data:/opt/lunaricorn/leader_data
     environment:
       - PYTHONUNBUFFERED=1
+      - db_type=postgresql
+      - db_host=lunaricorn-pg
+      - db_port=5432
+      - db_user=lunaricorn
+      - db_password=${LUNARICORN_PASSWORD}
+      - db_name=lunaricorn
+      - db_schema=lunaricorn
     networks:
       - lunaricorn-network
     restart: unless-stopped
+    #depends_on:
+    #  pg:
+    #    condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -31,7 +41,7 @@ services:
       - ${LUNARICORN_HOME}/portal_data:/opt/lunaricorn/portal_data
     environment:
       - PYTHONUNBUFFERED=1
-      - CLUSTER_LEADER_URL=http://leader:8000/v1
+      - CLUSTER_LEADER_URL=http://leader:8000/
     networks:
       - lunaricorn-network
     depends_on:
@@ -44,6 +54,30 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+  pg:
+    build:
+      context: ./data/pg
+      dockerfile: Dockerfile
+    container_name: lunaricorn-pg
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${PG_ROOT_PASSWORD}
+      - POSTGRES_DB=postgres
+      - LUNARICORN_PASSWORD=${LUNARICORN_PASSWORD}
+    volumes:
+      - ${LUNARICORN_HOME}/pg_data:/var/lib/postgresql/data
+    networks:
+      - lunaricorn-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 
 networks:
   lunaricorn-network:
