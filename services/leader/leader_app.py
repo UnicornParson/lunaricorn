@@ -145,6 +145,22 @@ def get_environment():
     logger.debug(f"Get environment response: {response}")
     return jsonify(response)
 
+@app.route("/v1/utils/get_mid", methods=["GET"])
+def get_mid():
+    logger.info("Received request for next message id")
+    if leader is None:
+        logger.error("Leader is not ready to start")
+        return make_response(jsonify({"message": "Leader is not ready to start"}), 500)
+    return jsonify({"mid": leader.get_next_message_id()})
+
+@app.route("/v1/utils/get_oid", methods=["GET"])
+def get_oid():
+    logger.info("Received request for next object id")
+    if leader is None:
+        logger.error("Leader is not ready to start")
+        return make_response(jsonify({"message": "Leader is not ready to start"}), 500)
+    return jsonify({"oid": leader.get_next_object_id()})
+
 @app.route("/", methods=["GET"])
 def root():
     logger.debug("Root endpoint accessed")
@@ -171,7 +187,11 @@ def api_root():
             "list": "/v1/list",
             "discover": "/v1/discover",
             "getenv": "/v1/getenv",
-            "clusterinfo": "/v1/clusterinfo"
+            "clusterinfo": "/v1/clusterinfo",
+            "utils": {
+                "get_mid": "/v1/utils/get_mid",
+                "get_oid": "/v1/utils/get_oid"
+            }
         },
         "status": "healthy"
     })

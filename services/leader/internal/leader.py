@@ -43,7 +43,9 @@ class Leader:
             port=db_port,
             user=db_user,
             password=db_password,
-            dbname=db_dbname
+            dbname=db_dbname,
+            minconn=1,
+            maxconn=3
         )
         self.logger.info("Leader initialized")
     
@@ -130,3 +132,15 @@ class Leader:
             "nodes_summary": nodes_summary,
             "required_nodes": list(set(required_nodes))
         }
+
+    def get_next_message_id(self):
+        current_mid = self.discover_manager.get_message_id()
+        current_mid += 1
+        self.discover_manager.update_message_id(current_mid)
+        return current_mid
+
+    def get_next_object_id(self):
+        current_oid = self.discover_manager.get_object_id()
+        current_oid += 1
+        self.discover_manager.update_object_id(current_oid)
+        return current_oid

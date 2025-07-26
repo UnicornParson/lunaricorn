@@ -1,5 +1,5 @@
 #!/bin/bash
-# This script starts the services defined in docker-compose.yaml
+
 if [ ! -f ".env" ]; then
     echo "Error: .env file not found"
     exit 1

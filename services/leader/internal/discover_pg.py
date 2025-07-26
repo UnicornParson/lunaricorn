@@ -21,31 +21,99 @@ class DiscoverManagerPG:
             'port': port,
             'user': user,
             'password': password,
-            'dbname': dbname
+            'dbname': dbname,
+            'connect_timeout': 10,
+            'application_name': 'lunaricorn_leader',
+            'options': '-c statement_timeout=30000'  # 30 second statement timeout
         }
+        self.minconn = minconn
+        self.maxconn = maxconn
         self.pool = SimpleConnectionPool(minconn, maxconn, **self.conn_params)
-        logger.info("PostgreSQL connection pool created")
+        logger.info(f"PostgreSQL connection pool created with {minconn}-{maxconn} connections")
         self._ensure_table_exists()
 
     def _get_conn(self):
         """Get a connection from the pool."""
-        return self.pool.getconn()
+        try:
+            conn = self.pool.getconn()
+            logger.debug("Connection acquired from pool")
+            return conn
+        except Exception as e:
+            if "connection pool exhausted" in str(e).lower():
+                logger.warning("Connection pool exhausted, attempting to reset")
+                self._reset_pool()
+                conn = self.pool.getconn()
+                logger.debug("Connection acquired from reset pool")
+                return conn
+            else:
+                logger.error(f"Failed to get connection from pool: {e}")
+                raise
 
     def _put_conn(self, conn):
         """Return a connection to the pool."""
-        self.pool.putconn(conn)
+        try:
+            if conn:
+                self.pool.putconn(conn)
+                logger.debug("Connection returned to pool")
+        except Exception as e:
+            logger.error(f"Failed to return connection to pool: {e}")
+            # Try to close the connection if we can't return it to the pool
+            try:
+                conn.close()
+                logger.debug("Connection closed due to pool return failure")
+            except:
+                pass
+
+    def _reset_pool(self):
+        """Reset the connection pool when it gets exhausted."""
+        try:
+            logger.warning("Resetting connection pool due to exhaustion")
+            self.pool.closeall()
+            self.pool = SimpleConnectionPool(self.minconn, self.maxconn, **self.conn_params)
+            logger.info("Connection pool reset successfully")
+        except Exception as e:
+            logger.error(f"Failed to reset connection pool: {e}")
+            raise
+
+    def _get_connection_context(self):
+        """Context manager for database connections."""
+        conn = None
+        try:
+            conn = self._get_conn()
+            return conn
+        except Exception as e:
+            if conn:
+                self._put_conn(conn)
+            raise
+        return conn
+
+    def get_pool_status(self):
+        """Get current connection pool status."""
+        try:
+            return {
+                'minconn': self.minconn,
+                'maxconn': self.maxconn,
+                'pool_size': self.pool.get_size(),
+                'pool_used': self.pool.get_used()
+            }
+        except Exception as e:
+            logger.error(f"Error getting pool status: {e}")
+            return {}
 
     def _validate_connection(self):
         """Validate that a connection can be acquired from the pool."""
+        conn = None
         try:
             conn = self._get_conn()
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
-            self._put_conn(conn)
             return True
         except Exception as e:
             logger.error(f"Connection pool validation failed: {e}")
             return False
+        finally:
+            if conn:
+                self._put_conn(conn)
 
     def _ensure_table_exists(self):
         """Create the last_seen table if it does not exist."""
@@ -258,6 +326,102 @@ class DiscoverManagerPG:
         finally:
             self._put_conn(conn)
 
+    def get_object_id(self) -> Optional[int]:
+        """
+        Get OBJECT_ID value from cluster_state table.
+        Returns the numeric value stored in field 'i' for key 'OBJECT_ID'.
+        """
+        if not self._validate_connection():
+            logger.error("Cannot get OBJECT_ID - no valid database connection")
+            return 0
+        conn = self._get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT i FROM cluster_state WHERE key = %s", ('OBJECT_ID',))
+                result = cur.fetchone()
+                if result:
+                    return result[0]
+                return 0
+        except Exception as e:
+            logger.error(f"Error getting OBJECT_ID: {e}")
+            return 0
+        finally:
+            self._put_conn(conn)
+
+    def update_object_id(self, object_id: int) -> bool:
+        """
+        Update OBJECT_ID value in cluster_state table.
+        Stores the numeric value in field 'i' for key 'OBJECT_ID'.
+        """
+        if not self._validate_connection():
+            logger.error("Cannot update OBJECT_ID - no valid database connection")
+            return False
+        conn = self._get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute('''
+                    INSERT INTO cluster_state (key, i) 
+                    VALUES (%s, %s) 
+                    ON CONFLICT (key) 
+                    DO UPDATE SET i = EXCLUDED.i
+                ''', ('OBJECT_ID', object_id))
+                conn.commit()
+                logger.debug(f"Updated OBJECT_ID to: {object_id}")
+                return True
+        except Exception as e:
+            logger.error(f"Error updating OBJECT_ID: {e}")
+            return False
+        finally:
+            self._put_conn(conn)
+
+    def get_message_id(self) -> Optional[int]:
+        """
+        Get MESSAGE_ID value from cluster_state table.
+        Returns the numeric value stored in field 'i' for key 'MESSAGE_ID'.
+        """
+        if not self._validate_connection():
+            logger.error("Cannot get MESSAGE_ID - no valid database connection")
+            return 0
+        conn = self._get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT i FROM cluster_state WHERE key = %s", ('MESSAGE_ID',))
+                result = cur.fetchone()
+                if result:
+                    return result[0]
+                return 0
+        except Exception as e:
+            logger.error(f"Error getting MESSAGE_ID: {e}")
+            return 0
+        finally:
+            self._put_conn(conn)
+
+    def update_message_id(self, message_id: int) -> bool:
+        """
+        Update MESSAGE_ID value in cluster_state table.
+        Stores the numeric value in field 'i' for key 'MESSAGE_ID'.
+        """
+        if not self._validate_connection():
+            logger.error("Cannot update MESSAGE_ID - no valid database connection")
+            return False
+        conn = self._get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute('''
+                    INSERT INTO cluster_state (key, i) 
+                    VALUES (%s, %s) 
+                    ON CONFLICT (key) 
+                    DO UPDATE SET i = EXCLUDED.i
+                ''', ('MESSAGE_ID', message_id))
+                conn.commit()
+                logger.debug(f"Updated MESSAGE_ID to: {message_id}")
+                return True
+        except Exception as e:
+            logger.error(f"Error updating MESSAGE_ID: {e}")
+            return False
+        finally:
+            self._put_conn(conn)
+
     def __del__(self):
         """Cleanup method to close the connection pool."""
         try:
@@ -266,3 +430,4 @@ class DiscoverManagerPG:
                 logger.info("PostgreSQL connection pool closed")
         except Exception as e:
             logger.error(f"Error closing PostgreSQL connection pool: {e}")
+
