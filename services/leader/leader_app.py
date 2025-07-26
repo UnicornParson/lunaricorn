@@ -8,7 +8,14 @@ from internal.leader import Leader, NotReadyException
 from internal.db_manager import db_manager
 import atexit
 
-# --- Logging setup ---
+class AutoFlushFileHandler(logging.handlers.RotatingFileHandler):
+    def __init__(self, filename):
+        super().__init__(filename, maxBytes=100*1024*1024, backupCount=10, encoding='utf-8')
+        
+    def emit(self, record):
+        super().emit(record)
+        self.flush()
+
 def setup_logging():
     logs_dir = Path("/opt/lunaricorn/leader_data/logs")
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -37,12 +44,7 @@ def setup_logging():
     simple_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     
     # File handler with rotation (100MB max size, keep 10 backup files)
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_file,
-        maxBytes=100*1024*1024,  # 100 MB
-        backupCount=10,
-        encoding='utf-8'
-    )
+    file_handler = AutoFlushFileHandler(log_file)
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(detailed_formatter)
     
