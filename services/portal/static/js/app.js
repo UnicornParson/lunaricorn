@@ -7,6 +7,7 @@ createApp({
             currentPage: 'dashboard',
             clusterReady: false,
             nodes: [],
+            requiredNodes: [], // Add required nodes array
             menuItems: [
                 {
                     id: 'dashboard',
@@ -78,15 +79,19 @@ createApp({
                 const data = await response.json();
                 
                 if (data.status === 'success' && data.data) {
+                    // Store required nodes
+                    this.requiredNodes = data.data.required_nodes || [];
                     // Transform the data to match our expected format
                     this.nodes = this.transformNodesData(data.data);
                 } else {
                     console.error('Failed to load nodes:', data.error);
                     this.nodes = [];
+                    this.requiredNodes = [];
                 }
             } catch (error) {
                 console.error('Failed to load nodes:', error);
                 this.nodes = [];
+                this.requiredNodes = [];
             }
         },
         transformNodesData(clusterData) {
@@ -97,22 +102,49 @@ createApp({
             if (clusterData.nodes_summary) {
                 // If we have nodes_summary, use it
                 Object.entries(clusterData.nodes_summary).forEach(([nodeName, status]) => {
-                    nodes.push({
-                        name: nodeName,
-                        type: 'node',
-                        status: status === 'on' ? 'online' : 'offline',
-                        key: nodeName
-                    });
+                    // Only include nodes that are in required_nodes if we're on the nodes page
+                    if (this.currentPage === 'nodes' && this.requiredNodes.length > 0) {
+                        if (this.requiredNodes.includes(nodeName)) {
+                            nodes.push({
+                                name: nodeName,
+                                type: 'node',
+                                status: status === 'on' ? 'online' : 'offline',
+                                key: nodeName
+                            });
+                        }
+                    } else {
+                        // On dashboard, show all nodes
+                        nodes.push({
+                            name: nodeName,
+                            type: 'node',
+                            status: status === 'on' ? 'online' : 'offline',
+                            key: nodeName
+                        });
+                    }
                 });
             } else if (Array.isArray(clusterData)) {
                 // If it's an array, assume it's the nodes list
                 clusterData.forEach(node => {
-                    nodes.push({
-                        name: node.name || node.key,
-                        type: node.type || 'node',
-                        status: this.determineNodeStatus(node),
-                        key: node.key || node.name
-                    });
+                    const nodeName = node.name || node.key;
+                    // Only include nodes that are in required_nodes if we're on the nodes page
+                    if (this.currentPage === 'nodes' && this.requiredNodes.length > 0) {
+                        if (this.requiredNodes.includes(nodeName)) {
+                            nodes.push({
+                                name: nodeName,
+                                type: node.type || 'node',
+                                status: this.determineNodeStatus(node),
+                                key: node.key || nodeName
+                            });
+                        }
+                    } else {
+                        // On dashboard, show all nodes
+                        nodes.push({
+                            name: nodeName,
+                            type: node.type || 'node',
+                            status: this.determineNodeStatus(node),
+                            key: node.key || nodeName
+                        });
+                    }
                 });
             }
             

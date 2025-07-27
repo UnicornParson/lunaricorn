@@ -173,8 +173,35 @@
                         </div>
                     </div>
 
+                    <!-- Nodes Page -->
+                    <div v-if="currentPage === 'nodes'" class="nodes-page">
+                        <div class="widget">
+                            <h3 class="widget-title">Nodes</h3>
+                            <div class="nodes-list" v-if="nodes.length > 0">
+                                <div v-for="node in nodes" :key="node.key" class="node-item" :class="{ 'node-online': node.status === 'online', 'node-offline': node.status === 'offline' }">
+                                    <div class="node-icon">
+                                        <i class="fas fa-server"></i>
+                                    </div>
+                                    <div class="node-content">
+                                        <div class="node-name">{{ node.name }}</div>
+                                        <div class="node-details">
+                                            <span class="node-type">{{ node.type }}</span>
+                                            <span class="node-status" :class="{ 'status-online': node.status === 'online', 'status-offline': node.status === 'offline' }">
+                                                {{ node.status === 'online' ? 'Online' : 'Offline' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-else class="nodes-empty">
+                                <i class="fas fa-info-circle"></i>
+                                <span>No required nodes available</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Other pages content -->
-                    <div v-else class="page-content">
+                    <div v-else-if="currentPage !== 'dashboard'" class="page-content">
                         <h2>{{ getCurrentPageTitle() }}</h2>
                         <p>This is the {{ getCurrentPageTitle() }} page content.</p>
                     </div>
