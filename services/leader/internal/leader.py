@@ -1,18 +1,5 @@
 from .discover_pg import DiscoverManagerPG
-from typing import Optional
-import yaml
-import logging
-import os
-
-from .discover_pg import DiscoverManagerPG
-from .db_manager import db_manager
-from typing import Optional
-import yaml
-import logging
-import os
-
-from .discover_pg import DiscoverManagerPG
-from .db_manager import db_manager
+from lunaricorn.utils.db_manager import DatabaseManager
 from typing import Optional
 import yaml
 import logging
@@ -52,6 +39,7 @@ class Leader:
             db_dbname = os.environ["db_name"]
 
         # Initialize global database manager
+        db_manager = DatabaseManager()
         db_manager.initialize(
             host=db_host,
             port=db_port,

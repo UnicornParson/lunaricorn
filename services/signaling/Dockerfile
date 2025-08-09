@@ -10,24 +10,24 @@ RUN apt update && apt install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /opt/lunaricorn/portal/logs
-COPY cfg/config.yaml /opt/lunaricorn/portal/data/config.yaml
-COPY requirements.txt /opt/lunaricorn/portal/app/   
+RUN mkdir -p /opt/lunaricorn/signaling/logs
+COPY cfg/config.yaml /opt/lunaricorn/signaling/data/config.yaml
+COPY requirements.txt /opt/lunaricorn/signaling/app/   
 
-RUN pip install --no-cache-dir -r /opt/lunaricorn/portal/app/requirements.txt
+RUN pip install --no-cache-dir -r /opt/lunaricorn/signaling/app/requirements.txt
 
 # Copy application code to the specified directory
-COPY . /opt/lunaricorn/portal/app/
-ADD tmp/lunaricorn.tgz /opt/lunaricorn/portal/app
-RUN ls -la /opt/lunaricorn/portal/app/lunaricorn
+COPY . /opt/lunaricorn/signaling/app/
+ADD tmp/lunaricorn.tgz /opt/lunaricorn/signaling/app
+RUN ls -la /opt/lunaricorn/signaling/app/lunaricorn
 # Set working directory to the application directory
-WORKDIR /opt/lunaricorn/portal/app
+WORKDIR /opt/lunaricorn/signaling/app
 
 # Expose ZeroMQ ports
 EXPOSE 5555 5556 5557
 
 # Set volume for persistent data
-VOLUME ["/opt/lunaricorn/portal/data"]
+VOLUME ["/opt/lunaricorn/signaling/data"]
 
 
 
