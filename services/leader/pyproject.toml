@@ -1,0 +1,220 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lunaricorn-leader"
+version = "0.1.0"
+description = "Leader service for LunaRicorn distributed RSS processing cluster"
+readme = "../../README.md"
+requires-python = ">=3.13"
+license = {file = "../../LICENSE"}
+authors = [
+    {name = "LunaRicorn Team"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Framework :: FastAPI",
+    "Framework :: Flask",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: System :: Distributed Computing",
+]
+dependencies = [
+    "fastapi>=0.104.0,<1.0.0",
+    "uvicorn[standard]>=0.24.0,<1.0.0",
+    "pydantic>=2.5.0,<3.0.0",
+    "python-multipart>=0.0.6,<1.0.0",
+    "pyyaml>=6.0.0,<7.0.0",
+    "flask>=3.0.0,<4.0.0",
+    "psycopg2>=2.9.0,<3.0.0; platform_system != 'Windows'",
+    "psycopg2-binary>=2.9.0,<3.0.0; platform_system == 'Windows'",
+    "tqdm>=4.65.0,<5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "flake8>=6.0.0,<7.0.0",
+    "black>=23.0.0,<25.0.0",
+    "mypy>=1.0.0,<2.0.0",
+    "bandit>=1.7.0,<2.0.0",
+    "safety>=2.0.0,<4.0.0",
+    "pytest>=7.0.0,<8.0.0",
+    "pytest-cov>=4.0.0,<5.0.0",
+    "pytest-asyncio>=0.21.0,<1.0.0",
+    "httpx>=0.25.0,<1.0.0",  # for FastAPI testing
+    "ruff>=0.1.0,<1.0.0",
+]
+docs = [
+    "mkdocs>=1.4.0,<2.0.0",
+    "mkdocstrings[python]>=0.20.0,<1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/lunaricorn/lunaricorn"
+Repository = "https://github.com/lunaricorn/lunaricorn.git"
+Issues = "https://github.com/lunaricorn/lunaricorn/issues"
+
+[project.scripts]
+lunaricorn-leader = "leader_app:main"
+
+# Flake8 configuration for code style checking
+[tool.flake8]
+max-line-length = 120
+extend-ignore = [
+    "E203",  # whitespace before ':'
+    "E501",  # line too long (handled by black)
+    "W503",  # line break before binary operator
+    "F401",  # imported but unused (common in __init__.py)
+]
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".venv",
+    "venv",
+    ".mypy_cache",
+    ".pytest_cache",
+    "*.egg-info",
+    "tmp",
+    "initial_data",
+]
+per-file-ignores = [
+    "__init__.py:F401,F403",  # imported but unused, star imports
+    "test_*.py:S101",         # use of assert
+    "leader_app.py:E402",     # module level import not at top
+    "main.py:E402",           # module level import not at top
+]
+
+# Black configuration for code formatting
+[tool.black]
+line-length = 120
+target-version = ["py313"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.mypy_cache
+  | \.pytest_cache
+  | \.venv
+  | venv
+  | build
+  | dist
+  | tmp
+  | initial_data
+)/
+'''
+
+# MyPy configuration for static type checking
+[tool.mypy]
+python_version = "3.13"
+strict = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+ignore_missing_imports = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+cache_dir = ".mypy_cache"
+
+# Per-module configuration for external dependencies
+[[tool.mypy.overrides]]
+module = [
+    "fastapi.*",
+    "uvicorn.*",
+    "pydantic.*",
+    "flask.*",
+    "psycopg2.*",
+    "yaml.*",
+    "multipart.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = "internal.*"
+warn_return_any = false
+
+# Bandit configuration for security linting
+[tool.bandit]
+exclude_dirs = [
+    "tests",
+    ".venv",
+    "venv",
+    "tmp",
+    "initial_data",
+]
+tests = ["B101", "B102", "B201", "B301", "B303", "B304", "B305", "B310", "B318", "B319", "B322", "B323", "B324", "B325", "B401", "B402", "B403", "B404", "B405", "B406", "B407", "B408", "B409", "B410", "B411", "B412", "B413", "B502", "B503", "B504", "B505", "B506", "B507", "B508", "B509", "B601", "B602", "B603", "B604", "B605", "B606", "B607", "B608", "B609", "B610", "B611", "B612", "B613", "B614", "B615", "B616", "B617", "B701", "B702", "B703", "B704", "B705", "B706", "B707", "B708", "B709", "B950"]
+skips = [
+    "B101",  # assert_used - commonly used in tests
+    "B108",  # hardcoded_tmp_directory - may be needed for containers
+    "B603",  # subprocess_without_shell_equals_true - may be needed for system calls
+]
+
+# Test configuration with pytest
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "api: marks tests for API endpoints",
+    "database: marks tests that require database",
+]
+asyncio_mode = "auto"
+
+# Coverage configuration
+[tool.coverage.run]
+source = [".", "internal"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__init__.py",
+    ".venv/*",
+    "venv/*",
+    "tmp/*",
+    "initial_data/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+# Ruff configuration for fast linting
+[tool.ruff]
+cache-dir = ".ruff_cache"
+line-length = 120
+target-version = "py313"
