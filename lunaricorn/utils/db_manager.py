@@ -14,6 +14,7 @@ class DatabaseManager:
     """
     _instance = None
     _lock = threading.Lock()
+    db_manager = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -21,6 +22,7 @@ class DatabaseManager:
                 if cls._instance is None:
                     cls._instance = super(DatabaseManager, cls).__new__(cls)
                     cls._instance._initialized = False
+                    cls.db_manager = cls._instance
         return cls._instance
     
     def __init__(self):
@@ -283,4 +285,3 @@ class DatabaseManager:
 
 
 # Global instance
-db_manager = DatabaseManager() 

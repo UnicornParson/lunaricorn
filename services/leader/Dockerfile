@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y \
 RUN mkdir -p /opt/lunaricorn/leader_data/logs \
     && mkdir -p /opt/lunaricorn/leader/app/initial_data
 
+ADD tmp/lunaricorn.tgz /opt/lunaricorn/leader/app
+RUN pip install --no-cache-dir -r /opt/lunaricorn/leader/app/lunaricorn/requirements.txt
 # Copy requirements file
 COPY requirements.txt /opt/lunaricorn/leader/app/
 

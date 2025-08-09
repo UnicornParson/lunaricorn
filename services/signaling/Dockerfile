@@ -7,7 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 USER root
 RUN apt update && apt install -y \
     gcc \
-    curl \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /opt/lunaricorn/portal/logs
@@ -19,19 +19,17 @@ RUN pip install --no-cache-dir -r /opt/lunaricorn/portal/app/requirements.txt
 # Copy application code to the specified directory
 COPY . /opt/lunaricorn/portal/app/
 ADD tmp/lunaricorn.tgz /opt/lunaricorn/portal/app
-RUN pip install --no-cache-dir -r /opt/lunaricorn/portal/app/lunaricorn/requirements.txt
+RUN ls -la /opt/lunaricorn/portal/app/lunaricorn
 # Set working directory to the application directory
 WORKDIR /opt/lunaricorn/portal/app
 
-# Expose port
-EXPOSE 8000
+# Expose ZeroMQ ports
+EXPOSE 5555 5556 5557
 
 # Set volume for persistent data
 VOLUME ["/opt/lunaricorn/portal/data"]
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+
 
 # Run the application
 CMD ["python", "main.py"]

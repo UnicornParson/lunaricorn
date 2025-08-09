@@ -6,7 +6,10 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
-#source .env
+echo "Building leader service..."
+pushd leader > /dev/null
+./build.sh
+popd > /dev/null
 
 docker compose stop leader && docker compose rm -f leader
 docker compose up -d --build --force-recreate leader

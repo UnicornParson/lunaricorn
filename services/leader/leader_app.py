@@ -5,78 +5,21 @@ import logging
 import logging.handlers
 from pathlib import Path
 from internal.leader import Leader, NotReadyException
-from internal.db_manager import db_manager
+from lunaricorn.utils.db_manager import DatabaseManager
 import atexit
+from lunaricorn.utils.logger_config import setup_logging
 
-class AutoFlushFileHandler(logging.handlers.RotatingFileHandler):
-    def __init__(self, filename):
-        super().__init__(filename, maxBytes=100*1024*1024, backupCount=10, encoding='utf-8')
-        
-    def emit(self, record):
-        super().emit(record)
-        self.flush()
 
-def setup_logging():
-    logs_dir = Path("/opt/lunaricorn/leader_data/logs")
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Backup existing log file if it exists
-    log_file = logs_dir / "leader_api.log"
-    if log_file.exists():
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = logs_dir / f"leader_api_{timestamp}.log"
-        try:
-            log_file.rename(backup_file)
-            print(f"Backed up existing log file to: {backup_file}")
-        except Exception as e:
-            print(f"Warning: Could not backup existing log file: {e}")
-    
-    # Create new log file
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    
-    # Clear any existing handlers
-    for handler in logger.handlers[:]:
-        logger.removeHandler(handler)
-    
-    # Create formatters
-    detailed_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s - %(message)s')
-    simple_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    
-    # File handler with rotation (100MB max size, keep 10 backup files)
-    file_handler = AutoFlushFileHandler(log_file)
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(detailed_formatter)
-    
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(simple_formatter)
-    
-    # Add handlers to root logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    
-    # Create specific logger for this application
-    app_logger = logging.getLogger("leader_api")
-    app_logger.info("Logging system initialized with file rotation")
-    
-    return app_logger
-
-logger = setup_logging()
+logger = setup_logging("leader_api", "/opt/lunaricorn/leader_data/logs")
 logger.info("Leader API started")
-
-# --- Flask app setup ---
 app = Flask(__name__)
 
-# --- Leader instance ---
 try:
     leader = Leader()
 except Exception as e:
     logger.error(f"Failed to initialize Leader: {e}")
     leader = None
 
-# --- Endpoints ---
 
 @app.route("/v1/imalive", methods=["POST"])
 def im_alive():
@@ -256,8 +199,8 @@ if __name__ == "__main__":
     # Register shutdown handler
     def shutdown_handler():
         logger.info("Shutting down Leader API...")
-        if db_manager:
-            db_manager.shutdown()
+        if DatabaseManager.db_manager:
+            DatabaseManager.db_manager.shutdown()
         logger.info("Leader API shutdown complete")
     
     atexit.register(shutdown_handler)

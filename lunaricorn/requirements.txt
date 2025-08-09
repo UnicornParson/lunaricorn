@@ -8,3 +8,5 @@ cloudscraper
 nest_asyncio 
 tabulate
 markdownify
+psycopg2-binary
+tqdm

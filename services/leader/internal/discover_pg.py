@@ -7,7 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from .db_manager import db_manager
+from lunaricorn.utils.db_manager import DatabaseManager
 
 class DiscoverManagerPG:
     """
@@ -27,7 +27,9 @@ class DiscoverManagerPG:
         self.dbname = dbname
         self.minconn = minconn
         self.maxconn = maxconn
-        
+        if not DatabaseManager.db_manager:
+            DatabaseManager.db_manager = DatabaseManager()
+        DatabaseManager.db_manager.initialize(self.host, self.port, self.user, self.password, self.dbname, self.minconn, self.maxconn)
         logger.info("DiscoverManagerPG initialized with global database manager")
 
     def _create_pool(self):
@@ -43,11 +45,11 @@ class DiscoverManagerPG:
 
     def _get_conn(self):
         """Get a connection from the global database manager."""
-        return db_manager.get_connection()
+        return DatabaseManager.db_manager.get_connection()
 
     def _put_conn(self, conn):
         """Return a connection to the global database manager."""
-        db_manager.return_connection(conn)
+        DatabaseManager.db_manager.return_connection(conn)
 
     def _reset_pool(self):
         """Reset the connection pool when it gets exhausted."""
@@ -86,15 +88,15 @@ class DiscoverManagerPG:
 
     def _is_pool_valid(self):
         """Check if the global database manager is valid."""
-        return db_manager.validate_connection()
+        return DatabaseManager.db_manager.validate_connection()
 
     def _validate_connection(self):
         """Validate that a connection can be acquired from the global database manager."""
-        return db_manager.validate_connection()
+        return DatabaseManager.db_manager.validate_connection()
 
     def _ensure_table_exists(self):
         """Ensure all required tables exist using the global database manager."""
-        db_manager.ensure_tables_exist()
+        DatabaseManager.db_manager.ensure_tables_exist()
 
     def update(self, node_name: str, node_type: str, instance_key: str, host: Optional[str] = None, port: Optional[int] = 0) -> bool:
         """
@@ -110,7 +112,7 @@ class DiscoverManagerPG:
         
         try:
             # Check if record exists
-            existing_record = db_manager.execute_query(
+            existing_record = DatabaseManager.db_manager.execute_query(
                 "SELECT i FROM last_seen WHERE key = %s",
                 (instance_key,),
                 fetch_one=True
@@ -118,7 +120,7 @@ class DiscoverManagerPG:
             
             if existing_record:
                 # Update existing record
-                db_manager.execute_query('''
+                DatabaseManager.db_manager.execute_query('''
                     UPDATE last_seen 
                     SET name = %s, type = %s, last_update = %s, key = %s
                     WHERE key = %s
@@ -126,7 +128,7 @@ class DiscoverManagerPG:
                 logger.debug(f"Updated existing node: {node_name} ({instance_key})")
             else:
                 # Insert new record
-                db_manager.execute_query('''
+                DatabaseManager.db_manager.execute_query('''
                     INSERT INTO last_seen (name, type, key, last_update)
                     VALUES (%s, %s, %s, %s)
                 ''', (node_name, node_type, instance_key, current_timestamp))
@@ -149,7 +151,7 @@ class DiscoverManagerPG:
         cutoff_timestamp = current_timestamp - offset
         
         try:
-            records = db_manager.execute_query('''
+            records = DatabaseManager.db_manager.execute_query('''
                 SELECT i, name, type, key, last_update
                 FROM last_seen
                 WHERE last_update >= %s
@@ -181,7 +183,7 @@ class DiscoverManagerPG:
             return None
         
         try:
-            record = db_manager.execute_query('''
+            record = DatabaseManager.db_manager.execute_query('''
                 SELECT i, name, type, key, last_update
                 FROM last_seen
                 WHERE key = %s
@@ -212,7 +214,7 @@ class DiscoverManagerPG:
         cutoff_timestamp = current_timestamp - max_age_seconds
         
         try:
-            deleted_count = db_manager.execute_query('''
+            deleted_count = DatabaseManager.db_manager.execute_query('''
                 DELETE FROM last_seen
                 WHERE last_update < %s
             ''', (cutoff_timestamp,))
@@ -232,15 +234,15 @@ class DiscoverManagerPG:
             return {}
         
         try:
-            total_records = db_manager.execute_query("SELECT COUNT(*) FROM last_seen", fetch_one=True)[0]
+            total_records = DatabaseManager.db_manager.execute_query("SELECT COUNT(*) FROM last_seen", fetch_one=True)[0]
             
-            records_by_type_result = db_manager.execute_query(
+            records_by_type_result = DatabaseManager.db_manager.execute_query(
                 "SELECT type, COUNT(*) FROM last_seen GROUP BY type", 
                 fetch_all=True
             )
             records_by_type = dict(records_by_type_result) if records_by_type_result else {}
             
-            time_range = db_manager.execute_query(
+            time_range = DatabaseManager.db_manager.execute_query(
                 "SELECT MIN(last_update), MAX(last_update) FROM last_seen", 
                 fetch_one=True
             )
@@ -267,7 +269,7 @@ class DiscoverManagerPG:
             return 0
         
         try:
-            result = db_manager.execute_query(
+            result = DatabaseManager.db_manager.execute_query(
                 "SELECT i FROM cluster_state WHERE key = %s", 
                 ('OBJECT_ID',), 
                 fetch_one=True
@@ -287,7 +289,7 @@ class DiscoverManagerPG:
             return False
         
         try:
-            db_manager.execute_query('''
+            DatabaseManager.db_manager.execute_query('''
                 INSERT INTO cluster_state (key, i) 
                 VALUES (%s, %s) 
                 ON CONFLICT (key) 
@@ -310,7 +312,7 @@ class DiscoverManagerPG:
             return 0
         
         try:
-            result = db_manager.execute_query(
+            result = DatabaseManager.db_manager.execute_query(
                 "SELECT i FROM cluster_state WHERE key = %s", 
                 ('MESSAGE_ID',), 
                 fetch_one=True
@@ -330,7 +332,7 @@ class DiscoverManagerPG:
             return False
         
         try:
-            db_manager.execute_query('''
+            DatabaseManager.db_manager.execute_query('''
                 INSERT INTO cluster_state (key, i) 
                 VALUES (%s, %s) 
                 ON CONFLICT (key) 

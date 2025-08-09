@@ -13,9 +13,9 @@ import signal
 import sys
 import os
 from lunaricorn.api.leader import ConnectorUtils
-from logger_config import setup_logging
+from lunaricorn.utils.logger_config import setup_logging
 
-logger = setup_logging("portal_app")
+logger = setup_logging("portal_app", "/opt/lunaricorn/portal_data/logs")
 
 # Global shutdown flag for graceful termination
 shutdown_event = threading.Event()

@@ -6,7 +6,10 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
-#source .env
+echo "Building portal service..."
+pushd portal > /dev/null
+./build.sh
+popd > /dev/null
 
 docker compose stop portal && docker compose rm -f portal
 docker compose up -d --build --force-recreate portal

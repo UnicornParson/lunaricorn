@@ -1,6 +1,7 @@
 import uvicorn
 import yaml
-from logger_config import setup_logging
+from lunaricorn.utils.logger_config import setup_logging
+
 
 def load_config():
     with open("cfg/config.yaml", "r") as f:
