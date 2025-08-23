@@ -5,9 +5,7 @@ signaling:
   zmq:
     protocol: "tcp"
     bind_address: "*"
-    max_connections: 100
     heartbeat_interval: 30
-    timeout: 60
 
 message_storage:
   db_type: "postgresql"
@@ -16,3 +14,5 @@ message_storage:
   db_user: "postgres"
   db_password: "postgres"
   dbname: "lunaricorn"
+  subscriber_timeout: 300
+  max_events: 1000

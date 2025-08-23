@@ -1,0 +1,5 @@
+db_type=postgresql
+db_host=192.168.0.18
+db_port=8003
+db_user=lunaricorn
+db_password=ssmir1

@@ -7,6 +7,19 @@ import threading
 
 logger = logging.getLogger(__name__)
 
+class DbConfig:
+    def __init__(self):
+        self.db_type = None
+        self.db_host = None
+        self.db_port = None
+        self.db_user = None
+        self.db_password = None
+        self.db_dbname = None
+    def valid(self) -> bool:
+        return self.db_type and self.db_host and self.db_port and self.db_user and self.db_password and self.db_dbname
+    def to_str(self) -> str:
+        return f"{self.db_user}@{self.db_host}:{self.db_port}/{self.db_dbname}"
+
 class DatabaseManager:
     """
     Singleton database manager for global PostgreSQL connection management.
@@ -136,6 +149,7 @@ class DatabaseManager:
                 except Exception as close_error:
                     logger.warning(f"Error closing old connection: {close_error}")
             
+            logger.error(f"@@ try to mace connection {self.conn_params}")
             self.connection = psycopg2.connect(**self.conn_params)
             self.connection.autocommit = False
             logger.info("Database connection created successfully")
@@ -194,6 +208,7 @@ class DatabaseManager:
             logger.error(f"Database connection validation failed: {e}")
             return False
     
+    # TODO: move back to leader code
     def ensure_tables_exist(self):
         """Ensure all required tables exist in the database."""
         if not self.validate_connection():
@@ -243,6 +258,39 @@ class DatabaseManager:
             logger.error(f"Error ensuring tables exist: {e}")
             raise
     
+    def installer_impl(self, cur):
+        raise NotImplementedError("base class call. should be overridden")
+
+    def install_db(self):
+        if not self.validate_connection():
+            raise Exception("Cannot ensure tables - no valid database connection")
+        
+        try:
+            with self.connection.cursor() as cur:
+                self.installer_impl(cur)
+            self.connection.commit()
+        except Exception as e:
+            logger.error(f"Error ensuring tables exist: {e}")
+            raise e
+
+    def check_tables(self, names:list) -> bool:
+        for name in names:
+            if not self.check_table(name):
+                return False
+        return True
+
+    def check_table(self, table_name:str, schema='public'):
+        with self.connection.cursor() as cur:
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT 1 
+                    FROM information_schema.tables 
+                    WHERE table_schema = %s 
+                    AND table_name = %s
+                );
+            """, (schema, table_name))
+            return cur.fetchone()[0]
+
     def execute_query(self, query: str, params: tuple = None, fetch_one: bool = False, fetch_all: bool = False):
         """
         Execute a database query with automatic connection management.
@@ -266,13 +314,12 @@ class DatabaseManager:
             
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
                 cur.execute(query, params)
-                
+                conn.commit()
                 if fetch_one:
                     return cur.fetchone()
                 elif fetch_all:
                     return cur.fetchall()
                 else:
-                    conn.commit()
                     return cur.rowcount
         except Exception as e:
             logger.error(f"Error executing query: {e}")
@@ -282,6 +329,3 @@ class DatabaseManager:
                 except Exception as rollback_error:
                     logger.debug(f"Error during rollback: {rollback_error}")
             raise
-
-
-# Global instance

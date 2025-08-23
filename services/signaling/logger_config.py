@@ -2,6 +2,27 @@ import logging
 import logging.handlers
 from pathlib import Path
 from datetime import datetime
+import os
+
+def is_docker():
+    # Check for the presence of the .dockerenv file
+    if os.path.exists('/.dockerenv'):
+        return True
+
+    # Check for Docker-specific environment variables
+    if os.path.exists('/.dockerinit'):
+        return True
+
+    # Check for cgroup information
+    try:
+        with open('/proc/1/cgroup', 'rt') as f:
+            content = f.read()
+            if 'docker' in content:
+                return True
+    except FileNotFoundError:
+        pass
+
+    return False
 
 class AutoFlushFileHandler(logging.handlers.RotatingFileHandler):
     def __init__(self, filename):
@@ -21,7 +42,11 @@ def setup_logging(logger_name="portal_api"):
     Returns:
         logging.Logger: Configured logger instance
     """
-    logs_dir = Path("/opt/lunaricorn/portal_data/logs")
+    logs_dir = Path("/opt/lunaricorn/signaling_data/logs")
+    if not is_docker(): # native run
+        logs_dir = Path("./logs")
+
+        
     logs_dir.mkdir(parents=True, exist_ok=True)
     
     # Backup existing log file if it exists
