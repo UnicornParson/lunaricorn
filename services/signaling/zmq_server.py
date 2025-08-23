@@ -10,6 +10,12 @@ from enum import Enum
 
 from internal import *
 
+class ZeroMQPattern(Enum):
+    PUB_SUB = "pub_sub"
+    PUSH_PULL = "push_pull"
+    ROUTER_DEALER = "router_dealer"
+    REQ_REP = "req_rep"
+
 class ZeroMQSignalingServer:
     """Simplified ZeroMQ signaling server for node communication"""
     

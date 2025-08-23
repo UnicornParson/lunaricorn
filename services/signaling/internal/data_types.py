@@ -13,6 +13,12 @@ class EventData:
     tags: Optional[list]= None
 
 @dataclass
+class EventDataExtended(EventData):
+    eid: int = 0
+
+
+
+@dataclass
 class Subscriber:
     """Subscriber information"""
     subscriber_id: str

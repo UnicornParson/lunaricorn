@@ -1,57 +1,8 @@
 from lunaricorn.utils.db_manager import *
 from .data_types import *
+from .signaling_database_manager import *
 from datetime import datetime
 import json
-
-class SignalingDatabaseManager(DatabaseManager):
-    def installer_impl(self, cur):
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS public.signaling_events
-            (
-                eid bigserial PRIMARY KEY,
-                type character varying(256) NOT NULL,
-                payload jsonb,
-                affected jsonb,
-                ctime timestamp without time zone NOT NULL DEFAULT now(),
-                owner character varying(256) NOT NULL,
-                tags text[]
-            ) WITH ( autovacuum_enabled = TRUE) TABLESPACE pg_default;
-            ''')
-        
-        cur.execute('''ALTER TABLE IF EXISTS public.signaling_events OWNER to lunaricorn''')
-
-        cur.execute('''
-            CREATE INDEX IF NOT EXISTS "byCtime"
-                ON public.signaling_events USING btree
-                (ctime ASC NULLS LAST)
-                WITH (deduplicate_items=True)
-                TABLESPACE pg_default;
-            ''')
-                    
-        cur.execute('''
-            CREATE INDEX IF NOT EXISTS "byOwner"
-                ON public.signaling_events USING btree
-                (owner COLLATE pg_catalog."default" ASC NULLS LAST)
-                WITH (deduplicate_items=True)
-                TABLESPACE pg_default;
-            ''')
-
-        cur.execute('''
-            CREATE INDEX IF NOT EXISTS "byTags"
-                ON public.signaling_events USING gin
-                (tags COLLATE pg_catalog."default")
-                WITH (fastupdate=True)
-                TABLESPACE pg_default;
-            ''')
-
-        cur.execute('''
-            CREATE INDEX IF NOT EXISTS "byType"
-                ON public.signaling_events USING btree
-                (type COLLATE pg_catalog."default" ASC NULLS LAST)
-                INCLUDE(type)
-                WITH (deduplicate_items=True)
-                TABLESPACE pg_default;
-            ''')
 
 class StorageError(Exception):
     pass
@@ -125,4 +76,60 @@ class MessageStorage:
         return result[0]
         
 
-
+    def find_events_by_type(self, event_type: str) -> List[EventDataExtended]:
+        """
+        Find events by type and return them as EventDataExtended objects
+        
+        Args:
+            event_type: The type of events to search for
+            
+        Returns:
+            List of EventDataExtended objects matching the criteria
+        """
+        query = """
+            SELECT eid, type, payload, affected, ctime, owner, tags
+            FROM public.signaling_events 
+            WHERE type = %s
+            ORDER BY ctime DESC;
+        """
+        
+        params = (event_type,)
+        
+        try:
+            results = self.db_manager.execute_query(
+                query=query,
+                params=params,
+                fetch_all=True
+            )
+            
+            events = []
+            for row in results:
+                # Convert database row to EventDataExtended object
+                eid, db_type, payload_json, affected_json, ctime, owner, tags = row
+                
+                # Parse JSON fields
+                payload = json.loads(payload_json) if payload_json else {}
+                affected = json.loads(affected_json) if affected_json else None
+                
+                # Convert datetime to timestamp
+                timestamp = ctime.timestamp() if ctime else 0
+                
+                # Determine source (convert "ownerless" to None)
+                source = owner if owner != "ownerless" else None
+                
+                event = EventDataExtended(
+                    eid=eid,
+                    event_type=db_type,
+                    payload=payload,
+                    timestamp=timestamp,
+                    source=source,
+                    affected=affected,
+                    tags=tags
+                )
+                events.append(event)
+            
+            return events
+            
+        except Exception as e:
+            self.logger.error(f"Error searching for events of type '{event_type}': {e}")
+            return []

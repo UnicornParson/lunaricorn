@@ -73,51 +73,48 @@ class Signaling:
         self.logger.info(f"test_create_event rc: {mst.test_create_event()}")
         self.logger.info(f"test_create_event rc: {mst.test_create_ownerless_event()}")
 
+    def notify_subscribers(self, event:EventData, eid:int):
+        for subscriber_id, subscriber in self.subscribers.items():
+            if event.event_type in subscriber.event_types:
+                # TODO: call zmq notify
+                pass
     
     def handle_push_event(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Handle pushevent message to store and distribute events"""
         event_type = data.get("event_type")
         payload = data.get("payload", {})
         source = data.get("source")
-        
+        tags = data.get("source", [])
+        affected = data.get("source", [])
+
+
         if not event_type:
             return {"status": "error", "message": "Missing required field: event_type"}
         
         # Create event data
         event = EventData(
-            event_type=event_type,
-            payload=payload,
-            timestamp=time.time(),
-            source=source
+            event_type = event_type,
+            payload = payload,
+            timestamp = time.time(),
+            source = source,
+            tags = tags,
+            affected = affected
         )
         
         # Store event
         self.events.append(event)
+        eid = 0
+        try:
+            eid = self._store_event_in_db(event)
+        except Exception as e:
+            self.logger.error(f"Failed to store event in database: {e}")
+            return {"status": "failed"}
         
-        # Trim events if we have too many
-        if len(self.events) > self.max_events:
-            self.events = self.events[-self.max_events:]
-        
-        # Store in database if enabled
-        if self.db_enabled:
-            try:
-                self._store_event_in_db(event)
-            except Exception as e:
-                self.logger.error(f"Failed to store event in database: {e}")
-        
-        # Find interested subscribers and notify them
-        interested_subscribers = []
-        for subscriber_id, subscriber in self.subscribers.items():
-            if event_type in subscriber.event_types or "*" in subscriber.event_types:
-                interested_subscribers.append(subscriber_id)
-        
-        self.logger.info(f"Event {event_type} pushed from {source}, notifying {len(interested_subscribers)} subscribers")
+        self.notify_subscribers(event, eid)
         
         return {
             "status": "success",
-            "message": "Event pushed successfully",
-            "event_id": len(self.events) - 1,
-            "subscribers_notified": len(interested_subscribers)
+            "event_id": eid
         }
     
     def handle_subscribe(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -141,13 +138,12 @@ class Signaling:
         )
         
         self.subscribers[subscriber_id] = subscriber
-        
-        # Store in database if enabled
-        if self.db_enabled:
-            try:
-                self._store_subscriber_in_db(subscriber)
-            except Exception as e:
-                self.logger.error(f"Failed to store subscriber in database: {e}")
+
+        try:
+            self._store_subscriber_in_db(subscriber)
+        except Exception as e:
+            self.logger.error(f"Failed to store subscriber in database: {e}")
+            return {"status": "failed"}
         
         # Get recent events of interest
         matching_events = []
@@ -170,9 +166,10 @@ class Signaling:
             "recent_events": matching_events
         }
     
-    def _store_event_in_db(self, event: EventData):
-        self.db_manager.create_event(event)
-        self.logger.debug(f"Stored event {event.event_type} in database")
+    def _store_event_in_db(self, event: EventData) -> int:
+        eid = self.db_manager.create_event(event)
+        self.logger.debug(f"Stored event {event.event_type} in database eid: {eid}")
+        return eid
 
     def _store_subscriber_in_db(self, subscriber: Subscriber):
         """Store subscriber in database"""
