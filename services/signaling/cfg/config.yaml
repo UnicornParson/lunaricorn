@@ -1,7 +1,8 @@
 signaling:
   name: "signaling"
   host: "0.0.0.0"
-  port: 5555
+  rep_port: 5555
+  pub_port: 5556
   zmq:
     protocol: "tcp"
     bind_address: "*"

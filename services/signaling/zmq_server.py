@@ -7,6 +7,8 @@ import os
 import sys
 from typing import Dict, Any
 from enum import Enum
+from collections import defaultdict
+from dataclasses import dataclass
 
 from internal import *
 
@@ -28,7 +30,8 @@ class ZeroMQSignalingServer:
         
         # Server configuration
         self.host = config.get("host", "0.0.0.0")
-        self.port = config.get("port", 5555)
+        self.rep_port = config.get("rep_port", 5555)  # REQ-REP port
+        self.pub_port = config.get("pub_port", 5556)  # PUB-SUB port
         self.protocol = config.get("zmq", {}).get("protocol", "tcp")
         self.bind_address = config.get("zmq", {}).get("bind_address", "*")
         self.heartbeat_interval = config.get("zmq", {}).get("heartbeat_interval", 30)
@@ -39,50 +42,124 @@ class ZeroMQSignalingServer:
         # Server state
         self.running = False
         
-        # Initialize socket
-        self._setup_socket()
+        # Initialize sockets
+        self.rep_socket = None  # REQ-REP socket
+        self.pub_socket = None  # PUB socket
+        self._setup_sockets()
+
+        # Client management
+        self.subscriptions = defaultdict(set)
+        self.client_last_seen = {} 
+
+        self.threads = []
     
-    def _setup_socket(self):
-        """Setup ZeroMQ REP socket for request-response pattern"""
+    def _setup_sockets(self):
+        """Setup ZeroMQ sockets"""
         try:
-            # REP socket for handling requests
-            self.socket = self.context.socket(zmq.REP)
-            address = f"{self.protocol}://{self.bind_address}:{self.port}"
-            self.socket.bind(address)
-            self.logger.info(f"REP socket bound to {address}")
+            # REP socket for request-response pattern
+            self.rep_socket = self.context.socket(zmq.REP)
+            self.rep_socket.bind(f"tcp://*:{self.rep_port}")
+            self.logger.info(f"REP socket bound to port {self.rep_port}")
+            
+            # PUB socket for publish-subscribe pattern
+            self.pub_socket = self.context.socket(zmq.PUB)
+            self.pub_socket.bind(f"tcp://*:{self.pub_port}")
+            self.logger.info(f"PUB socket bound to port {self.pub_port}")
             
         except Exception as e:
-            self.logger.error(f"Failed to setup socket: {e}")
+            self.logger.error(f"Failed to setup sockets: {e}")
             raise
-    
-    def _process_message(self, message_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process incoming message and return response"""
+    def _process_request(self, message_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Process incoming request and return response"""
         try:
             msg_type = message_data.get("type")
+            client_id = message_data.get("client_id")
             
-            # Handle supported message types
-            if msg_type == SignalingMessageType.PUSH_EVENT.value:
-                return self.signaling.handle_push_event(message_data)
+            if not client_id:
+                return {"status": "error", "message": "client_id is required"}
             
-            elif msg_type == SignalingMessageType.SUBSCRIBE.value:
-                return self.signaling.handle_subscribe(message_data)
+            # Update client activity
+            self.client_last_seen[client_id] = time.time()
+            
+            if msg_type == "subscribe":
+                # Handle subscription request
+                event_types = message_data.get("event_types", [])
+                
+                for event_type in event_types:
+                    self.subscriptions[event_type].add(client_id)
+                
+                self.logger.info(f"Client {client_id} subscribed to: {event_types}")
+                return {"status": "success", "message": "Subscribed successfully"}
+            
+            elif msg_type == "unsubscribe":
+                # Handle unsubscription request
+                event_types = message_data.get("event_types", [])
+                
+                for event_type in event_types:
+                    if client_id in self.subscriptions[event_type]:
+                        self.subscriptions[event_type].remove(client_id)
+                
+                self.logger.info(f"Client {client_id} unsubscribed from: {event_types}")
+                return {"status": "success", "message": "Unsubscribed successfully"}
+            
+            elif msg_type == "heartbeat":
+                # Handle heartbeat
+                self.logger.debug(f"Heartbeat from client {client_id}")
+                return {"status": "success", "message": "Heartbeat received"}
             
             else:
                 return {
                     "status": "error", 
                     "message": f"Unsupported message type: {msg_type}",
-                    "supported_types": [t.value for t in SignalingMessageType]
+                    "supported_types": ["subscribe", "unsubscribe", "heartbeat"]
                 }
                 
         except Exception as e:
-            self.logger.error(f"Error processing message: {e}")
+            self.logger.error(f"Error processing request: {e}")
             return {"status": "error", "message": f"Processing error: {e}"}
+        
+    def publish_event(self, event_data: EventDataExtended):
+        """Publish an event to all subscribed clients"""
+        try:
+            # Create event message
+            event_message = {
+                "eid": event_data.eid,
+                "type": event_data.event_type,
+                "payload": event_data.payload,
+                "timestamp": event_data.timestamp,
+                "source": event_data.source,
+                "affected": event_data.affected,
+                "tags": event_data.tags
+            }
+            
+            # Publish event to all subscribers
+            self.pub_socket.send_string(json.dumps(event_message))
+            self.logger.debug(f"Published event: {event_data.event_type} (ID: {event_data.eid})")
+            
+        except Exception as e:
+            self.logger.error(f"Error publishing event: {e}")
     
     def _cleanup_worker(self):
         """Background worker for cleanup tasks"""
         while self.running:
             try:
-                self.signaling.cleanup_dead_subscribers()
+                current_time = time.time()
+                dead_clients = []
+                
+                # Find inactive clients
+                for client_id, last_seen in self.client_last_seen.items():
+                    if current_time - last_seen > self.heartbeat_interval * 3:
+                        dead_clients.append(client_id)
+                
+                # Remove inactive clients from all subscriptions
+                for client_id in dead_clients:
+                    for event_type in self.subscriptions:
+                        if client_id in self.subscriptions[event_type]:
+                            self.subscriptions[event_type].remove(client_id)
+                    
+                    del self.client_last_seen[client_id]
+                    self.logger.info(f"Removed inactive client: {client_id}")
+                
                 time.sleep(self.heartbeat_interval)
             except Exception as e:
                 self.logger.error(f"Error in cleanup worker: {e}")
@@ -90,18 +167,18 @@ class ZeroMQSignalingServer:
     def start(self):
         """Start the ZeroMQ signaling server"""
         self.running = True
-        self.logger.info("Starting simplified ZeroMQ signaling server...")
+        self.logger.info("Starting ZeroMQ signaling server...")
         
         # Start cleanup worker
         cleanup_thread = threading.Thread(target=self._cleanup_worker, daemon=True)
         cleanup_thread.start()
         
-        # Main server loop
+        # Main server loop for REQ-REP
         try:
             while self.running:
                 try:
-                    # Wait for request (blocking)
-                    message_raw = self.socket.recv_string(zmq.NOBLOCK)
+                    # Wait for request
+                    message_raw = self.rep_socket.recv_string()
                     
                     # Parse message
                     try:
@@ -109,15 +186,14 @@ class ZeroMQSignalingServer:
                     except json.JSONDecodeError as e:
                         response = {"status": "error", "message": f"Invalid JSON: {e}"}
                     else:
-                        response = self._process_message(message_data)
+                        response = self._process_request(message_data)
                     
                     # Send response
-                    self.socket.send_string(json.dumps(response))
+                    self.rep_socket.send_string(json.dumps(response))
                     
-                except zmq.Again:
-                    # No message available, continue
-                    time.sleep(0.01)
-                    continue
+                except Exception as e:
+                    self.logger.error(f"Unexpected error in main loop: {e}")
+                    time.sleep(0.1)  # Prevent busy waiting on error
                     
         except KeyboardInterrupt:
             self.logger.info("Received keyboard interrupt, shutting down...")
@@ -132,17 +208,18 @@ class ZeroMQSignalingServer:
         self.running = False
         self.logger.info("Stopping ZeroMQ signaling server...")
         
-        # Close socket
+        # Close sockets
         try:
-            self.socket.close()
+            if self.rep_socket:
+                self.rep_socket.close()
         except Exception as e:
-            self.logger.error(f"Error closing socket: {e}")
+            self.logger.error(f"Error closing REP socket: {e}")
         
-        # Shutdown signaling service
         try:
-            self.signaling.shutdown()
+            if self.pub_socket:
+                self.pub_socket.close()
         except Exception as e:
-            self.logger.error(f"Error shutting down signaling service: {e}")
+            self.logger.error(f"Error closing PUB socket: {e}")
         
         # Terminate context
         try:
@@ -150,4 +227,4 @@ class ZeroMQSignalingServer:
         except Exception as e:
             self.logger.error(f"Error terminating context: {e}")
         
-        self.logger.info("ZeroMQ signaling server stopped") 
+        self.logger.info("ZeroMQ signaling server stopped")

@@ -6,7 +6,7 @@ from .message_storage import *
 __all__ = [
     "Signaling",
     "SignalingMessageType",
-    "EventData",
+    "EventData", "EventDataExtended",
     "Subscriber",
     "StorageError","BrokenStorageError"
 ]
