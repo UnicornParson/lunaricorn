@@ -18,14 +18,16 @@ class SignalingMessageType(Enum):
     PUSH_EVENT = "pushevent"
     SUBSCRIBE = "subscribe"
 
-
+# TODO: убрать локальное хранилище событий
+# TODO: убрать механизм подписчиков
 
 class Signaling:
     """Signaling service for handling event push and subscription"""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], publish_callback):
         self.config = config
         self.logger = logging.getLogger(__name__)
+        self.publish_callback = publish_callback
         
         # Subscriber registry
         self.subscribers: Dict[str, Subscriber] = {}
@@ -73,12 +75,27 @@ class Signaling:
         self.logger.info(f"test_create_event rc: {mst.test_create_event()}")
         self.logger.info(f"test_create_event rc: {mst.test_create_ownerless_event()}")
 
-    def notify_subscribers(self, event:EventData, eid:int):
-        for subscriber_id, subscriber in self.subscribers.items():
-            if event.event_type in subscriber.event_types:
-                # TODO: call zmq notify
-                pass
+    def notify_subscribers(self, event:EventDataExtended):
+        if self.publish_callback:
+            self.publish_callback(event)
+        else:
+            self.logger.error(f"no publish callback")
     
+    def push(self, data: EventData):
+        print("try push")
+        eid = 0
+        try:
+            eid = self.storage.create_event(data)
+            ex = EventDataExtended.from_event_data(data, eid=eid)
+            self.events.append(ex)
+            self.notify_subscribers(ex)
+        except Exception as e:
+            self.logger.error(f"Failed to store event in database: {e}")
+            return -1
+        
+        return eid
+
+    # TODO:  for remove
     def handle_push_event(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Handle pushevent message to store and distribute events"""
         event_type = data.get("event_type")
@@ -105,7 +122,7 @@ class Signaling:
         self.events.append(event)
         eid = 0
         try:
-            eid = self._store_event_in_db(event)
+            eid = self.storage.create_event(event)
         except Exception as e:
             self.logger.error(f"Failed to store event in database: {e}")
             return {"status": "failed"}
@@ -165,11 +182,7 @@ class Signaling:
             "event_types": event_types,
             "recent_events": matching_events
         }
-    
-    def _store_event_in_db(self, event: EventData) -> int:
-        eid = self.db_manager.create_event(event)
-        self.logger.debug(f"Stored event {event.event_type} in database eid: {eid}")
-        return eid
+
 
     def _store_subscriber_in_db(self, subscriber: Subscriber):
         """Store subscriber in database"""

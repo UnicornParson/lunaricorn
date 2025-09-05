@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional, List
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from enum import Enum
 
 @dataclass
@@ -15,7 +15,10 @@ class EventData:
 @dataclass
 class EventDataExtended(EventData):
     eid: int = 0
-
+    @classmethod
+    def from_event_data(cls, event_data: EventData, eid: int = 0) -> 'EventDataExtended':
+        data_dict = asdict(event_data)
+        return cls(**data_dict, eid=eid)
 
 
 @dataclass

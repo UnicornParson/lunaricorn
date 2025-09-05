@@ -6,4 +6,4 @@ source ../.native_env
 set +a
 
 source ../.local_run/venv/bin/activate
-python3 client.py
+python3 app.py

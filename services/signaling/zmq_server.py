@@ -37,7 +37,7 @@ class ZeroMQSignalingServer:
         self.heartbeat_interval = config.get("zmq", {}).get("heartbeat_interval", 30)
         
         # Initialize signaling service
-        self.signaling = Signaling(config)
+        self.signaling = Signaling(config, self.publish_event)
         
         # Server state
         self.running = False
@@ -106,8 +106,30 @@ class ZeroMQSignalingServer:
                 # Handle heartbeat
                 self.logger.debug(f"Heartbeat from client {client_id}")
                 return {"status": "success", "message": "Heartbeat received"}
+            elif msg_type == "push":
+                self.logger.info("on push")
+                required_fields = ["type", "message"]
+                for field in required_fields:
+                    if field not in message_data:
+                        self.logger.error(f"Missing required field: {field}")
+                        return {"status": "error", "message": f"Missing required field: {field}"}
+
+                # Создаем объект EventDataExtended
+                event_data = EventData(
+                    event_type=message_data["type"],
+                    payload=message_data["message"],
+                    timestamp=message_data.get("timestamp", time.time()),
+                    source=message_data.get("creator-id"),
+                    affected=None,
+                    tags=message_data.get("tags")
+                )
+                
+                
+                eid = self.signaling.push(event_data)
+                return {"status": "success", "eid": eid}
             
             else:
+                self.logger.info(f"unknown event {msg_type}")
                 return {
                     "status": "error", 
                     "message": f"Unsupported message type: {msg_type}",
@@ -120,6 +142,7 @@ class ZeroMQSignalingServer:
         
     def publish_event(self, event_data: EventDataExtended):
         """Publish an event to all subscribed clients"""
+        print("try publish_event")
         try:
             # Create event message
             event_message = {
