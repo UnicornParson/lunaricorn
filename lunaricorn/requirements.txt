@@ -1,4 +1,5 @@
 feedparser
+pyzmq
 argon2-cffi
 beautifulsoup4 
 selenium 

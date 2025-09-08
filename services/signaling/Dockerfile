@@ -20,6 +20,8 @@ RUN pip install --no-cache-dir -r /opt/lunaricorn/signaling/app/requirements.txt
 COPY . /opt/lunaricorn/signaling/app/
 ADD tmp/lunaricorn.tgz /opt/lunaricorn/signaling/app
 RUN ls -la /opt/lunaricorn/signaling/app/lunaricorn
+RUN pip install --no-cache-dir -r /opt/lunaricorn/signaling/app/lunaricorn/requirements.txt
+
 # Set working directory to the application directory
 WORKDIR /opt/lunaricorn/signaling/app
 

@@ -6,12 +6,12 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
-echo "Building leader service..."
-pushd leader > /dev/null
+echo "Building signaling service..."
+pushd signaling > /dev/null
 ./build.sh
 popd > /dev/null
 
-docker compose stop leader && docker compose rm -f leader
-docker compose up -d --build --force-recreate leader
+docker compose stop signaling && docker compose rm -f signaling
+docker compose up -d --build --force-recreate signaling
 
-echo "Leader service restarted"
+echo "Ыignaling service restarted"

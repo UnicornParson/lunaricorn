@@ -81,28 +81,8 @@ class ZeroMQSignalingServer:
             # Update client activity
             self.client_last_seen[client_id] = time.time()
             
-            if msg_type == "subscribe":
-                # Handle subscription request
-                event_types = message_data.get("event_types", [])
-                
-                for event_type in event_types:
-                    self.subscriptions[event_type].add(client_id)
-                
-                self.logger.info(f"Client {client_id} subscribed to: {event_types}")
-                return {"status": "success", "message": "Subscribed successfully"}
-            
-            elif msg_type == "unsubscribe":
-                # Handle unsubscription request
-                event_types = message_data.get("event_types", [])
-                
-                for event_type in event_types:
-                    if client_id in self.subscriptions[event_type]:
-                        self.subscriptions[event_type].remove(client_id)
-                
-                self.logger.info(f"Client {client_id} unsubscribed from: {event_types}")
-                return {"status": "success", "message": "Unsubscribed successfully"}
-            
-            elif msg_type == "heartbeat":
+
+            if msg_type == "heartbeat":
                 # Handle heartbeat
                 self.logger.debug(f"Heartbeat from client {client_id}")
                 return {"status": "success", "message": "Heartbeat received"}
@@ -162,48 +142,20 @@ class ZeroMQSignalingServer:
         except Exception as e:
             self.logger.error(f"Error publishing event: {e}")
     
-    def _cleanup_worker(self):
-        """Background worker for cleanup tasks"""
-        while self.running:
-            try:
-                current_time = time.time()
-                dead_clients = []
-                
-                # Find inactive clients
-                for client_id, last_seen in self.client_last_seen.items():
-                    if current_time - last_seen > self.heartbeat_interval * 3:
-                        dead_clients.append(client_id)
-                
-                # Remove inactive clients from all subscriptions
-                for client_id in dead_clients:
-                    for event_type in self.subscriptions:
-                        if client_id in self.subscriptions[event_type]:
-                            self.subscriptions[event_type].remove(client_id)
-                    
-                    del self.client_last_seen[client_id]
-                    self.logger.info(f"Removed inactive client: {client_id}")
-                
-                time.sleep(self.heartbeat_interval)
-            except Exception as e:
-                self.logger.error(f"Error in cleanup worker: {e}")
+
     
     def start(self):
         """Start the ZeroMQ signaling server"""
         self.running = True
         self.logger.info("Starting ZeroMQ signaling server...")
-        
-        # Start cleanup worker
-        cleanup_thread = threading.Thread(target=self._cleanup_worker, daemon=True)
-        cleanup_thread.start()
-        
+
         # Main server loop for REQ-REP
         try:
             while self.running:
                 try:
                     # Wait for request
                     message_raw = self.rep_socket.recv_string()
-                    
-                    # Parse message
+
                     try:
                         message_data = json.loads(message_raw)
                     except json.JSONDecodeError as e:

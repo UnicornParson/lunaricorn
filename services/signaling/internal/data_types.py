@@ -21,6 +21,7 @@ class EventDataExtended(EventData):
         return cls(**data_dict, eid=eid)
 
 
+
 @dataclass
 class Subscriber:
     """Subscriber information"""

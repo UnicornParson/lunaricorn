@@ -20,9 +20,9 @@ services:
     networks:
       - lunaricorn-network
     restart: unless-stopped
-    #depends_on:
-    #  pg:
-    #    condition: service_healthy
+    depends_on:
+      pg:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -54,6 +54,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
   pg:
     build:
       context: ./data/pg
@@ -78,7 +79,31 @@ services:
       retries: 5
       start_period: 20s
 
-
+  signaling:
+    build:
+      context: ./signaling
+      dockerfile: Dockerfile
+    container_name: lunaricorn-signaling
+    ports:
+      - "5555:5555"
+      - "5556:5556"
+    volumes:
+      - ${LUNARICORN_HOME}/signaling_data:/opt/lunaricorn/signaling/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - db_type=postgresql
+      - db_host=lunaricorn-pg
+      - db_port=5432
+      - db_user=lunaricorn
+      - db_password=${LUNARICORN_PASSWORD}
+      - db_name=lunaricorn
+      - db_schema=lunaricorn
+    networks:
+      - lunaricorn-network
+    restart: unless-stopped
+    depends_on:
+      pg:
+        condition: service_healthy
 networks:
   lunaricorn-network:
     driver: bridge
