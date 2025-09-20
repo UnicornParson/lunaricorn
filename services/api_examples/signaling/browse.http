@@ -1,14 +1,6 @@
 
 @apiUrl = http://{{lunaricordUrl}}:5557
 
-# @name health
-GET http://{{lunaricordUrl}}:5557/health
-
-###
-
-# @name index
-GET {{apiUrl}}
-
 
 ###
 
@@ -36,4 +28,37 @@ Accept-Encoding: br, gzip, deflate
 
 {
     "timestamp":0
+}
+
+###
+# @name browse - affected only
+POST http://{{lunaricordUrl}}:5557/v1/browse HTTP/1.1
+Content-Type: application/json
+Accept-Encoding: br, gzip, deflate
+
+{
+    "timestamp":0,
+    "affected": ["storage_server", "database_primary"]
+}
+
+###
+# @name browse - tags only
+POST http://{{lunaricordUrl}}:5557/v1/browse HTTP/1.1
+Content-Type: application/json
+Accept-Encoding: br, gzip, deflate
+
+{
+    "timestamp":0,
+    "tags": ["analytics"]
+}
+
+###
+# @name browse - type only
+POST http://{{lunaricordUrl}}:5557/v1/browse HTTP/1.1
+Content-Type: application/json
+Accept-Encoding: br, gzip, deflate
+
+{
+    "timestamp":0,
+    "event_types": ["user_interaction"]
 }

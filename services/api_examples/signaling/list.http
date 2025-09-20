@@ -1,4 +1,71 @@
 @apiUrl = http://{{lunaricordUrl}}:5557
 
-# @name health
-GET http://{{lunaricordUrl}}:5557/list/tags
+### 
+# @name GetTagsList
+# @title Retrieve All Available Tags
+# @description Returns an array of all unique tags used in the system for event categorization
+# @tags Metadata, Utilities
+#
+# @response 200 {json} Success - array of tag names (strings)
+# @response 500 {json} Internal server error
+#
+# @example Response:
+# [
+#   "tag1",
+#   "tag2",
+#   "tag3"
+# ]
+GET http://{{lunaricordUrl}}:5557/v1/list/tags
+
+
+### 
+# @name GetTypesList
+# @title Retrieve All Available Types
+# @description Returns an array of all unique types used in the system for event categorization
+# @tags Metadata, Utilities
+#
+# @response 200 {json} Success - array of types names (strings)
+# @response 500 {json} Internal server error
+#
+# @example Response:
+# [
+#   "type1",
+#   "type2",
+#   "type3"
+# ]
+GET http://{{lunaricordUrl}}:5557/v1/list/types
+
+
+### 
+# @name GetAffectedList
+# @title Retrieve All Available affected objects
+# @description Returns an array of all unique affected objects used in the system for event categorization
+# @tags Metadata, Utilities
+#
+# @response 200 {json} Success - array of affected objects names (strings)
+# @response 500 {json} Internal server error
+#
+# @example Response:
+# [
+#   "obj1",
+#   "obj2",
+#   "obj3"
+# ]
+GET http://{{lunaricordUrl}}:5557/v1/list/affected
+
+### 
+# @name GetOwnersList
+# @title Retrieve All Available affected owners
+# @description Returns an array of all unique affected objects used in the system for event categorization
+# @tags Metadata, Utilities
+#
+# @response 200 {json} Success - array of owner names (strings)
+# @response 500 {json} Internal server error
+#
+# @example Response:
+# [
+#   "owner1",
+#   "owner2",
+#   "owner3"
+# ]
+GET http://{{lunaricordUrl}}:5557/v1/list/owners

@@ -20,6 +20,11 @@ class DbConfig:
     def to_str(self) -> str:
         return f"{self.db_user}@{self.db_host}:{self.db_port}/{self.db_dbname}"
 
+class Dbutils:
+    @staticmethod
+    def compress_query(query: str) -> str:
+        return ' '.join(query.split())
+
 class DatabaseManager:
     """
     Singleton database manager for global PostgreSQL connection management.
@@ -290,6 +295,7 @@ class DatabaseManager:
             """, (schema, table_name))
             return cur.fetchone()[0]
 
+    
     def execute_query(self, query: str, params: tuple = None, fetch_one: bool = False, fetch_all: bool = False):
         """
         Execute a database query with automatic connection management.

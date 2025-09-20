@@ -39,6 +39,12 @@ class Signaling:
         self.subscriber_timeout = config.get("message_storage", {}).get("subscriber_timeout", 300)  # 5 minutes
         self.max_events = config.get("message_storage", {}).get("max_events", 1000)  # Max events to keep in memory
     
+    def u_list(self, what:str) -> list:
+        rc = self.storage.get_unique_values(what)
+        #print(f"{what} --> {rc}")
+        rc.sort()
+        return list(set(rc))
+
     def browse(self, filter:BrowseRequest) -> list:
         if not filter.is_valid():
             self.logger.error(f"invalid request {filter}")

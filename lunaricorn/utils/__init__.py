@@ -4,4 +4,4 @@
 from .db_manager import *
 from .logger_config import *
 
-__all__ = ['DatabaseManager', 'DbConfig', 'setup_logging'] 
+__all__ = ['DatabaseManager', 'DbConfig', "Dbutils", 'setup_logging'] 

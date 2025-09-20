@@ -53,6 +53,51 @@ class SiagnalingApiServer(threading.Thread):
                 #metrics.add_record(request.path, execution_time)
         return decorated_function
     
+    def setup_list_routes(self):
+        # ['type', 'affected', 'owner', 'tags']
+        @self.app.route('/v1/list/tags', methods=["GET"])
+        @self.measure_time
+        def list_tags():
+            field = "tags"
+            try:
+                values = self.signaling_controller.u_list(field)
+            except Exception as e:
+                self.logger.error(f"cannot get ulist for {field} reason: {e}")
+                return jsonify({"error": f"Internal Server Error. cannot get ulist for {field}"}), 500
+            return jsonify(values)
+        
+        @self.app.route('/v1/list/types', methods=["GET"])
+        @self.measure_time
+        def list_types():
+            field = "type"
+            try:
+                values = self.signaling_controller.u_list(field)
+            except Exception as e:
+                self.logger.error(f"cannot get ulist for {field} reason: {e}")
+                return jsonify({"error": f"Internal Server Error. cannot get ulist for {field}"}), 500
+            return jsonify(values)
+        
+        @self.app.route('/v1/list/affected', methods=["GET"])
+        @self.measure_time
+        def list_affected():
+            field = "affected"
+            try:
+                values = self.signaling_controller.u_list(field)
+            except Exception as e:
+                self.logger.error(f"cannot get ulist for {field} reason: {e}")
+                return jsonify({"error": f"Internal Server Error. cannot get ulist for {field}"}), 500
+            return jsonify(values)
+        
+        @self.app.route('/v1/list/owners', methods=["GET"])
+        @self.measure_time
+        def list_owners():
+            field = "owner"
+            try:
+                values = self.signaling_controller.u_list(field)
+            except Exception as e:
+                self.logger.error(f"cannot get ulist for {field} reason: {e}")
+                return jsonify({"error": f"Internal Server Error. cannot get ulist for {field}"}), 500
+            return jsonify(values)
 
     def setup_routes(self):
         @self.app.route('/', methods=["GET"])
@@ -64,6 +109,8 @@ class SiagnalingApiServer(threading.Thread):
         @self.measure_time
         def health():
             return jsonify({"status": "ok"})
+        self.setup_list_routes()
+        
         
         @self.app.route("/v1/browse", methods=["POST"])
         @self.measure_time

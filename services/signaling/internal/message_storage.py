@@ -4,7 +4,7 @@ from .signaling_database_manager import *
 from datetime import datetime
 import json
 import time as time_module
-
+from lunaricorn.utils.db_manager import *
 
 class StorageError(Exception):
     pass
@@ -76,42 +76,78 @@ class MessageStorage:
         )
         
         return result[0]
+
+    def get_unique_values(self, field_name):
+        if field_name not in ['type', 'affected', 'owner', 'tags']:
+            raise ValueError(f"list operation for field {field_name} not supported")
+
+        if field_name in ['type', 'owner']:
+            query = f"""
+                SELECT DISTINCT {field_name} as f
+                FROM public.signaling_events
+                WHERE {field_name} IS NOT NULL
+                ORDER BY f ASC
+            """
+            result = self.db_manager.execute_query(query=query, params=None, fetch_one = False,fetch_all = True)
+            return [row[0] for row in result]
+
+
+        elif field_name == 'tags':
+            query = """
+                SELECT DISTINCT UNNEST(tags) as tag
+                FROM public.signaling_events
+                WHERE tags IS NOT NULL AND array_length(tags, 1) > 0
+                ORDER BY tag ASC
+            """
+            result = self.db_manager.execute_query(query=query, params=None, fetch_one = False,fetch_all = True)
+            return [row[0] for row in result]
+
+        elif field_name == 'affected':
+            query = """
+                SELECT DISTINCT jsonb_array_elements_text(affected) AS affected_value
+                FROM public.signaling_events
+                WHERE affected IS NOT NULL 
+                AND affected != 'null'::jsonb
+                AND jsonb_typeof(affected) = 'array'
+                ORDER BY affected_value ASC
+            """
+            result = self.db_manager.execute_query(query=query, params=None, fetch_one = False,fetch_all = True)
+            return [row[0] for row in result]
         
     def find_events(self, timestamp:float, types:list = [], sources:list = [], affected:list = [], tags:list = [], limit:int = 0) -> list:
-        types_q = " "
-        sources_q = " "
-        affected_q = " "
-        tags_q = " "
-        limit_q = " "
-
-        if limit > 0:
-            limit_q = f"LIMIT {int(limit)}"
+        conditions = ["ctime >= %s"]
+        params = [datetime.fromtimestamp(timestamp)]
 
         if types:
-            tlist = ', '.join(f"'{s}'" for s in types)
-            types_q = f"AND (type IN ({tlist}) )"
+            placeholders = ",".join(["%s"] * len(types))
+            conditions.append(f"type IN ({placeholders})")
+            params.extend(types)
+
         if sources:
-            slist = ', '.join(f"'{s}'" for s in sources)
-            sources_q = f"AND (type IN ({slist}) )"
+            placeholders = ",".join(["%s"] * len(sources))
+            conditions.append(f"owner IN ({placeholders})")
+            params.extend(sources)
+
         if affected:
-            alist = ', '.join(f"'{s}'" for s in affected)
-            affected_q = f"AND (type IN ({alist}) )"
+            placeholders = ",".join(["%s"] * len(affected))
+            conditions.append(f"affected @> ANY(ARRAY[{placeholders}]::jsonb[])")
+            params.extend([f'["{a}"]' for a in affected])
+
         if tags:
-            tlist = ', '.join(f"'{s}'" for s in tags)
-            tags_q = f"AND (type IN ({tlist}) )"
+            placeholders = ",".join(["%s"] * len(tags))
+            conditions.append(f"tags && ARRAY[{placeholders}]")
+            params.extend(tags)
+
 
         query = f"""
             SELECT eid, type, payload, affected, ctime, owner, tags
             FROM public.signaling_events 
-            WHERE ((ctime >= %s) {types_q} {sources_q} {affected_q} {tags_q})
+            WHERE {' AND '.join(conditions)}
             ORDER BY ctime DESC
-            {limit_q};
         """
-        print(f"run q {query}")
+        if limit > 0:
+            query += f" LIMIT {limit}"
 
-        params = (
-            datetime.fromtimestamp(timestamp),
-        )
         start_time = time_module.perf_counter()
         result = self.db_manager.execute_query(
             query=query,
@@ -121,16 +157,15 @@ class MessageStorage:
         )
         end_time = time_module.perf_counter()
         execution_time = end_time - start_time
-        self.logger.info(f"ROBOTS: find_events query - {execution_time} - count: {len(result)}")
+        self.logger.info(f"ROBOTS: find_events query - {execution_time} - count: {len(result)} q: {Dbutils.compress_query(query)}, params: {params}")
         events = self.__result_to_event_data_extended_list(result)
-        for event in events:
-            self.logger.info(f"EID: {event.eid}, Type: {event.event_type}, Timestamp: {event.timestamp}")
+        #for event in events:
+        #    self.logger.info(f"EID: {event.eid}, Type: {event.event_type}, Timestamp: {event.timestamp}")
         return events
 
     def __result_to_event_data_extended_list(self, data_list: list) -> List[EventDataExtended]:
         result = []
         for item in data_list:
-            # Создаем словарь с соответствующими ключами
             event_dict = {
                 'eid': item[0],
                 'type': item[1],
@@ -140,8 +175,6 @@ class MessageStorage:
                 'owner': item[5],
                 'tags': item[6]
             }
-            
-            # Создаем объект EventDataExtended
             event_extended = EventDataExtended.from_dict(event_dict)
             result.append(event_extended)
         
