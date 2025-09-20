@@ -87,10 +87,12 @@ services:
     ports:
       - "5555:5555"
       - "5556:5556"
+      - "5557:5557"
     volumes:
       - ${LUNARICORN_HOME}/signaling_data:/opt/lunaricorn/signaling/data
     environment:
       - PYTHONUNBUFFERED=1
+      - CLUSTER_LEADER_URL=http://leader:8000/
       - db_type=postgresql
       - db_host=lunaricorn-pg
       - db_port=5432
@@ -103,6 +105,8 @@ services:
     restart: unless-stopped
     depends_on:
       pg:
+        condition: service_healthy
+      leader:
         condition: service_healthy
 networks:
   lunaricorn-network:

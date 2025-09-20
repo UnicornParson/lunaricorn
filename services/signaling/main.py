@@ -3,17 +3,52 @@ import os
 import atexit
 import sys
 import logging
-
-
+import threading
+import time 
 sys.path.append(os.path.dirname(__file__))
 sys.path.append(os.getcwd())
 
 from logger_config import setup_logging
 from zmq_server import ZeroMQSignalingServer
+from api_server import *
+from lunaricorn.utils.logger_config import setup_logging
+import lunaricorn.api.leader as leader
+
+class NodeController:
+    instance = None
+    def __init__(self, leader_url):
+        self.leader_available = False
+        self.connector = None
+        self.leader_url = leader_url
+        self._abort_event = threading.Event()
+    @staticmethod
+    def abort_registration():
+        if NodeController.instance:
+            NodeController.instance._abort_event.set()
+
+    def register_node(self):
+        logger.info(f"Attempting to connect to leader at: {self.leader_url}")
+        self.leader_available = leader.ConnectorUtils.test_connection(self.leader_url)
+        
+        if not self.leader_available:
+            logger.info(f"Leader API is not available at {self.leader_url}. wait")
+            self.connector = None
+            rc = False
+            start = time.time()
+            while not rc and not self._abort_event.is_set():
+                logger.info(f"wait for leader ready... {time.time() - start}")
+                rc = leader.ConnectorUtils.wait_connection(self.leader_url, 5.0)
+            if self._abort_event.is_set():
+                self._abort_event.clear()
+                return False
+        if self.leader_available:
+            logger.info(f"Successfully connected to leader API at {self.leader_url}")
+            self.connector = leader.ConnectorUtils.create_leader_connector(self.leader_url)
+            return True
+        return False
 
 def load_config():
     config_path = "cfg/config.yaml"
-
     logger = logging.getLogger(__name__)
     logger.info("Shutting down Signaling Server...")
     if not os.path.exists(config_path):
@@ -22,7 +57,9 @@ def load_config():
             "signaling": {
                 "name": "signaling",
                 "host": "0.0.0.0",
-                "port": 5555,
+                "rep_port": 5555,
+                "pub_port": 5556,
+                "api_port": 5557,
                 "zmq": {
                     "protocol": "tcp",
                     "bind_address": "*",
@@ -40,7 +77,8 @@ def load_config():
                 "dbname": "lunaricorn",
                 "subscriber_timeout": 300,
                 "max_events": 1000
-            }
+            },
+            "CLUSTER_LEADER_URL": "http://127.0.0.1:8080"
         }
         
         # Ensure cfg directory exists
@@ -59,6 +97,8 @@ def shutdown_handler():
     """Handle graceful shutdown"""
     logger = logging.getLogger(__name__)
     logger.info("Shutting down Signaling Server...")
+    NodeController.abort_registration()
+    ServerApp.stop_api_server()
 
 if __name__ == "__main__":
     logger = setup_logging("portal_main")
@@ -69,16 +109,36 @@ if __name__ == "__main__":
         # Load configuration
         config = load_config()
         signaling_config = config.get("signaling", {})
-        
+        cluster_url = config.get("CLUSTER_LEADER_URL", "")
+        if "CLUSTER_LEADER_URL" in os.environ:
+            cluster_url = os.environ["CLUSTER_LEADER_URL"]
+            logger.info(f"apply env. cluster_url { cluster_url }")
+
+        if not cluster_url:
+            logger.error("cluster url not found")
+            exit(1)
+
         logger.info(f"Configuration loaded: {signaling_config}")
         
+        logger.info("Setup Signaling cluster node")
+        NodeController.instance = NodeController(cluster_url)
+        rc = NodeController.instance.register_node()
+        if not rc:
+            logger.error("Setup Signaling cluster node - FAILED")
+            exit(1)
+        logger.info("Setup Signaling cluster node - OK")
+
+        logger.info("Starting http api server")
+
         # Create and start ZeroMQ signaling server  
         # Pass the full config to the server
         server = ZeroMQSignalingServer(config)
-        
+        controller = server.signaling
+        ServerApp.start_api_server(signaling_config, controller)
         logger.info("Starting ZeroMQ signaling server...")
-        server.start()
         
+        server.start()
+        ServerApp.stop_api_server()
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt, shutting down...")
     except Exception as e:

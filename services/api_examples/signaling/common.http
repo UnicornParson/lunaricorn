@@ -1,0 +1,11 @@
+
+@apiUrl = http://{{lunaricordUrl}}:5557
+
+# @name health
+GET http://{{lunaricordUrl}}:5557/health
+
+###
+
+# @name index
+GET {{apiUrl}}
+

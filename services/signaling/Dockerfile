@@ -8,12 +8,12 @@ USER root
 RUN apt update && apt install -y \
     gcc \
     g++ \
-    && rm -rf /var/lib/apt/lists/*
+    iproute2
 
 RUN mkdir -p /opt/lunaricorn/signaling/logs
 COPY cfg/config.yaml /opt/lunaricorn/signaling/data/config.yaml
 COPY requirements.txt /opt/lunaricorn/signaling/app/   
-
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r /opt/lunaricorn/signaling/app/requirements.txt
 
 # Copy application code to the specified directory

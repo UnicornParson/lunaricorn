@@ -39,6 +39,13 @@ class Signaling:
         self.subscriber_timeout = config.get("message_storage", {}).get("subscriber_timeout", 300)  # 5 minutes
         self.max_events = config.get("message_storage", {}).get("max_events", 1000)  # Max events to keep in memory
     
+    def browse(self, filter:BrowseRequest) -> list:
+        if not filter.is_valid():
+            self.logger.error(f"invalid request {filter}")
+            return []
+        records = self.storage.find_events(timestamp=filter.timestamp, types=filter.event_types, sources=filter.sources, affected=filter.affected, tags=filter.tags, limit=filter.limit)
+        self.logger.info(f"browse: {len(records)} records found")
+        return records
 
     def _setup_storage(self):
         """Setup database connection with environment variable override"""

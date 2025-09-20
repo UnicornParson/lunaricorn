@@ -327,4 +327,4 @@ class DatabaseManager:
                     self.connection.rollback()
                 except Exception as rollback_error:
                     logger.debug(f"Error during rollback: {rollback_error}")
-            raise
+            raise e

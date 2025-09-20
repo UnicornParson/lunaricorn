@@ -3,6 +3,8 @@ from .data_types import *
 from .signaling_database_manager import *
 from datetime import datetime
 import json
+import time as time_module
+
 
 class StorageError(Exception):
     pass
@@ -75,6 +77,76 @@ class MessageStorage:
         
         return result[0]
         
+    def find_events(self, timestamp:float, types:list = [], sources:list = [], affected:list = [], tags:list = [], limit:int = 0) -> list:
+        types_q = " "
+        sources_q = " "
+        affected_q = " "
+        tags_q = " "
+        limit_q = " "
+
+        if limit > 0:
+            limit_q = f"LIMIT {int(limit)}"
+
+        if types:
+            tlist = ', '.join(f"'{s}'" for s in types)
+            types_q = f"AND (type IN ({tlist}) )"
+        if sources:
+            slist = ', '.join(f"'{s}'" for s in sources)
+            sources_q = f"AND (type IN ({slist}) )"
+        if affected:
+            alist = ', '.join(f"'{s}'" for s in affected)
+            affected_q = f"AND (type IN ({alist}) )"
+        if tags:
+            tlist = ', '.join(f"'{s}'" for s in tags)
+            tags_q = f"AND (type IN ({tlist}) )"
+
+        query = f"""
+            SELECT eid, type, payload, affected, ctime, owner, tags
+            FROM public.signaling_events 
+            WHERE ((ctime >= %s) {types_q} {sources_q} {affected_q} {tags_q})
+            ORDER BY ctime DESC
+            {limit_q};
+        """
+        print(f"run q {query}")
+
+        params = (
+            datetime.fromtimestamp(timestamp),
+        )
+        start_time = time_module.perf_counter()
+        result = self.db_manager.execute_query(
+            query=query,
+            params=params,
+            fetch_one = False,
+            fetch_all = True
+        )
+        end_time = time_module.perf_counter()
+        execution_time = end_time - start_time
+        self.logger.info(f"ROBOTS: find_events query - {execution_time} - count: {len(result)}")
+        events = self.__result_to_event_data_extended_list(result)
+        for event in events:
+            self.logger.info(f"EID: {event.eid}, Type: {event.event_type}, Timestamp: {event.timestamp}")
+        return events
+
+    def __result_to_event_data_extended_list(self, data_list: list) -> List[EventDataExtended]:
+        result = []
+        for item in data_list:
+            # Создаем словарь с соответствующими ключами
+            event_dict = {
+                'eid': item[0],
+                'type': item[1],
+                'payload': item[2],
+                'affected': item[3],
+                'ctime': item[4],
+                'owner': item[5],
+                'tags': item[6]
+            }
+            
+            # Создаем объект EventDataExtended
+            event_extended = EventDataExtended.from_dict(event_dict)
+            result.append(event_extended)
+        
+        return result
+
 
     def find_events_by_type(self, event_type: str) -> List[EventDataExtended]:
         """

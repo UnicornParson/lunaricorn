@@ -478,3 +478,13 @@ class ConnectorUtils:
             # Log the exception if needed
             logger.error(f"Failed to connect to {base_url}: {e}")
             return False
+
+    @staticmethod
+    def wait_connection(url: str, seconds_timeout: float) -> bool:
+        start_time = time.time()
+        while True:
+            if ConnectorUtils.test_connection(url):
+                return True
+            if time.time() - start_time >= seconds_timeout:
+                return False
+            time.sleep(0.5)

@@ -3,3 +3,4 @@ pyzmq
 pyyaml
 asyncio
 psycopg2-binary
+flask
