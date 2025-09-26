@@ -7,13 +7,15 @@ from typing import Dict, Any, List, Callable, Optional
 from dataclasses import dataclass, asdict
 from typing import Callable
 from enum import Enum
-
+from datetime import datetime
+import requests
 
 @dataclass
 class SignalingClientConfig:
     host: str
     rep_port: int
     pub_port: int
+    api_port: int
 
 @dataclass
 class ClientEventData:
@@ -24,7 +26,23 @@ class ClientEventData:
     source: Optional[str] = None
     affected: Optional[list]= None
     tags: Optional[list]= None
-
+    @classmethod
+    def from_dict(cls, data: dict) -> 'ClientEventData':
+        try:
+            timestamp = data['timestamp'].timestamp() if isinstance(data['timestamp'], datetime) else data['timestamp']
+            return cls(
+                eid=data['eid'],
+                event_type=data['event_type'],
+                payload=data['payload'],
+                timestamp=timestamp,
+                source=data.get('source'),
+                affected=data.get('affected'),
+                tags=data.get('tags')
+            )
+        except Exception as e:
+            print(f"error {e} for data \n {data}")
+            raise e
+    
     def __str__(self) -> str:
         affected_str = f", affected={self.affected}" if self.affected is not None else ""
         tags_str = f", tags={self.tags}" if self.tags is not None else ""
@@ -59,6 +77,7 @@ class SignalingClient:
         self.server_host = config.host
         self.rep_port = config.rep_port  # REQ-REP port
         self.pub_port = config.rep_port  # PUB-SUB port
+        self.api_port = config.api_port  # rest api port
         self.protocol = "tcp"
         
         # Client state management
@@ -135,7 +154,13 @@ class SignalingClient:
             self.connected = False
             self.running = False
             return False
-    
+    def __repr__(self) -> str:
+        return self.__str__() 
+    def __str__(self) -> str:
+        status = "Connected" if self.connected else "Disconnected"
+        state = "running" if self.running else "stopped"
+        return f"Lunaricorn signaling client {status} {state}"
+
     def subscribe(self, event_types: List[str]):
         for et in event_types:
             if et not in self.watched_types:
@@ -365,3 +390,108 @@ class SignalingClient:
             self.logger.error(f"Error terminating context: {e}")
         
         self.logger.info(f"ZeroMQ client {self.client_id} disconnected")
+
+    def browse_events(self,
+                     timestamp: float = 0,
+                     event_types: Optional[List[str]] = None,
+                     sources: Optional[List[str]] = None,
+                     affected: Optional[List[str]] = None,
+                     tags: Optional[List[str]] = None,
+                     limit: Optional[int] = None) -> List[ClientEventData]:
+
+        url = f"http://{self.server_host}:{self.api_port}/v1/browse"
+        request_body = {"timestamp": timestamp}
+        
+        if event_types:
+            request_body["event_types"] = event_types
+        if sources:
+            request_body["sources"] = sources
+        if affected:
+            request_body["affected"] = affected
+        if tags:
+            request_body["tags"] = tags
+        if limit:
+            request_body["limit"] = limit
+
+        try:
+            response = requests.post(
+                url,
+                json=request_body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept-Encoding": "br, gzip, deflate"
+                },
+                timeout=self.net_timeout
+            )
+            response.raise_for_status()
+
+            events_data = response.json()
+            return [ClientEventData.from_dict(event) for event in events_data]
+            
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"API request failed: {str(e)}")
+        except ValueError as e:
+            raise Exception(f"Failed to parse response: {str(e)}")
+        
+    def get_tags_list(self) -> List[str]:
+        """
+        Retrieve All Available Tags
+        
+        Returns an array of all unique tags used in the system for event categorization
+        
+        :return: List of tag names
+        :raises: Exception if API request fails
+        """
+        return self._get_list("tags")
+    
+    def get_types_list(self) -> List[str]:
+        """
+        Retrieve All Available Types
+        
+        Returns an array of all unique types used in the system for event categorization
+        
+        :return: List of type names
+        :raises: Exception if API request fails
+        """
+        return self._get_list("types")
+    
+    def get_affected_list(self) -> List[str]:
+        """
+        Retrieve All Available affected objects
+        
+        Returns an array of all unique affected objects used in the system for event categorization
+        
+        :return: List of affected object names
+        :raises: Exception if API request fails
+        """
+        return self._get_list("affected")
+    
+    def get_owners_list(self) -> List[str]:
+        """
+        Retrieve All Available affected owners
+        
+        Returns an array of all unique owner names used in the system for event categorization
+        
+        :return: List of owner names
+        :raises: Exception if API request fails
+        """
+        return self._get_list("owners")
+    
+    def _get_list(self, endpoint: str) -> List[str]:
+        """
+        Internal method to handle all list API requests
+        
+        :param endpoint: API endpoint suffix (tags, types, affected, owners)
+        :return: List of strings from the API response
+        :raises: Exception if API request fails
+        """
+        url = f"http://{self.server_host}:{self.api_port}/v1/list/{endpoint}"
+        
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"API request failed: {str(e)}")
+        except ValueError as e:
+            raise Exception(f"Failed to parse response: {str(e)}")
