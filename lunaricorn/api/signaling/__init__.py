@@ -11,4 +11,11 @@ class SignalingEventType(Enum):
     FileOp_delete = "FileOp_delete"
     FileOp_notify = "FileOp_notify"
 
-__all__ = ["SignalingEventType", "SignalingClientConfig", "ClientEventData"]
+class SignalingEventFlags(Enum):
+    JobEntry = "JobEntry"
+    JobExit = "JobExit"
+    News = "News"
+    Md = "Md"
+    Obsidian = "Obsidian"
+
+__all__ = ["SignalingEventType", "SignalingClientConfig", "ClientEventData", "SignalingEventFlags"]

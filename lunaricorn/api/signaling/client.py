@@ -40,7 +40,8 @@ class ClientEventData:
                 tags=data.get('tags')
             )
         except Exception as e:
-            print(f"error {e} for data \n {data}")
+            logger = logging.getLogger(f"{__name__}.ClientEventData.from_dict")
+            logger.error(f"error {e} for data \n {data}")
             raise e
     
     def __str__(self) -> str:
@@ -241,7 +242,6 @@ class SignalingClient:
         """
         with self.lock:  # Ensure thread-safe access to REQ socket
             try:
-                print("Send request")
                 self.req_socket.send_string(json.dumps(message))
                 
                 # Wait for response with timeout

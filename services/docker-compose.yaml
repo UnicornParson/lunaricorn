@@ -89,7 +89,7 @@ services:
       - "5556:5556"
       - "5557:5557"
     volumes:
-      - ${LUNARICORN_HOME}/signaling_data:/opt/lunaricorn/signaling/data
+      - ${LUNARICORN_HOME}/signaling_data:/opt/lunaricorn/signaling_data
     environment:
       - PYTHONUNBUFFERED=1
       - CLUSTER_LEADER_URL=http://leader:8000/

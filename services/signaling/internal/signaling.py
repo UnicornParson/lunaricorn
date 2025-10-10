@@ -5,6 +5,7 @@ import json
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum
+import threading
 from .data_types import *
 from .message_storage import *
 from .test_message_storage  import *
@@ -28,7 +29,9 @@ class Signaling:
         
         # Subscriber registry
         self.subscribers: Dict[str, Subscriber] = {}
-        
+        self.client_last_seen = {} 
+        self.client_last_seen_lock = threading.RLock()
+
         # Event storage (in-memory for now, could be moved to DB)
         self.events: List[EventData] = []
         
@@ -44,6 +47,30 @@ class Signaling:
         #print(f"{what} --> {rc}")
         rc.sort()
         return list(set(rc))
+
+    def on_client_action(self, client_id):
+        with self.client_last_seen_lock:
+            self.client_last_seen[client_id] = time.time()
+            self.clean_inactive_clients()
+
+    def active_clients(self, window_seconds=20) -> list:
+        current_time = time.time()
+        with self.client_last_seen_lock:
+            return [
+                client_id
+                for client_id, last_seen in self.client_last_seen.items()
+                if current_time - last_seen <= window_seconds
+            ]
+
+    def clean_inactive_clients(self, max_age_seconds=600):
+        current_time = time.time()
+        to_remove = [
+            client_id for client_id, last_seen in self.client_last_seen.items()
+            if current_time - last_seen > max_age_seconds
+        ]
+        for client_id in to_remove:
+            del self.client_last_seen[client_id]
+
 
     def browse(self, filter:BrowseRequest) -> list:
         if not filter.is_valid():

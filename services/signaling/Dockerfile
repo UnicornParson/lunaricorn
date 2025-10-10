@@ -10,8 +10,8 @@ RUN apt update && apt install -y \
     g++ \
     iproute2
 
-RUN mkdir -p /opt/lunaricorn/signaling/logs
-COPY cfg/config.yaml /opt/lunaricorn/signaling/data/config.yaml
+RUN mkdir -p /opt/lunaricorn/signaling_data/logs
+COPY cfg/config.yaml /opt/lunaricorn/signaling_data/config.yaml
 COPY requirements.txt /opt/lunaricorn/signaling/app/   
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r /opt/lunaricorn/signaling/app/requirements.txt
@@ -26,10 +26,13 @@ RUN pip install --no-cache-dir -r /opt/lunaricorn/signaling/app/lunaricorn/requi
 WORKDIR /opt/lunaricorn/signaling/app
 
 # Expose ZeroMQ ports
-EXPOSE 5555 5556 5557
+EXPOSE 5555 5556 
+
+# Expose api port
+EXPOSE 5557
 
 # Set volume for persistent data
-VOLUME ["/opt/lunaricorn/signaling/data"]
+VOLUME ["/opt/lunaricorn/signaling_data"]
 
 
 

@@ -8,10 +8,10 @@ import time
 sys.path.append(os.path.dirname(__file__))
 sys.path.append(os.getcwd())
 
-from logger_config import setup_logging
+from logger_config import setup_signaling_logging
 from zmq_server import ZeroMQSignalingServer
 from api_server import *
-from lunaricorn.utils.logger_config import setup_logging
+
 import lunaricorn.api.leader as leader
 
 class NodeController:
@@ -101,7 +101,7 @@ def shutdown_handler():
     ServerApp.stop_api_server()
 
 if __name__ == "__main__":
-    logger = setup_logging("portal_main")
+    logger = setup_signaling_logging("signaling_main")
     logger.info("Starting Signaling Service")
     
     atexit.register(shutdown_handler)

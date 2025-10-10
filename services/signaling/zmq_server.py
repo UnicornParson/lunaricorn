@@ -49,7 +49,6 @@ class ZeroMQSignalingServer:
 
         # Client management
         self.subscriptions = defaultdict(set)
-        self.client_last_seen = {} 
 
         self.threads = []
     
@@ -79,8 +78,7 @@ class ZeroMQSignalingServer:
                 return {"status": "error", "message": "client_id is required"}
             
             # Update client activity
-            self.client_last_seen[client_id] = time.time()
-            
+            self.signaling.on_client_action(client_id)
 
             if msg_type == "heartbeat":
                 # Handle heartbeat
@@ -94,7 +92,6 @@ class ZeroMQSignalingServer:
                         self.logger.error(f"Missing required field: {field}")
                         return {"status": "error", "message": f"Missing required field: {field}"}
 
-                # Создаем объект EventDataExtended
                 event_data = EventData(
                     event_type=message_data["type"],
                     payload=message_data["message"],

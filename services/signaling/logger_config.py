@@ -32,9 +32,9 @@ class AutoFlushFileHandler(logging.handlers.RotatingFileHandler):
         super().emit(record)
         self.flush()
 
-def setup_logging(logger_name="portal_api"):
+def setup_signaling_logging(logger_name="signaling_api"):
     """
-    Setup logging configuration for the portal application
+    Setup logging configuration for the signaling application
     
     Args:
         logger_name (str): Name for the specific logger instance
@@ -50,10 +50,10 @@ def setup_logging(logger_name="portal_api"):
     logs_dir.mkdir(parents=True, exist_ok=True)
     
     # Backup existing log file if it exists
-    log_file = logs_dir / "portal_api.log"
+    log_file = logs_dir / "signaling_api.log"
     if log_file.exists():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = logs_dir / f"portal_api_{timestamp}.log"
+        backup_file = logs_dir / f"signaling_api_{timestamp}.log"
         try:
             log_file.rename(backup_file)
             print(f"Backed up existing log file to: {backup_file}")

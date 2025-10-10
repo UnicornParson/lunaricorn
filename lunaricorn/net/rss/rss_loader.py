@@ -133,7 +133,7 @@ class RssEntryDB:
 
 
 class RssLoader(ContentLoader):
-    def __init__(self, url: str, db_dir: str = None, dumper: IDataDumper = EmptyDataDumper()):
+    def __init__(self, url: str, db_dir: str = None, dumper: IDataDumper = EmptyDataDumper(), db_engine = None):
         super().__init__()
         self.logger = logging.getLogger("net.RssLoader")
         # Use a separate database file for each RSS feed, based on the hash of the URL
@@ -142,7 +142,9 @@ class RssLoader(ContentLoader):
         if db_dir is None:
             db_dir = os.getcwd()
         db_path = os.path.join(db_dir, db_filename)
-        self.db = RssEntryDB(db_path)
+        self.db = db_engine
+        if not self.db:
+            self.db = RssEntryDB(db_path)
         self.feed_url = url
         self.dumper = dumper
         
@@ -232,7 +234,7 @@ class RssLoader(ContentLoader):
                 elif not isinstance(content, str):
                     content = str(content)
                 content_hash = hashlib.sha256(content.encode()).hexdigest() if content else None
-                if content_hash and self.db.has_entry(content_hash):
+                if content_hash and self.db.has_entry(content_hash, entry.link ):
                     continue  # Already loaded, skip
                 entry = await self._fetch_entry(entry)
                 # Recalculate content_hash after fetching full_content
@@ -256,7 +258,7 @@ class RssLoader(ContentLoader):
                 elif not isinstance(content, str):
                     content = str(content)
                 content_hash = hashlib.sha256(content.encode()).hexdigest() if content else None
-                if content_hash and self.db.has_entry(content_hash):
+                if content_hash and self.db.has_entry(content_hash, entry.link):
                     continue
                 try:
                     entry = await self._fetch_entry(entry)

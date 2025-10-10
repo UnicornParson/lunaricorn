@@ -13,7 +13,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from lunaricorn.api.leader import *
 from lunaricorn.utils.db_manager import DatabaseManager
-from lunaricorn.utils.logger_config import setup_logging
+from logger_config import setup_signaling_logging
 import time as time_module
 
 from internal import *
@@ -54,7 +54,6 @@ class SiagnalingApiServer(threading.Thread):
         return decorated_function
     
     def setup_list_routes(self):
-        # ['type', 'affected', 'owner', 'tags']
         @self.app.route('/v1/list/tags', methods=["GET"])
         @self.measure_time
         def list_tags():
@@ -98,6 +97,12 @@ class SiagnalingApiServer(threading.Thread):
                 self.logger.error(f"cannot get ulist for {field} reason: {e}")
                 return jsonify({"error": f"Internal Server Error. cannot get ulist for {field}"}), 500
             return jsonify(values)
+    def setup_stat_routes(self):
+        @self.app.route("/v1/stat/clients", methods=["get"])
+        @self.measure_time
+        def active_clients_list():
+            active_clients = self.signaling_controller.active_clients()
+            return jsonify(active_clients)
 
     def setup_routes(self):
         @self.app.route('/', methods=["GET"])
@@ -110,7 +115,7 @@ class SiagnalingApiServer(threading.Thread):
         def health():
             return jsonify({"status": "ok"})
         self.setup_list_routes()
-        
+        self.setup_stat_routes()
         
         @self.app.route("/v1/browse", methods=["POST"])
         @self.measure_time
@@ -119,6 +124,8 @@ class SiagnalingApiServer(threading.Thread):
             request_data = BrowseRequest.from_dict(data)
             events = self.signaling_controller.browse(filter=request_data)
             return jsonify(events)
+        
+
 
     def run(self):
         self.server = make_server(self.host, self.port, self.app)
