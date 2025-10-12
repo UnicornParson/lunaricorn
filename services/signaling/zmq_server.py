@@ -86,14 +86,14 @@ class ZeroMQSignalingServer:
                 return {"status": "success", "message": "Heartbeat received"}
             elif msg_type == "push":
                 self.logger.info("on push")
-                required_fields = ["type", "message"]
+                required_fields = ["type", "message", "event_type"]
                 for field in required_fields:
                     if field not in message_data:
                         self.logger.error(f"Missing required field: {field}")
                         return {"status": "error", "message": f"Missing required field: {field}"}
 
                 event_data = EventData(
-                    event_type=message_data["type"],
+                    event_type=message_data["event_type"],
                     payload=message_data["message"],
                     timestamp=message_data.get("timestamp", time.time()),
                     source=message_data.get("creator-id"),
