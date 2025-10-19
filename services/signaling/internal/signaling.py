@@ -44,7 +44,6 @@ class Signaling:
     
     def u_list(self, what:str) -> list:
         rc = self.storage.get_unique_values(what)
-        #print(f"{what} --> {rc}")
         rc.sort()
         return list(set(rc))
 

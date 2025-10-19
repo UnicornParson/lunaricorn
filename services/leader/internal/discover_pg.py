@@ -159,6 +159,7 @@ class DiscoverManagerPG:
             ''', (cutoff_timestamp,), fetch_all=True)
             
             result = []
+            logger.error(f"@@ found {len(records)} after cutoff {cutoff_timestamp}")
             for record in records:
                 result.append({
                     'id': record['i'],

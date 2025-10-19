@@ -4,7 +4,7 @@ import atexit
 import sys
 import logging
 import threading
-import time 
+import time
 sys.path.append(os.path.dirname(__file__))
 sys.path.append(os.getcwd())
 
@@ -21,6 +21,10 @@ class NodeController:
         self.connector = None
         self.leader_url = leader_url
         self._abort_event = threading.Event()
+        self.node_key = "signaling_main"
+        self.node_type = "signaling"
+        self.node_name = "signaling"
+
     @staticmethod
     def abort_registration():
         if NodeController.instance:
@@ -29,7 +33,7 @@ class NodeController:
     def register_node(self):
         logger.info(f"Attempting to connect to leader at: {self.leader_url}")
         self.leader_available = leader.ConnectorUtils.test_connection(self.leader_url)
-        
+
         if not self.leader_available:
             logger.info(f"Leader API is not available at {self.leader_url}. wait")
             self.connector = None
@@ -44,6 +48,7 @@ class NodeController:
         if self.leader_available:
             logger.info(f"Successfully connected to leader API at {self.leader_url}")
             self.connector = leader.ConnectorUtils.create_leader_connector(self.leader_url)
+            self.connector.register_service(self.node_name, self.node_key, self.node_type)
             return True
         return False
 
@@ -80,15 +85,15 @@ def load_config():
             },
             "CLUSTER_LEADER_URL": "http://127.0.0.1:8080"
         }
-        
+
         # Ensure cfg directory exists
         os.makedirs("cfg", exist_ok=True)
-        
+
         with open(config_path, "w") as f:
             yaml.dump(default_config, f, default_flow_style=False)
-        
+
         return default_config
-    
+
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     return config
@@ -103,7 +108,7 @@ def shutdown_handler():
 if __name__ == "__main__":
     logger = setup_signaling_logging("signaling_main")
     logger.info("Starting Signaling Service")
-    
+
     atexit.register(shutdown_handler)
     try:
         # Load configuration
@@ -119,7 +124,7 @@ if __name__ == "__main__":
             exit(1)
 
         logger.info(f"Configuration loaded: {signaling_config}")
-        
+
         logger.info("Setup Signaling cluster node")
         NodeController.instance = NodeController(cluster_url)
         rc = NodeController.instance.register_node()
@@ -130,13 +135,13 @@ if __name__ == "__main__":
 
         logger.info("Starting http api server")
 
-        # Create and start ZeroMQ signaling server  
+        # Create and start ZeroMQ signaling server
         # Pass the full config to the server
         server = ZeroMQSignalingServer(config)
         controller = server.signaling
         ServerApp.start_api_server(signaling_config, controller)
         logger.info("Starting ZeroMQ signaling server...")
-        
+
         server.start()
         ServerApp.stop_api_server()
     except KeyboardInterrupt:

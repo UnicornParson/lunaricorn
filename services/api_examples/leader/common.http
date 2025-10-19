@@ -1,0 +1,5 @@
+
+# @name health
+GET http://{{lunaricordUrl}}:8001/v1/clusterinfo
+
+

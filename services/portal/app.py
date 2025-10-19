@@ -78,9 +78,13 @@ def load_config():
     return config
 
 def init_components(config):
-    logger.info(f"init_components started: {config}")
+    logger.info(f"@@ init_components started: {config}")
     ClusterEngine.config = config
     try:
+        if (ClusterEngine.cluster):
+            logger.error(f"@@ cluster already done")
+            return True
+        
         ClusterEngine.cluster = ClusterEngine()
         logger.info("Portal components initialized successfully")
         return True

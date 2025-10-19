@@ -34,6 +34,7 @@ class LeaderConnector:
         self._registration_timer = None
         self._registration_stop_event = threading.Event()
         self._registered_service = None
+        self._registration_interval = 2 # s
         
         logger.info(f"LeaderConnector initialized with base URL: {self.base_url}")
     
@@ -112,6 +113,7 @@ class LeaderConnector:
         Returns:
             True if successful, False otherwise
         """
+        
         if not self._registered_service:
             logger.warning("No service registered for periodic updates")
             return False
@@ -122,7 +124,7 @@ class LeaderConnector:
                 'node_type': self._registered_service['node_type'],
                 'instance_key': self._registered_service['instance_key']
             }
-            
+            logger.debug("@@ send _send_registration_request {data}")
             if self._registered_service.get('host') is not None:
                 data['host'] = self._registered_service['host']
             if self._registered_service.get('port') is not None:
@@ -143,13 +145,22 @@ class LeaderConnector:
         Timer worker function that sends registration requests every second.
         """
         while not self._registration_stop_event.is_set():
+            cycle_start = time.time()
             self._send_registration_request()
-            # Wait for 1 second or until stop event is set
-            if self._registration_stop_event.wait(1.0):
-                break
+            elapsed = time.time() - cycle_start
+            sleep_time = max(0, self._registration_interval - elapsed)
+
+            if sleep_time > 0:
+                self._registration_stop_event.wait(sleep_time)
+            elapsed = time.time() - cycle_start
+            sleep_time = max(0, self._registration_interval - elapsed)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
         
         logger.info("Registration timer stopped")
-    
+
+
+
     def register_service(self, 
                         node_name: str, 
                         node_type: str, 

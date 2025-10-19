@@ -9,10 +9,14 @@ router = APIRouter()
 # Track when cluster first became not ready
 cluster_not_ready_since = None
 
+
 class ClusterEngine:
     config = None
     cluster = None
+    counter = 0
+
     def __init__(self):
+        logger.info(f"@@ make cluster"
         if ClusterEngine.config is None:
             raise ValueError("Config is not loaded")
         
@@ -115,3 +119,12 @@ async def get_nodes():
         return {"status": "error", "error": str(e)}
 
 
+class ClusterEngineNode:
+    instance = None
+
+    def make_node(config):
+        if not instance:
+            instance = ClusterEngineNode(config)
+
+    def __init__(self, config):
+        self.config = config
