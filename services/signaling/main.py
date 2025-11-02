@@ -31,6 +31,7 @@ class NodeController:
             NodeController.instance._abort_event.set()
 
     def register_node(self):
+        logger = logging.getLogger(__name__)
         logger.info(f"Attempting to connect to leader at: {self.leader_url}")
         self.leader_available = leader.ConnectorUtils.test_connection(self.leader_url)
 

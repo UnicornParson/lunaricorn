@@ -12,6 +12,7 @@ RUN apt update && apt install -y \
 
 RUN mkdir -p /opt/lunaricorn/orb/logs
 RUN mkdir -p /opt/lunaricorn/orb/file_storage
+RUN mkdir -p /opt/lunaricorn/orb/app
 COPY cfg/config.yaml /opt/lunaricorn/orb/data/config.yaml
 COPY requirements.txt /opt/lunaricorn/orb/app/   
 
@@ -26,7 +27,7 @@ RUN pip install --no-cache-dir -r /opt/lunaricorn/orb/app/lunaricorn/requirement
 # Set working directory to the application directory
 WORKDIR /opt/lunaricorn/orb/app
 
-# Expose ZeroMQ ports
+# Expose api ports
 EXPOSE 8080
 
 # Set volume for persistent data

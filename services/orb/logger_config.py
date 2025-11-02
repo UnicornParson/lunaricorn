@@ -32,9 +32,9 @@ class AutoFlushFileHandler(logging.handlers.RotatingFileHandler):
         super().emit(record)
         self.flush()
 
-def setup_signaling_logging(logger_name="signaling_api"):
+def setup_orb_logging(logger_name="orb_api"):
     """
-    Setup logging configuration for the signaling application
+    Setup logging configuration for the orb application
     
     Args:
         logger_name (str): Name for the specific logger instance
@@ -42,7 +42,7 @@ def setup_signaling_logging(logger_name="signaling_api"):
     Returns:
         logging.Logger: Configured logger instance
     """
-    logs_dir = Path("/opt/lunaricorn/signaling_data/logs")
+    logs_dir = Path("/opt/lunaricorn/orb_data/logs")
     if not is_docker(): # native run
         logs_dir = Path("./logs")
 
@@ -50,10 +50,10 @@ def setup_signaling_logging(logger_name="signaling_api"):
     logs_dir.mkdir(parents=True, exist_ok=True)
     
     # Backup existing log file if it exists
-    log_file = logs_dir / "signaling_api.log"
+    log_file = logs_dir / "orb_api.log"
     if log_file.exists():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = logs_dir / f"signaling_api_{timestamp}.log"
+        backup_file = logs_dir / f"orb_api_{timestamp}.log"
         try:
             log_file.rename(backup_file)
             print(f"Backed up existing log file to: {backup_file}")
