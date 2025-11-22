@@ -1,2 +1,9 @@
+tqdm
+pyzmq
+pyyaml
+asyncio
 psycopg2-binary
 flask
+grpcio
+grpcio-tools
+uvicorn

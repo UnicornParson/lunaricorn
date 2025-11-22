@@ -1,20 +1,6 @@
-FROM python:3.13.5
+FROM lunaricorn_orb_base
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV DEBIAN_FRONTEND=noninteractive
 USER root
-RUN apt update && apt install -y \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN mkdir -p /opt/lunaricorn/orb/logs
-RUN mkdir -p /opt/lunaricorn/orb/file_storage
-RUN mkdir -p /opt/lunaricorn/orb/app
-COPY cfg/config.yaml /opt/lunaricorn/orb/data/config.yaml
-COPY requirements.txt /opt/lunaricorn/orb/app/   
 
 RUN pip install --no-cache-dir -r /opt/lunaricorn/orb/app/requirements.txt
 

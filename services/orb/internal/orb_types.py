@@ -1,6 +1,8 @@
 import os
 from dataclasses import dataclass
 from typing import Union
+from enum import Enum
+from lunaricorn.types import *
 
 def get_required_env_vars(keys):
     missing = [key for key in keys if key not in os.environ]
@@ -35,3 +37,23 @@ class OrbConfig:
 def load_config() -> OrbConfig:
     return OrbConfig.from_env()
 
+
+@dataclass
+class OrbMetaObject(MetaObject):
+    id: str
+
+    def __post_init__(self):
+        """Initialize type after object creation"""
+        self.type = "@OrbMeta"
+
+class OrbDataSybtypes(Enum):
+    Json = "@json"
+    Raw = "@raw"
+
+@dataclass
+class OrbDataObject(LunaObject):
+    subtype: str
+
+    def __post_init__(self):
+        """Initialize type after object creation"""
+        self.type = "@OrbMeta"

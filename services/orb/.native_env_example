@@ -3,3 +3,6 @@ db_host=
 db_port=8003
 db_user=lunaricorn
 db_password=
+ORB_API_PORT=8085
+SIGNALING_PUSH_PORT=5555
+CLUSTER_LEADER_URL=http://leader:8000/

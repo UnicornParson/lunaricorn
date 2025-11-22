@@ -78,7 +78,34 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-
+  orb:
+    build:
+      context: ./orb
+      dockerfile: Dockerfile
+    container_name: lunaricorn-orb
+    ports:
+      - "${ORB_API_PORT}:8080"
+    volumes:
+      - ${LUNARICORN_HOME}/orb_data:/opt/lunaricorn/orb/data
+      - ${LUNARICORN_HOME}/orb_storage:/opt/lunaricorn/orb/file_storage
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CLUSTER_LEADER_URL=http://leader:8000/
+      - db_type=postgresql
+      - db_host=lunaricorn-pg
+      - db_port=5432
+      - db_user=lunaricorn
+      - db_password=${LUNARICORN_PASSWORD}
+      - db_name=lunaricorn
+      - db_schema=lunaricorn
+    networks:
+      - lunaricorn-network
+    restart: unless-stopped
+    depends_on:
+      pg:
+        condition: service_healthy
+      leader:
+        condition: service_healthy
   signaling:
     build:
       context: ./signaling

@@ -1,3 +1,4 @@
+# services/orb/main.py
 import yaml
 import os
 import atexit
@@ -5,15 +6,17 @@ import sys
 import logging
 import threading
 import time
-import uvicorn
+from flask import Flask
+
 sys.path.append(os.path.dirname(__file__))
 sys.path.append(os.getcwd())
 
 from node_config import *
 from logger_config import setup_orb_logging
-
 import internal
 
+# Import the Flask app from rest_app
+from rest_app import create_app
 
 if __name__ == "__main__":
     logger = setup_orb_logging("orb_main")
@@ -29,15 +32,26 @@ if __name__ == "__main__":
 
         logger.info("Starting api server")
 
-        uvicorn.run(
-            "app:app",
-            host="0.0.0.0",
-            port=8080,
-            reload=True,
-            log_level="info"
-        )
+        # Create and run Flask app
+        app = create_app()
+        
+        # Run Flask app in a separate thread
+        def run_flask():
+            app.run(host='0.0.0.0', port=8080, debug=True, use_reloader=False)
+        
+        flask_thread = threading.Thread(target=run_flask)
+        flask_thread.daemon = True
+        flask_thread.start()
+        
+        # Keep main thread alive
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Received keyboard interrupt, shutting down...")
+            
     except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt, shutting down...")
+        logger.info("Received keyboard interrupt, shutting down..")
     except KeyError as ke:
         logger.error(f"Configuration error: {ke}")
     except Exception as e:
