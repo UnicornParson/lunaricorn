@@ -1,4 +1,3 @@
-# services/orb/main.py
 import yaml
 import os
 import atexit
@@ -28,13 +27,24 @@ if __name__ == "__main__":
         rc = NodeController.instance.register_node()
         if not rc:
             logger.error("Setup Signaling cluster node - FAILED")
-            exit(1)
+            sys.exit(1)
 
         logger.info("Starting api server")
+        db_config = config.create_db_config()
+        storage = internal.DataStorage(db_config)
+        if not storage.good():
+            logger.error("cannot make storage")
+            sys.exit(1)
 
         # Create and run Flask app
-        app = create_app()
+        app = create_app(storage)
         
+        tester = internal.StorageTester(storage)
+        test_rc = tester.run_all_tests()
+        if not test_rc:
+            logger.error("❌ self test failed!")
+            sys.exit(1)
+        logger.info("✅ self test ok")
         # Run Flask app in a separate thread
         def run_flask():
             app.run(host='0.0.0.0', port=8080, debug=True, use_reloader=False)

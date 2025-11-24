@@ -1,8 +1,9 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Union
 from enum import Enum
 from lunaricorn.types import *
+from lunaricorn.utils.db_manager import *
 
 def get_required_env_vars(keys):
     missing = [key for key in keys if key not in os.environ]
@@ -34,13 +35,24 @@ class OrbConfig:
         
         return cls(**config_dict)
 
+    def create_db_config(self) -> DbConfig:
+        db_config = DbConfig()
+        db_config.db_type = self.db_type
+        db_config.db_host = self.db_host
+        db_config.db_port = self.db_port
+        db_config.db_user = self.db_user
+        db_config.db_password = self.db_password
+        db_config.db_dbname = self.db_name  # Обратите внимание на преобразование имени
+        return db_config
+
 def load_config() -> OrbConfig:
     return OrbConfig.from_env()
 
 
 @dataclass
 class OrbMetaObject(MetaObject):
-    id: str
+    id: int = 0
+    flags: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         """Initialize type after object creation"""
@@ -52,7 +64,7 @@ class OrbDataSybtypes(Enum):
 
 @dataclass
 class OrbDataObject(LunaObject):
-    subtype: str
+    subtype: str = OrbDataSybtypes.Json
 
     def __post_init__(self):
         """Initialize type after object creation"""

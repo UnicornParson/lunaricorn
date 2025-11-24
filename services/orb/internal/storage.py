@@ -5,7 +5,8 @@ import json
 import time as time_module
 import logging
 from typing import List, Dict, Any, Optional
-from orb_database_manager import *
+from .orb_database_manager import *
+from .orb_types import *
 class StorageError(Exception):
     pass
 
@@ -45,7 +46,10 @@ class DataStorage:
             self.logger.error(f"Failed to initialize database connection: {e}")
             self.db_enabled = False
             raise BrokenStorageError(f"cannot init storage. reason: {e}")
-
+        
+    def good(self) -> bool:
+        return self.db_enabled
+    
     def create_record(self, table_name: str, data: Dict[str, Any]) -> int:
         """Create a new record in the specified table"""
         # Build INSERT query dynamically
@@ -200,3 +204,68 @@ class DataStorage:
             return [dict(zip(columns, row)) for row in result]
         
         return []
+
+    def push_meta(self, meta_obj: OrbMetaObject) -> OrbMetaObject:
+        """
+        Push OrbMetaObject to the database. 
+        If record doesn't exist, creates new one. If exists, updates it.
+        
+        Args:
+            meta_obj: OrbMetaObject instance to push to database
+            
+        Returns:
+            OrbMetaObject: Updated object with database ID if new record was created
+            
+        Raises:
+            StorageError: If database operation fails
+            BrokenStorageError: If database connection is not available
+        """
+        if not self.db_enabled:
+            self.logger.error("Database is not enabled, cannot push meta object")
+            raise BrokenStorageError("Database connection is not available")
+        
+        try:
+            # Prepare data for database operation
+            data = {
+                'data_type': meta_obj.subtype if hasattr(meta_obj, 'subtype') else '@json',
+                'flags': meta_obj.flags if hasattr(meta_obj, 'flags') else [],
+                'src': meta_obj.handle
+            }
+            
+            # Check if this is a new record (id is None, <= 0, or doesn't exist)
+            is_new_record = (not hasattr(meta_obj, 'id') or 
+                           meta_obj.id is None or 
+                           meta_obj.id <= 0)
+            
+            if is_new_record:
+                # Insert new record
+                self.logger.info("Creating new orb_meta record")
+                data['ctime'] = datetime.utcnow()
+                
+                new_id = self.create_record('public.orb_meta', data)
+                if new_id is None:
+                    raise StorageError("Failed to create new orb_meta record")
+                
+                # Update the object with the new ID
+                meta_obj.id = new_id
+                self.logger.debug(f"Created new orb_meta record with ID: {new_id}")
+                
+            else:
+                # Update existing record
+                self.logger.info(f"Updating existing orb_meta record with ID: {meta_obj.id}")
+                
+                # For updates, we don't change the ctime
+                success = self.update_record('public.orb_meta', meta_obj.id, data)
+                if not success:
+                    raise StorageError(f"Failed to update orb_meta record with ID: {meta_obj.id}")
+                
+                self.logger.debug(f"Successfully updated orb_meta record with ID: {meta_obj.id}")
+            
+            return meta_obj
+            
+        except StorageError:
+            # Re-raise StorageError
+            raise
+        except Exception as e:
+            self.logger.error(f"Unexpected error during push_meta operation: {e}")
+            raise StorageError(f"Failed to push meta object: {e}")

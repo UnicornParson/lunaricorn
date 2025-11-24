@@ -16,7 +16,7 @@ class OrbDatabaseManager(DatabaseManager):
         
         cur.execute('''ALTER TABLE IF EXISTS public.orb_meta OWNER to lunaricorn''')
         cur.execute('''
-            CREATE INDEX idata_type
+            CREATE INDEX IF NOT EXISTS idata_type
                 ON public.orb_meta USING btree
                 (data_type)
                 WITH (deduplicate_items=True)

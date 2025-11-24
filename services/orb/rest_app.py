@@ -15,6 +15,10 @@ from lunaricorn.api.signaling import SignalingClient as signaling
 # Create Flask app
 app = Flask(__name__)
 
+# global data storage
+storage = None
+
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -70,11 +74,7 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 # Export the app for use in main.py
-def create_app():
-    """Factory function to create the Flask app"""
+def create_app(orb_storage):
+    global storage
+    storage = orb_storage
     return app
-
-if __name__ == '__main__':
-    # This will only run when directly executing this file
-    logger.info("Starting Orb Service with Flask")
-    app.run(host='0.0.0.0', port=8080, debug=False)
