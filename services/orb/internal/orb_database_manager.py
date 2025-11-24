@@ -1,6 +1,16 @@
 from lunaricorn.utils.db_manager import *
 
 class OrbDatabaseManager(DatabaseManager):
+
+
+    def __init__(self):
+        super().__init__()
+        self._last_cursor_description = None
+
+    def get_last_cursor_description(self):
+        """Get the description of the last cursor used in execute_query"""
+        return self._last_cursor_description
+    
     def installer_impl(self, cur):
         cur.execute('''
             CREATE TABLE IF NOT EXISTS public.orb_meta

@@ -1,12 +1,11 @@
-# services/orb/internal/storage.py
+import json
 from lunaricorn.utils.db_manager import *
 from datetime import datetime
-import json
-import time as time_module
 import logging
 from typing import List, Dict, Any, Optional
 from .orb_database_manager import *
 from .orb_types import *
+
 class StorageError(Exception):
     pass
 
@@ -50,11 +49,22 @@ class DataStorage:
     def good(self) -> bool:
         return self.db_enabled
     
+    def _prepare_data_for_db(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Prepare data for database insertion, converting lists/dicts to JSON strings for jsonb columns"""
+        prepared_data = {}
+        for key, value in data.items():
+            if key == 'flags' and isinstance(value, (list, dict)):
+                prepared_data[key] = json.dumps(value)
+            else:
+                prepared_data[key] = value
+        return prepared_data
+    
     def create_record(self, table_name: str, data: Dict[str, Any]) -> int:
         """Create a new record in the specified table"""
-        # Build INSERT query dynamically
-        columns = list(data.keys())
-        values = list(data.values())
+        # Prepare data for database
+        prepared_data = self._prepare_data_for_db(data)
+        columns = list(prepared_data.keys())
+        values = list(prepared_data.values())
         
         placeholders = ",".join(["%s"] * len(columns))
         columns_str = ",".join(columns)
@@ -79,24 +89,29 @@ class DataStorage:
             SELECT * FROM {table_name}
             WHERE id = %s
         """
-        
+        self.logger.error(f" get_record q {query}")
         result = self.db_manager.execute_query(
             query=query,
             params=(record_id,),
             fetch_one=True
         )
-        
+        self.logger.error(f" get_record result {result}")
         if result:
-            # Convert result to dictionary
-            columns = [desc[0] for desc in self.db_manager.cursor.description]
-            return dict(zip(columns, result))
+            # Get column names from the result description
+            description = self.db_manager.get_last_cursor_description()
+            if description:
+                columns = [desc[0] for desc in description]
+                return dict(zip(columns, result))
         return None
 
     def update_record(self, table_name: str, record_id: int, data: Dict[str, Any]) -> bool:
         """Update a record in the specified table"""
+        # Prepare data for database
+        prepared_data = self._prepare_data_for_db(data)
+        
         # Build UPDATE query dynamically
-        set_clause = ",".join([f"{key} = %s" for key in data.keys()])
-        values = list(data.values()) + [record_id]
+        set_clause = ",".join([f"{key} = %s" for key in prepared_data.keys()])
+        values = list(prepared_data.values()) + [record_id]
         
         query = f"""
             UPDATE {table_name}
@@ -162,9 +177,11 @@ class DataStorage:
         )
         
         # Convert results to list of dictionaries
-        if result and self.db_manager.cursor.description:
-            columns = [desc[0] for desc in self.db_manager.cursor.description]
-            return [dict(zip(columns, row)) for row in result]
+        if result:
+            description = self.db_manager.get_last_cursor_description()
+            if description:
+                columns = [desc[0] for desc in description]
+                return [dict(zip(columns, row)) for row in result]
         
         return []
 
@@ -185,8 +202,10 @@ class DataStorage:
         )
         
         if result:
-            columns = [desc[0] for desc in self.db_manager.cursor.description]
-            return [dict(zip(columns, row)) for row in result]
+            description = self.db_manager.get_last_cursor_description()
+            if description:
+                columns = [desc[0] for desc in description]
+                return [dict(zip(columns, row)) for row in result]
         
         return []
 
@@ -199,9 +218,11 @@ class DataStorage:
             fetch_all=True
         )
         
-        if result and self.db_manager.cursor.description:
-            columns = [desc[0] for desc in self.db_manager.cursor.description]
-            return [dict(zip(columns, row)) for row in result]
+        if result:
+            description = self.db_manager.get_last_cursor_description()
+            if description:
+                columns = [desc[0] for desc in description]
+                return [dict(zip(columns, row)) for row in result]
         
         return []
 
@@ -227,9 +248,9 @@ class DataStorage:
         try:
             # Prepare data for database operation
             data = {
-                'data_type': meta_obj.subtype if hasattr(meta_obj, 'subtype') else '@json',
-                'flags': meta_obj.flags if hasattr(meta_obj, 'flags') else [],
-                'src': meta_obj.handle
+                'data_type': getattr(meta_obj, 'data_type', '@json'),
+                'flags': getattr(meta_obj, 'flags', []),
+                'src': getattr(meta_obj, 'handle', 0)
             }
             
             # Check if this is a new record (id is None, <= 0, or doesn't exist)
