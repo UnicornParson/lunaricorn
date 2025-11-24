@@ -59,6 +59,20 @@ class DataStorage:
                 prepared_data[key] = value
         return prepared_data
     
+    def _execute_query_with_columns(self, query: str, params: tuple = None, columns: List[str] = None) -> List[Dict[str, Any]]:
+        """Execute a query and return results with column names"""
+        result = self.db_manager.execute_query(
+            query=query,
+            params=params,
+            fetch_one=False,
+            fetch_all=True
+        )
+        
+        if result and columns:
+            return [dict(zip(columns, row)) for row in result]
+        
+        return []
+    
     def create_record(self, table_name: str, data: Dict[str, Any]) -> int:
         """Create a new record in the specified table"""
         # Prepare data for database
@@ -83,13 +97,13 @@ class DataStorage:
         
         return result[0] if result else None
 
-    def get_record(self, table_name: str, record_id: int) -> Optional[Dict[str, Any]]:
+    def get_record(self, table_name: str, record_id: int, columns:list = []) -> Optional[Dict[str, Any]]:
         """Get a record by ID from the specified table"""
         query = f"""
             SELECT * FROM {table_name}
             WHERE id = %s
         """
-        self.logger.error(f" get_record q {query}")
+        self.logger.error(f" get_record q {query} r: {record_id}")
         result = self.db_manager.execute_query(
             query=query,
             params=(record_id,),
@@ -97,12 +111,37 @@ class DataStorage:
         )
         self.logger.error(f" get_record result {result}")
         if result:
-            # Get column names from the result description
-            description = self.db_manager.get_last_cursor_description()
-            if description:
-                columns = [desc[0] for desc in description]
+            if not columns:
+                # Get column names directly from table structure
+                columns = self._get_table_columns(table_name)
+                
+            if columns:
+                self.logger.error(f" get_record has columns {columns}")
                 return dict(zip(columns, result))
+            else:
+                self.logger.error(f" get_record no columns {columns}")
         return None
+
+    def _get_table_columns(self, table_name: str) -> List[str]:
+        """Get column names for a table"""
+        query = """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = %s
+            ORDER BY ordinal_position
+        """
+        
+        result = self.db_manager.execute_query(
+            query=query,
+            params=(table_name,),
+            fetch_one=False,
+            fetch_all=True
+        )
+        
+        if result:
+            return [row[0] for row in result]
+        
+        return []
 
     def update_record(self, table_name: str, record_id: int, data: Dict[str, Any]) -> bool:
         """Update a record in the specified table"""
@@ -149,7 +188,7 @@ class DataStorage:
             return False
 
     def find_records(self, table_name: str, conditions: Dict[str, Any] = None, 
-                     limit: int = 0, offset: int = 0) -> List[Dict[str, Any]]:
+                     limit: int = 0, offset: int = 0, columns:list = []) -> List[Dict[str, Any]]:
         """Find records in the specified table with optional conditions"""
         query = f"SELECT * FROM {table_name}"
         params = []
@@ -169,6 +208,10 @@ class DataStorage:
             if offset > 0:
                 query += f" OFFSET {offset}"
         
+        # Get column names for the table
+        if not columns:
+            columns = self._get_table_columns(table_name)
+        
         result = self.db_manager.execute_query(
             query=query,
             params=params,
@@ -177,11 +220,8 @@ class DataStorage:
         )
         
         # Convert results to list of dictionaries
-        if result:
-            description = self.db_manager.get_last_cursor_description()
-            if description:
-                columns = [desc[0] for desc in description]
-                return [dict(zip(columns, row)) for row in result]
+        if result and columns:
+            return [dict(zip(columns, row)) for row in result]
         
         return []
 
@@ -202,15 +242,17 @@ class DataStorage:
         )
         
         if result:
-            description = self.db_manager.get_last_cursor_description()
-            if description:
-                columns = [desc[0] for desc in description]
-                return [dict(zip(columns, row)) for row in result]
+            columns = ['column_name', 'data_type', 'is_nullable', 'column_default']
+            return [dict(zip(columns, row)) for row in result]
         
         return []
 
     def execute_raw_query(self, query: str, params: tuple = None) -> List[Dict[str, Any]]:
         """Execute a raw SQL query and return results"""
+        # For raw queries, we need to determine column names
+        # This is a simplified approach - in practice, you might want to 
+        # use a more sophisticated approach to get column names
+        
         result = self.db_manager.execute_query(
             query=query,
             params=params,
@@ -218,11 +260,12 @@ class DataStorage:
             fetch_all=True
         )
         
+        # Since we don't know column names for raw queries, we return as-is
+        # or you could implement a more complex column detection logic
         if result:
-            description = self.db_manager.get_last_cursor_description()
-            if description:
-                columns = [desc[0] for desc in description]
-                return [dict(zip(columns, row)) for row in result]
+            # For raw queries, we can't reliably determine column names
+            # This would require parsing the query or using a different approach
+            pass
         
         return []
 

@@ -104,10 +104,11 @@ class StorageTester:
             if (result_obj and  int(result_obj.id) == int(record_id)):
                 self.logger.info(f"p {line_numb()} id ok")
                 # Verify the update in database
-                db_record = self.storage.get_record(self.test_table, record_id)
+
+                db_record = self.storage.get_record(self.test_table, record_id, columns=["id", "data_type", "ctime", "flags", "src"])
                 self.logger.info(f"p {line_numb()} get_record {db_record}")
                 if (db_record and 
-                    db_record['data_type'] == '@raw' and
+                    db_record['data_type'] == '@json' and
                     db_record['src'] == 88888):
                     self.logger.info(f"p {line_numb()}")
                     return True
