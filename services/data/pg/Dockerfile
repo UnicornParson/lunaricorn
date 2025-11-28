@@ -1,5 +1,5 @@
 
-FROM postgres:latest
+FROM postgres:18.1
 ENV DEBIAN_FRONTEND=noninteractive
 RUN echo "listen_addresses = '*'" >> /usr/share/postgresql/postgresql.conf.sample
 
@@ -14,5 +14,5 @@ RUN echo "pg_stat_statements.track = all" >> /usr/share/postgresql/postgresql.co
 COPY init-db.sh /docker-entrypoint-initdb.d/
 RUN chmod +x /docker-entrypoint-initdb.d/init-db.sh
 EXPOSE 5432
-VOLUME /var/lib/postgresql/data
+VOLUME /var/lib/postgresql
 

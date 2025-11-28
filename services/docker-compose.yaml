@@ -68,7 +68,7 @@ services:
       - POSTGRES_DB=postgres
       - LUNARICORN_PASSWORD=${LUNARICORN_PASSWORD}
     volumes:
-      - ${LUNARICORN_HOME}/pg_data:/var/lib/postgresql/data
+      - ${LUNARICORN_HOME}/pg_data:/var/lib/postgresql
     networks:
       - lunaricorn-network
     restart: unless-stopped
