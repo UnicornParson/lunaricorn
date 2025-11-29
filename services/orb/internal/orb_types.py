@@ -15,7 +15,9 @@ def get_required_env_vars(keys):
 class OrbConfig:
     CLUSTER_LEADER_URL: str
     ORB_API_PORT: int
-    SIGNALING_PUSH_PORT: int
+    SIGNALING_REQ: int
+    SIGNALING_PUB: int
+    SIGNALING_API: int
     db_type: str
     db_host: str
     db_port: int
@@ -26,11 +28,13 @@ class OrbConfig:
     
     @classmethod
     def from_env(cls) -> 'OrbConfig':
-        required_keys = ['CLUSTER_LEADER_URL', 'ORB_API_PORT', 'SIGNALING_PUSH_PORT',
+        required_keys = ['CLUSTER_LEADER_URL', 'ORB_API_PORT', 'SIGNALING_REQ', 'SIGNALING_PUB', 'SIGNALING_API',
                         "db_type", "db_host", "db_port", "db_user", "db_password", "db_name", "db_schema"]
         config_dict = get_required_env_vars(required_keys)
         config_dict['ORB_API_PORT'] = int(config_dict['ORB_API_PORT'])
-        config_dict['SIGNALING_PUSH_PORT'] = int(config_dict['SIGNALING_PUSH_PORT'])
+        config_dict['SIGNALING_REQ'] = int(config_dict['SIGNALING_REQ'])
+        config_dict['SIGNALING_PUB'] = int(config_dict['SIGNALING_PUB'])
+        config_dict['SIGNALING_API'] = int(config_dict['SIGNALING_API'])
         config_dict['db_port'] = int(config_dict['db_port'])
         
         return cls(**config_dict)

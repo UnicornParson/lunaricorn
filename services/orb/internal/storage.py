@@ -57,6 +57,9 @@ class DataStorage:
         for key, value in data.items():
             if key == 'flags' and isinstance(value, (list, dict)):
                 prepared_data[key] = json.dumps(value)
+            elif key == 'u' and isinstance(value, uuid.UUID):
+                # Convert UUID to string for database storage
+                prepared_data[key] = str(value)
             else:
                 prepared_data[key] = value
         return prepared_data
@@ -78,7 +81,10 @@ class DataStorage:
     def create_record(self, table_name: str, data: Dict[str, Any]) -> int:
         """Create a new record in the specified table"""
         # Prepare data for database
+
+        
         prepared_data = self._prepare_data_for_db(data)
+        self.logger.error(f"create_record entry  \n data: {data} \n prepared_data: {prepared_data}")
         columns = list(prepared_data.keys())
         values = list(prepared_data.values())
         
@@ -90,6 +96,7 @@ class DataStorage:
             VALUES ({placeholders})
             RETURNING id;
         """
+        self.logger.error(f"create_record: q={query} params={values}")
         
         result = self.db_manager.execute_query(
             query=query,
@@ -101,8 +108,6 @@ class DataStorage:
 
     def get_record(self, table_name: str, record_id: int, columns:list = []) -> Optional[Dict[str, Any]]:
         """Get a record by ID from the specified table"""
-        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
-            raise ValueError("Invalid table name")
         if columns is None:
             columns = []
         

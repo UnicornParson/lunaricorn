@@ -78,12 +78,15 @@ class StorageTester:
         """Test pushing existing OrbMetaObject (with ID)"""
         try:
             # First create a record
+            u = uuid.uuid7()
             test_data = {
                 'data_type': '@json',
                 'ctime': datetime.utcnow(),
                 'flags': json.dumps(['before_push_update']),  # Convert to JSON string
-                'src': 77777
+                'src': 77777,
+                'u':u
             }
+            
             self.logger.info(f"p {line_numb()}")
 
             record_id = self.storage.create_record(self.test_table, test_data)
@@ -95,6 +98,7 @@ class StorageTester:
             meta_obj = OrbMetaObject(
                 id=record_id,
                 flags=['after_push_update'],
+
                 handle=88888  # Change handle
             )
             self.logger.info(f"p {line_numb()}")
@@ -105,7 +109,7 @@ class StorageTester:
                 self.logger.info(f"p {line_numb()} id ok")
                 # Verify the update in database
 
-                db_record = self.storage.get_record(self.test_table, record_id, columns=["id", "data_type", "ctime", "flags", "src"])
+                db_record = self.storage.get_record(self.test_table, record_id, columns=["id", "u", "data_type", "ctime", "flags", "src"])
                 self.logger.info(f"p {line_numb()} get_record {db_record}")
                 if (db_record and 
                     db_record['data_type'] == '@json' and

@@ -14,7 +14,7 @@ class OrbDatabaseManager(DatabaseManager):
             CREATE TABLE IF NOT EXISTS public.orb_meta
             (
                 id bigserial NOT NULL,
-                u UUID DEFAULT uuid_generate_v7(),
+                u UUID DEFAULT uuidv7(),
                 data_type character varying(64) NOT NULL DEFAULT '@json',
                 ctime timestamp without time zone NOT NULL,
                 flags jsonb NOT NULL DEFAULT '[]'::JSONB,
