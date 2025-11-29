@@ -30,26 +30,15 @@ class DatabaseManager:
     Singleton database manager for global PostgreSQL connection management.
     Provides a single connection that can be shared across the application.
     """
-    _instance = None
     _lock = threading.Lock()
     db_manager = None
 
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super(DatabaseManager, cls).__new__(cls)
-                    cls._instance._initialized = False
-                    cls.db_manager = cls._instance
-        return cls._instance
+
 
     def __init__(self):
-        if self._initialized:
-            return
-
         self.connection = None
         self.conn_params = None
-        self._initialized = True
+        self._initialized = False
         logger.info("DatabaseManager singleton created")
 
     def initialize(self, host: str, port: int, user: str, password: str, dbname: str,
@@ -74,6 +63,7 @@ class DatabaseManager:
 
         self._create_connection()
         logger.info("Database connection initialized")
+        self._initialized = True
 
     def _create_pool(self):
         """Create a new connection pool."""
@@ -222,6 +212,7 @@ class DatabaseManager:
 
         try:
             with self.connection.cursor() as cur:
+                logger.info(f"@@ install_db called on {self.__class__.__name__}")
                 self.installer_impl(cur)
             self.connection.commit()
         except Exception as e:

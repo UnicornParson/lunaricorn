@@ -199,8 +199,8 @@ if __name__ == "__main__":
     # Register shutdown handler
     def shutdown_handler():
         logger.info("Shutting down Leader API...")
-        if DatabaseManager.db_manager:
-            DatabaseManager.db_manager.shutdown()
+        if leader:
+            leader.shutdown()
         logger.info("Leader API shutdown complete")
     
     atexit.register(shutdown_handler)
