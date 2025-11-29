@@ -91,6 +91,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - CLUSTER_LEADER_URL=http://leader:8000/
+      - SIGNALING_HOST=signaling
       - ORB_API_PORT=8080
       - SIGNALING_REQ=5555
       - SIGNALING_PUB=5556

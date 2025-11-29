@@ -15,6 +15,7 @@ def get_required_env_vars(keys):
 class OrbConfig:
     CLUSTER_LEADER_URL: str
     ORB_API_PORT: int
+    SIGNALING_HOST: str
     SIGNALING_REQ: int
     SIGNALING_PUB: int
     SIGNALING_API: int
@@ -25,19 +26,23 @@ class OrbConfig:
     db_password: str
     db_name: str
     db_schema: str
-    
+
     @classmethod
     def from_env(cls) -> 'OrbConfig':
-        required_keys = ['CLUSTER_LEADER_URL', 'ORB_API_PORT', 'SIGNALING_REQ', 'SIGNALING_PUB', 'SIGNALING_API',
+        required_keys = ['CLUSTER_LEADER_URL', 'ORB_API_PORT', 'SIGNALING_REQ', 'SIGNALING_PUB', 'SIGNALING_API', 'SIGNALING_HOST',
                         "db_type", "db_host", "db_port", "db_user", "db_password", "db_name", "db_schema"]
         config_dict = get_required_env_vars(required_keys)
         config_dict['ORB_API_PORT'] = int(config_dict['ORB_API_PORT'])
+        config_dict['SIGNALING_HOST'] = str(config_dict['SIGNALING_HOST'])
         config_dict['SIGNALING_REQ'] = int(config_dict['SIGNALING_REQ'])
         config_dict['SIGNALING_PUB'] = int(config_dict['SIGNALING_PUB'])
         config_dict['SIGNALING_API'] = int(config_dict['SIGNALING_API'])
         config_dict['db_port'] = int(config_dict['db_port'])
-        
+
         return cls(**config_dict)
+
+    def valid(self) -> bool:
+        return self.db_type and self.db_host and self.db_port and self.db_user and self.db_password and self.db_name and self.SIGNALING_HOST and self.SIGNALING_REQ and self.SIGNALING_PUB and self.SIGNALING_API
 
     def create_db_config(self) -> DbConfig:
         db_config = DbConfig()

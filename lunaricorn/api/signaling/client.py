@@ -17,6 +17,8 @@ class SignalingClientConfig:
     pub_port: int
     api_port: int
 
+    def __str__(self) -> str:
+        return f"{self.host}(rep:{self.rep_port}, pub:{self.pub_port}, api:{self.api_port})"
 @dataclass
 class ClientEventData:
     eid: int

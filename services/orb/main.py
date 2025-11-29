@@ -31,7 +31,7 @@ if __name__ == "__main__":
 
         logger.info("Starting api server")
         db_config = config.create_db_config()
-        storage = internal.DataStorage(db_config)
+        storage = internal.DataStorage(config)
         if not storage.good():
             logger.error("cannot make storage")
             sys.exit(1)
