@@ -1,4 +1,4 @@
-FROM python:3.13.5
+FROM python:3.14.0-trixie
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

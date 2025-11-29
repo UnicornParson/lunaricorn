@@ -212,55 +212,6 @@ class DatabaseManager:
             logger.error(f"Database connection validation failed: {e}")
             return False
 
-    # TODO: move back to leader code
-    def ensure_tables_exist(self):
-        """Ensure all required tables exist in the database."""
-        if not self.validate_connection():
-            raise Exception("Cannot ensure tables - no valid database connection")
-
-        try:
-            with self.connection.cursor() as cur:
-                # Create last_seen table
-                cur.execute('''
-                    CREATE TABLE IF NOT EXISTS last_seen (
-                        i SERIAL PRIMARY KEY,
-                        name VARCHAR(128) NOT NULL,
-                        type VARCHAR(32) NOT NULL,
-                        key VARCHAR(128) NOT NULL,
-                        last_update BIGINT NOT NULL DEFAULT 0
-                    )
-                ''')
-
-                # Create indexes for last_seen table
-                cur.execute('''
-                    CREATE UNIQUE INDEX IF NOT EXISTS idx_last_seen_key ON last_seen(key)
-                ''')
-                cur.execute('''
-                    CREATE INDEX IF NOT EXISTS idx_last_seen_last_update ON last_seen(last_update)
-                ''')
-                cur.execute('''
-                    CREATE INDEX IF NOT EXISTS idx_last_seen_type_last_update ON last_seen(type, last_update)
-                ''')
-
-                # Create cluster_state table
-                cur.execute('''
-                    CREATE TABLE IF NOT EXISTS cluster_state
-                    (
-                        key character varying(64) NOT NULL,
-                        i bigint DEFAULT NULL,
-                        j jsonb DEFAULT NULL,
-                        PRIMARY KEY (key)
-                    );
-                ''')
-                cur.execute('''
-                    ALTER TABLE IF EXISTS cluster_state OWNER to lunaricorn;
-                ''')
-
-                logger.info("Ensured all required tables and indexes exist")
-            self.connection.commit()
-        except Exception as e:
-            logger.error(f"Error ensuring tables exist: {e}")
-            raise
 
     def installer_impl(self, cur):
         raise NotImplementedError("base class call. should be overridden")

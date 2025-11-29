@@ -1,10 +1,11 @@
-FROM python:3.13.5
+FROM python:3.14.0-trixie
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV DEBIAN_FRONTEND=noninteractive
 USER root
+RUN apt update && apt upgrade -y
 RUN apt update && apt install -y \
     gcc \
     g++ \

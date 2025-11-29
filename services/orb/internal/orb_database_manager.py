@@ -1,8 +1,6 @@
 from lunaricorn.utils.db_manager import *
 
 class OrbDatabaseManager(DatabaseManager):
-
-
     def __init__(self):
         super().__init__()
         self._last_cursor_description = None
@@ -16,6 +14,7 @@ class OrbDatabaseManager(DatabaseManager):
             CREATE TABLE IF NOT EXISTS public.orb_meta
             (
                 id bigserial NOT NULL,
+                u UUID DEFAULT uuid_generate_v7(),
                 data_type character varying(64) NOT NULL DEFAULT '@json',
                 ctime timestamp without time zone NOT NULL,
                 flags jsonb NOT NULL DEFAULT '[]'::JSONB,
@@ -29,6 +28,13 @@ class OrbDatabaseManager(DatabaseManager):
             CREATE INDEX IF NOT EXISTS idata_type
                 ON public.orb_meta USING btree
                 (data_type)
+                WITH (deduplicate_items=True)
+            ;
+            ''')
+        cur.execute('''
+            CREATE INDEX IF NOT EXISTS iu
+                ON public.orb_meta USING btree
+                (u)
                 WITH (deduplicate_items=True)
             ;
             ''')

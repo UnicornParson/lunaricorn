@@ -1,4 +1,6 @@
 import json
+import re
+import uuid
 from lunaricorn.utils.db_manager import *
 from datetime import datetime
 import logging
@@ -99,6 +101,17 @@ class DataStorage:
 
     def get_record(self, table_name: str, record_id: int, columns:list = []) -> Optional[Dict[str, Any]]:
         """Get a record by ID from the specified table"""
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
+            raise ValueError("Invalid table name")
+        if columns is None:
+            columns = []
+        
+            if not columns:
+                columns_str = "*"
+            else:
+                columns_str = ", ".join([f'"{col}"' for col in columns])
+
+
         query = f"""
             SELECT * FROM {table_name}
             WHERE id = %s
@@ -293,7 +306,8 @@ class DataStorage:
             data = {
                 'data_type': getattr(meta_obj, 'data_type', '@json'),
                 'flags': getattr(meta_obj, 'flags', []),
-                'src': getattr(meta_obj, 'handle', 0)
+                'src': getattr(meta_obj, 'handle', 0),
+                'u': getattr(meta_obj, 'u', uuid.uuid7())
             }
             
             # Check if this is a new record (id is None, <= 0, or doesn't exist)

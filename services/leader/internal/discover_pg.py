@@ -4,10 +4,12 @@ from psycopg2.pool import SimpleConnectionPool
 import time
 from typing import List, Dict, Optional
 import logging
-
+from .leader_databasemanager import *
 logger = logging.getLogger(__name__)
 
 from lunaricorn.utils.db_manager import DatabaseManager
+
+db_manager = None
 
 class DiscoverManagerPG:
     """
@@ -19,6 +21,7 @@ class DiscoverManagerPG:
         Initialize the manager.
         Uses the global database manager for connection management.
         """
+        global db_manager
         # Store connection parameters for reference
         self.host = host
         self.port = port
@@ -27,9 +30,10 @@ class DiscoverManagerPG:
         self.dbname = dbname
         self.minconn = minconn
         self.maxconn = maxconn
-        if not DatabaseManager.db_manager:
-            DatabaseManager.db_manager = DatabaseManager()
-        DatabaseManager.db_manager.initialize(self.host, self.port, self.user, self.password, self.dbname, self.minconn, self.maxconn)
+        if not db_manager:
+            db_manager = LeaderDatabaseManager()
+        db_manager.initialize(self.host, self.port, self.user, self.password, self.dbname, self.minconn, self.maxconn)
+        db_manager.install_db()
         logger.info("DiscoverManagerPG initialized with global database manager")
 
     def _create_pool(self):
@@ -45,11 +49,13 @@ class DiscoverManagerPG:
 
     def _get_conn(self):
         """Get a connection from the global database manager."""
-        return DatabaseManager.db_manager.get_connection()
+        global db_manager
+        return db_manager.get_connection()
 
     def _put_conn(self, conn):
         """Return a connection to the global database manager."""
-        DatabaseManager.db_manager.return_connection(conn)
+        global db_manager
+        db_manager.return_connection(conn)
 
     def _reset_pool(self):
         """Reset the connection pool when it gets exhausted."""
@@ -88,17 +94,17 @@ class DiscoverManagerPG:
 
     def _is_pool_valid(self):
         """Check if the global database manager is valid."""
-        return DatabaseManager.db_manager.validate_connection()
+        global db_manager
+        return db_manager.validate_connection()
 
     def _validate_connection(self):
         """Validate that a connection can be acquired from the global database manager."""
-        return DatabaseManager.db_manager.validate_connection()
+        global db_manager
+        return db_manager.validate_connection()
 
-    def _ensure_table_exists(self):
-        """Ensure all required tables exist using the global database manager."""
-        DatabaseManager.db_manager.ensure_tables_exist()
 
     def update(self, node_name: str, node_type: str, instance_key: str, host: Optional[str] = None, port: Optional[int] = 0) -> bool:
+        global db_manager
         """
         Update node information in the database.
         If record exists with same instance_key, update fields and timestamp.
@@ -112,7 +118,7 @@ class DiscoverManagerPG:
         
         try:
             # Check if record exists
-            existing_record = DatabaseManager.db_manager.execute_query(
+            existing_record = db_manager.execute_query(
                 "SELECT i FROM last_seen WHERE key = %s",
                 (instance_key,),
                 fetch_one=True
@@ -120,7 +126,7 @@ class DiscoverManagerPG:
             
             if existing_record:
                 # Update existing record
-                DatabaseManager.db_manager.execute_query('''
+                db_manager.execute_query('''
                     UPDATE last_seen 
                     SET name = %s, type = %s, last_update = %s, key = %s
                     WHERE key = %s
@@ -128,7 +134,7 @@ class DiscoverManagerPG:
                 logger.debug(f"Updated existing node: {node_name} ({instance_key})")
             else:
                 # Insert new record
-                DatabaseManager.db_manager.execute_query('''
+                db_manager.execute_query('''
                     INSERT INTO last_seen (name, type, key, last_update)
                     VALUES (%s, %s, %s, %s)
                 ''', (node_name, node_type, instance_key, current_timestamp))
@@ -143,6 +149,7 @@ class DiscoverManagerPG:
         """
         List all records where last_update is not older than offset seconds.
         """
+        global db_manager
         if not self._validate_connection():
             logger.error("Cannot list nodes - no valid database connection")
             return []
@@ -151,7 +158,7 @@ class DiscoverManagerPG:
         cutoff_timestamp = current_timestamp - offset
         
         try:
-            records = DatabaseManager.db_manager.execute_query('''
+            records = db_manager.execute_query('''
                 SELECT i, name, type, key, last_update
                 FROM last_seen
                 WHERE last_update >= %s
@@ -179,12 +186,13 @@ class DiscoverManagerPG:
         """
         Get a specific node by instance key.
         """
+        global db_manager
         if not self._validate_connection():
             logger.error("Cannot get node by key - no valid database connection")
             return None
         
         try:
-            record = DatabaseManager.db_manager.execute_query('''
+            record = db_manager.execute_query('''
                 SELECT i, name, type, key, last_update
                 FROM last_seen
                 WHERE key = %s
@@ -207,6 +215,7 @@ class DiscoverManagerPG:
         """
         Delete records older than specified age.
         """
+        global db_manager
         if not self._validate_connection():
             logger.error("Cannot delete old records - no valid database connection")
             return 0
@@ -215,7 +224,7 @@ class DiscoverManagerPG:
         cutoff_timestamp = current_timestamp - max_age_seconds
         
         try:
-            deleted_count = DatabaseManager.db_manager.execute_query('''
+            deleted_count = db_manager.execute_query('''
                 DELETE FROM last_seen
                 WHERE last_update < %s
             ''', (cutoff_timestamp,))
@@ -230,20 +239,21 @@ class DiscoverManagerPG:
         """
         Get database statistics.
         """
+        global db_manager
         if not self._validate_connection():
             logger.error("Cannot get statistics - no valid database connection")
             return {}
         
         try:
-            total_records = DatabaseManager.db_manager.execute_query("SELECT COUNT(*) FROM last_seen", fetch_one=True)[0]
+            total_records = db_manager.execute_query("SELECT COUNT(*) FROM last_seen", fetch_one=True)[0]
             
-            records_by_type_result = DatabaseManager.db_manager.execute_query(
+            records_by_type_result = db_manager.execute_query(
                 "SELECT type, COUNT(*) FROM last_seen GROUP BY type", 
                 fetch_all=True
             )
             records_by_type = dict(records_by_type_result) if records_by_type_result else {}
             
-            time_range = DatabaseManager.db_manager.execute_query(
+            time_range = db_manager.execute_query(
                 "SELECT MIN(last_update), MAX(last_update) FROM last_seen", 
                 fetch_one=True
             )
@@ -265,12 +275,13 @@ class DiscoverManagerPG:
         Get OBJECT_ID value from cluster_state table.
         Returns the numeric value stored in field 'i' for key 'OBJECT_ID'.
         """
+        global db_manager
         if not self._validate_connection():
             logger.error("Cannot get OBJECT_ID - no valid database connection")
             return 0
         
         try:
-            result = DatabaseManager.db_manager.execute_query(
+            result = db_manager.execute_query(
                 "SELECT i FROM cluster_state WHERE key = %s", 
                 ('OBJECT_ID',), 
                 fetch_one=True
@@ -285,12 +296,13 @@ class DiscoverManagerPG:
         Update OBJECT_ID value in cluster_state table.
         Stores the numeric value in field 'i' for key 'OBJECT_ID'.
         """
+        global db_manager
         if not self._validate_connection():
             logger.error("Cannot update OBJECT_ID - no valid database connection")
             return False
         
         try:
-            DatabaseManager.db_manager.execute_query('''
+            db_manager.execute_query('''
                 INSERT INTO cluster_state (key, i) 
                 VALUES (%s, %s) 
                 ON CONFLICT (key) 
@@ -308,12 +320,13 @@ class DiscoverManagerPG:
         Get MESSAGE_ID value from cluster_state table.
         Returns the numeric value stored in field 'i' for key 'MESSAGE_ID'.
         """
+        global db_manager
         if not self._validate_connection():
             logger.error("Cannot get MESSAGE_ID - no valid database connection")
             return 0
         
         try:
-            result = DatabaseManager.db_manager.execute_query(
+            result = db_manager.execute_query(
                 "SELECT i FROM cluster_state WHERE key = %s", 
                 ('MESSAGE_ID',), 
                 fetch_one=True
@@ -328,12 +341,13 @@ class DiscoverManagerPG:
         Update MESSAGE_ID value in cluster_state table.
         Stores the numeric value in field 'i' for key 'MESSAGE_ID'.
         """
+        global db_manager
         if not self._validate_connection():
             logger.error("Cannot update MESSAGE_ID - no valid database connection")
             return False
         
         try:
-            DatabaseManager.db_manager.execute_query('''
+            db_manager.execute_query('''
                 INSERT INTO cluster_state (key, i) 
                 VALUES (%s, %s) 
                 ON CONFLICT (key) 

@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
-
+import uuid
 class BaseObjectType(Enum):
     Base = "@base"
     Meta = "@meta"
@@ -9,11 +9,12 @@ class BaseObjectType(Enum):
 @dataclass
 class LunaObject:
     """Base class for all Luna objects with serialization capabilities"""
-    
+    u: uuid.uuid7= field(default=uuid.uuid7())
     type: BaseObjectType = field(default=BaseObjectType.Base)
     chain_left: Optional[Any] = field(default=None)
     chain_right: Optional[Any] = field(default=None)
     parent: Optional[Any] = field(default=None)
+    
 
     def toDict(self) -> dict:
         """Convert object to dictionary representation"""
