@@ -4,6 +4,7 @@ import os
 import atexit
 import sys
 import logging
+import pprint
 from .utils  import *
 from datetime import datetime, timezone
 from .storage import *
@@ -16,7 +17,7 @@ class StorageTester:
     def __init__(self, storage: DataStorage):
         self.storage = storage
         self.logger = logging.getLogger(__name__)
-        self.test_table = "public.orb_meta"
+        self.meta_table = "public.orb_meta"
         self.created_ids = []  # Track created records for cleanup
         
     def run_all_tests(self) -> bool:
@@ -177,7 +178,7 @@ class StorageTester:
             
             self.logger.info(f"p {line_numb()}")
 
-            record_id = self.storage._create_record(self.test_table, test_data, id_field="id")
+            record_id = self.storage._create_record(self.meta_table, test_data, id_field="id")
 
             self.logger.info(f"p {line_numb()}")
             self.created_ids.append(record_id)
@@ -195,22 +196,23 @@ class StorageTester:
             # Push the object (should update)
             result_obj = self.storage.push_meta(meta_obj)
             self.logger.info(f"p {line_numb()}")
-            if (result_obj and  int(result_obj.id) == int(record_id)):
-                self.logger.info(f"p {line_numb()} id ok")
-                # Verify the update in database
+            assert(result_obj)
+            assert(int(result_obj.id) == int(record_id))
 
-                db_record = self.storage._get_record(self.test_table, record_id, columns=["id", "u", "data_type", "ctime", "flags", "src"])
-                self.logger.info(f"p {line_numb()} get_record {db_record}")
-                if (db_record and 
-                    db_record['data_type'] == '@json' and
-                    db_record['src'] == 88888):
-                    self.logger.info(f"p {line_numb()}")
-                    return True
-            self.logger.info(f"p {line_numb()}:  res: {result_obj}, record_id:{record_id}")
-            return False
+            self.logger.info(f"p {line_numb()} id ok")
+            # Verify the update in database
+            meta_obj = self.storage.fetch_meta(record_id)
+            self.logger.info(f"p {line_numb()} get_record \meta_obj: {meta_obj}")
+            assert(meta_obj)
+            assert(meta_obj.type == '@OrbMeta')
+            assert(meta_obj.id == record_id)
+            assert(meta_obj.u == u)
+            self.logger.info(f"p {line_numb()}")
+            return True
+
         except Exception as e:
             self.logger.error(f"test_push_meta_existing failed: {e}")
             self.logger.info(f"p {line_numb()}")
             traceback.print_exc()
-            return False
+            raise
 

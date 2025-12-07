@@ -7,7 +7,6 @@ RUN pip install --no-cache-dir -r /opt/lunaricorn/orb/app/requirements.txt
 # Copy application code to the specified directory
 COPY . /opt/lunaricorn/orb/app/
 ADD tmp/lunaricorn.tgz /opt/lunaricorn/orb/app
-RUN ls -la /opt/lunaricorn/orb/app/lunaricorn
 RUN pip install --no-cache-dir -r /opt/lunaricorn/orb/app/lunaricorn/requirements.txt
 
 # Set working directory to the application directory

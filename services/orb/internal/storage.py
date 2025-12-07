@@ -82,7 +82,7 @@ class DataStorage:
         return prepared_data
 
     def _execute_query_with_columns(self, query: str, params: tuple = None, columns: List[str] = None) -> List[Dict[str, Any]]:
-        self.logger.debug(f"@@ Execute a query and return results with column names \n q: \n{query}\n params: \n{params}\n columns: \n{columns}")
+        self.logger.info(f"@@ Execute a query and return results with column names \n q: \n{query}\n params: \n{params}\n columns: \n{columns}")
         result = self.db_manager.execute_query(
             query=query,
             params=params,
@@ -98,7 +98,7 @@ class DataStorage:
     def _create_record(self, table_name: str, data: Dict[str, Any], id_field="id") -> int:
         """Create a new record in the specified table"""
         prepared_data = self._prepare_data_for_db(data)
-        self.logger.debug(f"@@ _create_record entry  \n data: {data} \n prepared_data: {prepared_data}")
+        self.logger.info(f"@@ _create_record entry  \n data: {data} \n prepared_data: {prepared_data}")
         columns = list(prepared_data.keys())
         values = list(prepared_data.values())
 
@@ -143,23 +143,23 @@ class DataStorage:
             SELECT {columns_str} FROM {table_name}
             WHERE {id_field} = %s
         """
-        self.logger.debug(f"@@ _get_record q {query} r: {record_id}")
+        self.logger.info(f"@@ _get_record q {query} r: {record_id}")
         result = self.db_manager.execute_query(
             query=query,
             params=(record_id,),
             fetch_one=True
         )
-        self.logger.debug(f"@@ _get_record result {result}")
+        self.logger.info(f"@@ _get_record result {result}")
         if result:
             if not columns:
                 # Get column names directly from table structure
                 columns = self._get_table_columns(table_name)
 
             if columns:
-                self.logger.debug(f"@@ _get_record has columns {columns}")
+                self.logger.info(f"@@ _get_record has columns {columns}")
                 return dict(zip(columns, result))
             else:
-                self.logger.debug(f"@@ _get_record no columns {columns}")
+                self.logger.info(f"@@ _get_record no columns {columns}")
         return None
 
     def _get_table_columns(self, table_name: str) -> List[str]:
@@ -186,7 +186,7 @@ class DataStorage:
     def _update_record(self, table_name: str, record_id, data: Dict[str, Any], id_field="id") -> bool:
         """Update a record in the specified table"""
         prepared_data = self._prepare_data_for_db(data)
-        self.logger.debug(f"@@ _update_record entry  \n data: {data} \n prepared_data: {prepared_data}")
+        self.logger.info(f"@@ _update_record entry  \n data: {data} \n prepared_data: {prepared_data}")
         columns = list(prepared_data.keys())
         set_clause = ",".join([f"{key} = %s" for key in columns])
         values = list(prepared_data.values()) + [str(record_id)]
@@ -227,44 +227,6 @@ class DataStorage:
             self.logger.error(f"Failed to delete record: {e}")
             return False
 
-    def _find_records(self, table_name: str, conditions: Dict[str, Any] = None,
-                     limit: int = 0, offset: int = 0, columns:list = []) -> List[Dict[str, Any]]:
-        """Find records in the specified table with optional conditions"""
-        query = f"SELECT * FROM {table_name}"
-        params = []
-
-        if conditions:
-            where_conditions = []
-            for key, value in conditions.items():
-                where_conditions.append(f"{key} = %s")
-                params.append(value)
-
-            query += " WHERE " + " AND ".join(where_conditions)
-
-        query += " ORDER BY id DESC"
-
-        if limit > 0:
-            query += f" LIMIT {limit}"
-            if offset > 0:
-                query += f" OFFSET {offset}"
-
-        # Get column names for the table
-        if not columns:
-            columns = self._get_table_columns(table_name)
-
-        result = self.db_manager.execute_query(
-            query=query,
-            params=params,
-            fetch_one=False,
-            fetch_all=True
-        )
-
-        # Convert results to list of dictionaries
-        if result and columns:
-            return [dict(zip(columns, row)) for row in result]
-
-        return []
-
     def _get_table_info(self, table_name: str) -> Dict[str, Any]:
         """Get information about a table structure"""
         query = """
@@ -284,28 +246,6 @@ class DataStorage:
         if result:
             columns = ['column_name', 'data_type', 'is_nullable', 'column_default']
             return [dict(zip(columns, row)) for row in result]
-
-        return []
-
-    def _execute_raw_query(self, query: str, params: tuple = None) -> List[Dict[str, Any]]:
-        """Execute a raw SQL query and return results"""
-        # For raw queries, we need to determine column names
-        # This is a simplified approach - in practice, you might want to
-        # use a more sophisticated approach to get column names
-
-        result = self.db_manager.execute_query(
-            query=query,
-            params=params,
-            fetch_one=False,
-            fetch_all=True
-        )
-
-        # Since we don't know column names for raw queries, we return as-is
-        # or you could implement a more complex column detection logic
-        if result:
-            # For raw queries, we can't reliably determine column names
-            # This would require parsing the query or using a different approach
-            pass
 
         return []
 
@@ -346,7 +286,7 @@ class DataStorage:
                 new_id = self._create_record('public.orb_data', prepared_data, id_field="u")
                 data_obj.u = new_id
                 self.notify_signaling(lsig.SignalingEventType.FileOp_new, data_obj.u, data_obj.u)
-                self.logger.debug(f"Created new orb_data record with UUID: {data_obj.u}")
+                self.logger.info(f"Created new orb_data record with UUID: {data_obj.u}")
 
             else:
                 # Update existing record
@@ -355,7 +295,7 @@ class DataStorage:
                 if not success:
                     raise StorageError(f"Failed to update orb_data record with ID: {data_obj.u}")
                 self.notify_signaling(lsig.SignalingEventType.FileOp_update, data_obj.u, data_obj.u)
-                self.logger.debug(f"Successfully updated orb_data record with UUID: {data_obj.u}")
+                self.logger.info(f"Successfully updated orb_data record with UUID: {data_obj.u}")
 
             return data_obj
 
@@ -410,7 +350,7 @@ class DataStorage:
                 # Update the object with the new ID
                 meta_obj.id = new_id
                 self.notify_signaling(lsig.SignalingEventType.FileOp_new, meta_obj.id, data['u'])
-                self.logger.debug(f"Created new orb_meta record with ID: {new_id}")
+                self.logger.info(f"Created new orb_meta record with ID: {new_id}")
 
             else:
                 # Update existing record
@@ -422,8 +362,7 @@ class DataStorage:
                     raise StorageError(f"Failed to update orb_meta record with ID: {meta_obj.id}")
 
                 self.notify_signaling(lsig.SignalingEventType.FileOp_update, meta_obj.id, data['u'])
-                self.logger.debug(f"Successfully updated orb_meta record with ID: {meta_obj.id}")
-
+                self.logger.info(f"Successfully updated orb_meta record with ID: {meta_obj.id}")
             return meta_obj
 
         except StorageError:
@@ -432,3 +371,13 @@ class DataStorage:
         except Exception as e:
             self.logger.error(f"Unexpected error during push_meta operation: {e}")
             raise StorageError(f"Failed to push meta object: {e}")
+        
+    def fetch_meta(self, id:int):
+        if not id:
+            raise ValueError("Invalid or missing 'id'")
+        db_record = self._get_record('public.orb_meta', id, columns=["id", "u", "data_type", "ctime", "flags", "src"])
+        if not db_record:
+            # not found
+            return None
+        meta_obj = OrbMetaObject.from_record(db_record)
+        return meta_obj
