@@ -95,10 +95,10 @@ class DataStorage:
 
         return []
 
-    def create_record(self, table_name: str, data: Dict[str, Any], id_field="id") -> int:
+    def _create_record(self, table_name: str, data: Dict[str, Any], id_field="id") -> int:
         """Create a new record in the specified table"""
         prepared_data = self._prepare_data_for_db(data)
-        self.logger.debug(f"@@ create_record entry  \n data: {data} \n prepared_data: {prepared_data}")
+        self.logger.debug(f"@@ _create_record entry  \n data: {data} \n prepared_data: {prepared_data}")
         columns = list(prepared_data.keys())
         values = list(prepared_data.values())
 
@@ -110,7 +110,7 @@ class DataStorage:
             VALUES ({placeholders})
             RETURNING {id_field};
         """
-        self.logger.info(f"@@ create_record: q={query} params={values}")
+        self.logger.info(f"@@ _create_record: q={query} params={values}")
 
         result = self.db_manager.execute_query(
             query=query,
@@ -127,7 +127,7 @@ class DataStorage:
                                     tags=["orb"]
                                     )
 
-    def get_record(self, table_name: str, record_id: int, columns:list = [], id_field="id") -> Optional[Dict[str, Any]]:
+    def _get_record(self, table_name: str, record_id: int, columns:list = [], id_field="id") -> Optional[Dict[str, Any]]:
         """Get a record by ID from the specified table"""
         columns_str = "*"
         if columns is None:
@@ -143,23 +143,23 @@ class DataStorage:
             SELECT {columns_str} FROM {table_name}
             WHERE {id_field} = %s
         """
-        self.logger.debug(f"@@ get_record q {query} r: {record_id}")
+        self.logger.debug(f"@@ _get_record q {query} r: {record_id}")
         result = self.db_manager.execute_query(
             query=query,
             params=(record_id,),
             fetch_one=True
         )
-        self.logger.debug(f"@@ get_record result {result}")
+        self.logger.debug(f"@@ _get_record result {result}")
         if result:
             if not columns:
                 # Get column names directly from table structure
                 columns = self._get_table_columns(table_name)
 
             if columns:
-                self.logger.debug(f"@@ get_record has columns {columns}")
+                self.logger.debug(f"@@ _get_record has columns {columns}")
                 return dict(zip(columns, result))
             else:
-                self.logger.debug(f"@@ get_record no columns {columns}")
+                self.logger.debug(f"@@ _get_record no columns {columns}")
         return None
 
     def _get_table_columns(self, table_name: str) -> List[str]:
@@ -183,10 +183,10 @@ class DataStorage:
 
         return []
 
-    def update_record(self, table_name: str, record_id, data: Dict[str, Any], id_field="id") -> bool:
+    def _update_record(self, table_name: str, record_id, data: Dict[str, Any], id_field="id") -> bool:
         """Update a record in the specified table"""
         prepared_data = self._prepare_data_for_db(data)
-        self.logger.debug(f"@@ update_record entry  \n data: {data} \n prepared_data: {prepared_data}")
+        self.logger.debug(f"@@ _update_record entry  \n data: {data} \n prepared_data: {prepared_data}")
         columns = list(prepared_data.keys())
         set_clause = ",".join([f"{key} = %s" for key in columns])
         values = list(prepared_data.values()) + [str(record_id)]
@@ -196,7 +196,7 @@ class DataStorage:
             SET {set_clause}
             WHERE {id_field} = %s
         """
-        self.logger.info(f"@@ update_record: q={query} params={values}")
+        self.logger.info(f"@@ _update_record: q={query} params={values}")
         try:
             self.db_manager.execute_query(
                 query=query,
@@ -209,7 +209,7 @@ class DataStorage:
             self.logger.error(f"Failed to update record: {e}")
             return False
 
-    def delete_record(self, table_name: str, record_id) -> bool:
+    def _delete_record(self, table_name: str, record_id) -> bool:
         """Delete a record from the specified table"""
         query = f"""
             DELETE FROM {table_name}
@@ -227,7 +227,7 @@ class DataStorage:
             self.logger.error(f"Failed to delete record: {e}")
             return False
 
-    def find_records(self, table_name: str, conditions: Dict[str, Any] = None,
+    def _find_records(self, table_name: str, conditions: Dict[str, Any] = None,
                      limit: int = 0, offset: int = 0, columns:list = []) -> List[Dict[str, Any]]:
         """Find records in the specified table with optional conditions"""
         query = f"SELECT * FROM {table_name}"
@@ -265,7 +265,7 @@ class DataStorage:
 
         return []
 
-    def get_table_info(self, table_name: str) -> Dict[str, Any]:
+    def _get_table_info(self, table_name: str) -> Dict[str, Any]:
         """Get information about a table structure"""
         query = """
             SELECT column_name, data_type, is_nullable, column_default
@@ -287,7 +287,7 @@ class DataStorage:
 
         return []
 
-    def execute_raw_query(self, query: str, params: tuple = None) -> List[Dict[str, Any]]:
+    def _execute_raw_query(self, query: str, params: tuple = None) -> List[Dict[str, Any]]:
         """Execute a raw SQL query and return results"""
         # For raw queries, we need to determine column names
         # This is a simplified approach - in practice, you might want to
@@ -343,7 +343,7 @@ class DataStorage:
             # Prepare data for database operation
             prepared_data = data_obj.to_record()
             if is_new_record:
-                new_id = self.create_record('public.orb_data', prepared_data, id_field="u")
+                new_id = self._create_record('public.orb_data', prepared_data, id_field="u")
                 data_obj.u = new_id
                 self.notify_signaling(lsig.SignalingEventType.FileOp_new, data_obj.u, data_obj.u)
                 self.logger.debug(f"Created new orb_data record with UUID: {data_obj.u}")
@@ -351,7 +351,7 @@ class DataStorage:
             else:
                 # Update existing record
                 self.logger.info(f"Updating existing orb_data record with UUID: {data_obj.u}")
-                success = self.update_record('public.orb_data', data_obj.u, prepared_data, id_field='u')
+                success = self._update_record('public.orb_data', data_obj.u, prepared_data, id_field='u')
                 if not success:
                     raise StorageError(f"Failed to update orb_data record with ID: {data_obj.u}")
                 self.notify_signaling(lsig.SignalingEventType.FileOp_update, data_obj.u, data_obj.u)
@@ -403,7 +403,7 @@ class DataStorage:
             if is_new_record:
                 data['ctime'] = datetime.now(timezone.utc).replace(tzinfo=None)
                 self.logger.info(f"Creating new orb_meta record data: {data}")
-                new_id = self.create_record('public.orb_meta', data)
+                new_id = self._create_record('public.orb_meta', data)
                 if new_id is None:
                     raise StorageError("Failed to create new orb_meta record")
 
@@ -417,7 +417,7 @@ class DataStorage:
                 self.logger.info(f"Updating existing orb_meta record with ID: {meta_obj.id}")
 
                 # For updates, we don't change the ctime
-                success = self.update_record('public.orb_meta', meta_obj.id, data)
+                success = self._update_record('public.orb_meta', meta_obj.id, data)
                 if not success:
                     raise StorageError(f"Failed to update orb_meta record with ID: {meta_obj.id}")
 

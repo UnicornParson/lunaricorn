@@ -100,7 +100,7 @@ class StorageTester:
             }
             self.logger.info(f"@@ test_push_data_existing p {line_numb()}")
             # Assuming there's a method to create a record with auto-generated ID
-            record_id = self.storage.create_record(data_table, test_data, id_field="u")
+            record_id = self.storage._create_record(data_table, test_data, id_field="u")
 
             self.logger.info(f"@@ test_push_data_existing p {line_numb()}")
             # Create OrbDataObject with existing ID - use correct attribute names
@@ -121,7 +121,7 @@ class StorageTester:
             self.logger.info(f"@@ test_push_data_existing p {line_numb()}")
             if (result_obj and  str(result_obj.u) == str(record_id)):
                 # Verify the update in database
-                db_record = self.storage.get_record(data_table, record_id, columns=["u", "subtype", "src", "left", "right", "data", "flags"], id_field='u')
+                db_record = self.storage._get_record(data_table, record_id, columns=["u", "subtype", "src", "left", "right", "data", "flags"], id_field='u')
                 self.logger.info(f"@@ test_push_data_existing db_record {db_record}")
                 if (db_record and 
                     db_record['subtype'] == '@json' and
@@ -177,7 +177,7 @@ class StorageTester:
             
             self.logger.info(f"p {line_numb()}")
 
-            record_id = self.storage.create_record(self.test_table, test_data, id_field="id")
+            record_id = self.storage._create_record(self.test_table, test_data, id_field="id")
 
             self.logger.info(f"p {line_numb()}")
             self.created_ids.append(record_id)
@@ -199,7 +199,7 @@ class StorageTester:
                 self.logger.info(f"p {line_numb()} id ok")
                 # Verify the update in database
 
-                db_record = self.storage.get_record(self.test_table, record_id, columns=["id", "u", "data_type", "ctime", "flags", "src"])
+                db_record = self.storage._get_record(self.test_table, record_id, columns=["id", "u", "data_type", "ctime", "flags", "src"])
                 self.logger.info(f"p {line_numb()} get_record {db_record}")
                 if (db_record and 
                     db_record['data_type'] == '@json' and
