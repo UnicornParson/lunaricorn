@@ -10,6 +10,7 @@ class OrbDatabaseManager(DatabaseManager):
         return self._last_cursor_description
     
     def installer_impl(self, cur):
+        # META
         cur.execute('''
             CREATE TABLE IF NOT EXISTS public.orb_meta
             (
@@ -40,3 +41,20 @@ class OrbDatabaseManager(DatabaseManager):
             ''')
         cur.execute('''ALTER TABLE IF EXISTS public.orb_meta CLUSTER ON idata_type;''')
 
+        # DATA
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS public.orb_data
+            (
+                u uuid NOT NULL DEFAULT uuidv7(),
+                data_type character varying(256) NOT NULL DEFAULT '@json',
+                chain_left uuid,
+                chain_right uuid,
+                parent uuid,
+                ctime timestamp without time zone NOT NULL,
+                flags jsonb NOT NULL DEFAULT '[]'::JSONB,
+                src text,
+                data jsonb,
+                PRIMARY KEY (u)
+            );
+        ''')
+        cur.execute('''ALTER TABLE IF EXISTS public.orb_data OWNER to lunaricorn;''')

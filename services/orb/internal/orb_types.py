@@ -4,6 +4,8 @@ from typing import Union
 from enum import Enum
 from lunaricorn.types import *
 from lunaricorn.utils.db_manager import *
+from datetime import datetime, timezone
+import json
 
 def get_required_env_vars(keys):
     missing = [key for key in keys if key not in os.environ]
@@ -51,7 +53,7 @@ class OrbConfig:
         db_config.db_port = self.db_port
         db_config.db_user = self.db_user
         db_config.db_password = self.db_password
-        db_config.db_dbname = self.db_name  # Обратите внимание на преобразование имени
+        db_config.db_dbname = self.db_name
         return db_config
 
 def load_config() -> OrbConfig:
@@ -62,7 +64,16 @@ def load_config() -> OrbConfig:
 class OrbMetaObject(MetaObject):
     id: int = 0
     flags: list[str] = field(default_factory=list)
-
+    ctime: datetime = field(default_factory=lambda: utime())
+    def to_record(self):
+        return {
+            'id': self.id,
+            'u': str(self.u),
+            'ctime': str(self.ctime.isoformat()) if self.ctime else utime_s(),
+            'type': self.type.value,
+            'handle': str(self.handle) if self.handle else None,
+            'flags': json.dumps(self.flags) if isinstance(self.flags, (list, dict)) else '[]',
+        }
     def __post_init__(self):
         """Initialize type after object creation"""
         self.type = "@OrbMeta"
@@ -73,8 +84,31 @@ class OrbDataSybtypes(Enum):
 
 @dataclass
 class OrbDataObject(LunaObject):
+    src: Optional[str]
+    data: Optional[dict]
+    chain_left: Optional[Any] = None
+    chain_right: Optional[Any] = None
+    parent: Optional[Any] = None
+    ctime: datetime = field(default_factory=lambda: utime())
+    flags: list[str] = field(default_factory=list)
     subtype: str = OrbDataSybtypes.Json
 
     def __post_init__(self):
         """Initialize type after object creation"""
-        self.type = "@OrbMeta"
+        self.type = "@OrbData"
+        self.chain_left = None
+        self.chain_right = None
+        self.parent = None
+
+    def to_record(self):
+        return {
+            'u': str(self.u),
+            'ctime': str( self.ctime.isoformat() if self.ctime else utime_s() ),
+            'data_type': self.subtype,
+            'chain_left': str(self.chain_left) if self.chain_left else None,
+            'chain_right': str(self.chain_right) if self.chain_right else None,
+            'parent': str(self.parent) if self.parent else None,
+            'flags': json.dumps(self.flags) if isinstance(self.flags, (list, dict)) else '[]',
+            'src': self.src,
+            'data': json.dumps(self.data) if isinstance(self.data, dict) else '{}'
+        }

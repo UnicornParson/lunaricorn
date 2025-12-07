@@ -2,19 +2,26 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 import uuid
+from datetime import datetime, timezone
 class BaseObjectType(Enum):
     Base = "@base"
     Meta = "@meta"
 
+
+def utime() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+def utime_s() -> str:
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 @dataclass
 class LunaObject:
     """Base class for all Luna objects with serialization capabilities"""
-    u: uuid.uuid7= field(default=uuid.uuid7())
-    type: BaseObjectType = field(default=BaseObjectType.Base)
-    chain_left: Optional[Any] = field(default=None)
-    chain_right: Optional[Any] = field(default=None)
-    parent: Optional[Any] = field(default=None)
-    
+    u: uuid.uuid7
+    type: BaseObjectType
+
+    def __post_init__(self):
+        """Initialize type after object creation"""
+        self.u = uuid.uuid7()
+        self.type = BaseObjectType.Base
 
     def toDict(self) -> dict:
         """Convert object to dictionary representation"""

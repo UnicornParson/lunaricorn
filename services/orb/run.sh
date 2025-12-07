@@ -27,6 +27,7 @@ docker run -it --name $CONTAINER_NAME \
   -e db_user=$db_user \
   -e db_password=$db_password \
   -e ORB_API_PORT=$ORB_API_PORT \
+  -e SIGNALING_HOST=$SIGNALING_HOST \
   -e SIGNALING_REQ=$SIGNALING_REQ_PORT \
   -e SIGNALING_PUB=$SIGNALING_PUB_PORT \
   -e SIGNALING_API=$SIGNALING_API_PORT \

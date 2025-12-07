@@ -4,6 +4,11 @@ import time
 from typing import List, Dict, Optional
 import logging
 import threading
+import traceback
+import sys
+from datetime import datetime
+import uuid
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +257,20 @@ class DatabaseManager:
             Query result or None
         """
         try:
+            if params:
+                # Convert UUID to string and datetime to ISO format
+                formatted_params = []
+                for param in params:
+                    if isinstance(param, uuid.UUID) and param != None:
+                        formatted_params.append(str(param))
+                    elif isinstance(param, datetime):
+                        formatted_params.append(param.isoformat())
+                    elif isinstance(param, (list, dict)):
+                        formatted_params.append(json.dumps(param))
+                    else:
+                        formatted_params.append(param)
+
+
             # Get and validate connection
             conn = self.get_connection()
 
@@ -260,7 +279,7 @@ class DatabaseManager:
                 raise RuntimeError("Invalid or closed connection")
 
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                cur.execute(query, params)
+                cur.execute(query, formatted_params)
                 conn.commit()
                 if fetch_one:
                     return cur.fetchone()
@@ -269,7 +288,10 @@ class DatabaseManager:
                 else:
                     return cur.rowcount
         except Exception as e:
-            logger.error(f"Error executing query: {e}")
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            traceback_str = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            logger.error(f"Error executing query: {e} \n q: {query} \n p: {params} \n {traceback_str}")
+            traceback.print_exc()
             if self.connection and not self.connection.closed:
                 try:
                     self.connection.rollback()
