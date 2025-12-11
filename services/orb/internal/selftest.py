@@ -202,7 +202,7 @@ class StorageTester:
             self.logger.info(f"p {line_numb()} id ok")
             # Verify the update in database
             meta_obj = self.storage.fetch_meta(record_id)
-            self.logger.info(f"p {line_numb()} get_record \meta_obj: {meta_obj}")
+            self.logger.info(f"p {line_numb()} get_record \n meta_obj: {meta_obj}")
             assert(meta_obj)
             assert(meta_obj.type == '@OrbMeta')
             assert(meta_obj.id == record_id)

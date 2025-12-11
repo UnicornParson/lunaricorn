@@ -1,5 +1,4 @@
 import json
-import re
 import uuid
 from lunaricorn.utils.db_manager import *
 import lunaricorn.api.signaling as lsig
@@ -8,6 +7,8 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from .orb_database_manager import *
 from .orb_types import *
+from .meta_object import *
+from .data_object import *
 
 class StorageError(Exception):
     pass
@@ -381,3 +382,13 @@ class DataStorage:
             return None
         meta_obj = OrbMetaObject.from_record(db_record)
         return meta_obj
+
+    def fetch_data(self, u:str):
+        if not u:
+            raise ValueError("Invalid or missing 'u'")
+        db_record = self._get_record('public.orb_meta', u, columns=["u", "subtype", "src", "left", "right", "data", "flags"], id_field='u')
+        if not db_record:
+            # not found
+            return None
+        data_obj = OrbDataObject.from_record(db_record)
+        return data_obj
