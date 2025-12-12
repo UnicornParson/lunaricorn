@@ -19,6 +19,7 @@ docker run -it --name $CONTAINER_NAME \
   -p 8004:8080 \
   -v "$(pwd)/tmp/data:/opt/lunaricorn/orb_data" \
   -v "$(pwd)/tmp/file_storage:/opt/lunaricorn/orb/file_storage" \
+  -v "$(pwd)/tmp/share:/opt/lunaricorn/orb/share" \
   -e db_type=$db_type \
   -e db_host=$db_host \
   -e db_port=$db_port \

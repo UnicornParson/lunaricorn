@@ -7,3 +7,4 @@ flask
 grpcio
 grpcio-tools
 uvicorn
+grpcio-tools
