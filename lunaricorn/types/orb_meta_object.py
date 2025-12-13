@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Union
 from enum import Enum
-from lunaricorn.types import *
+from .object import *
 from lunaricorn.utils.db_manager import *
 from datetime import datetime, timezone
 import json

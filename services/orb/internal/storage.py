@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from .orb_database_manager import *
 from .orb_types import *
 from .meta_object import *
-from .data_object import *
+from .orb_data_object import *
 
 class StorageError(Exception):
     pass

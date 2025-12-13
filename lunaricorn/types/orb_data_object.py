@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from lunaricorn.types import *
+from .object import *
 from lunaricorn.utils.db_manager import *
 from datetime import datetime, timezone
 import json

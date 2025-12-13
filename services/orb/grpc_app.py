@@ -2,8 +2,8 @@ import grpc
 from concurrent import futures
 import logging
 from typing import Optional
-import datastorage_pb2
-import datastorage_pb2_grpc
+from lunaricorn.api.orb.datastorage_pb2_grpc import *
+from lunaricorn.api.orb.datastorage_pb2 import *
 
 logger = logging.getLogger(__name__)
 

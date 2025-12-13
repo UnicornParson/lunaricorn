@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package lunaricorn.orb;
+
+// Обновленный протокол с поддержкой Orb объектов
+service OrbDataService {
+    // Существующие методы для совместимости
+    rpc PushData(PushDataRequest) returns (PushResponse);
+    rpc PushMeta(PushMetaRequest) returns (PushResponse);
+    rpc FetchData(FetchRequest) returns (FetchDataResponse);
+    rpc FetchMeta(FetchRequest) returns (FetchMetaResponse);
+    
+    // Новые методы для работы с Orb объектами
+    rpc PushOrbData(OrbDataRequest) returns (OrbResponse);
+    rpc PushOrbMeta(OrbMetaRequest) returns (OrbResponse);
+    rpc FetchOrbData(FetchOrbRequest) returns (OrbDataResponse);
+    rpc FetchOrbMeta(FetchOrbRequest) returns (OrbMetaResponse);
+}
+
+// Существующие сообщения (для совместимости)
+message PushDataRequest {
+    string key = 1;
+    bytes data = 2;
+}
+
+message PushMetaRequest {
+    string key = 1;
+    bytes meta = 2;
+}
+
+message FetchRequest {
+    string key = 1;
+}
+
+message PushResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message FetchDataResponse {
+    bytes data = 1;
+}
+
+message FetchMetaResponse {
+    bytes meta = 1;
+}
+
+// Новые сообщения для Orb объектов
+message OrbDataRequest {
+    OrbDataObject data = 1;
+}
+
+message OrbMetaRequest {
+    OrbMetaObject meta = 2;
+}
+
+message FetchOrbRequest {
+    string identifier = 1;  // UUID для OrbDataObject, число для OrbMetaObject
+    string type = 2;        // "data" или "meta"
+}
+
+message OrbResponse {
+    bool success = 1;
+    string message = 2;
+    string identifier = 3;  // UUID или ID созданного объекта
+}
+
+message OrbDataResponse {
+    OrbDataObject data = 1;
+}
+
+message OrbMetaResponse {
+    OrbMetaObject meta = 2;
+}
+
+// Структуры Orb объектов
+message OrbDataObject {
+    string u = 1;              // UUID
+    string subtype = 2;        // "@json" или "@raw"
+    string chain_left = 3;     // UUID левого соседа
+    string chain_right = 4;    // UUID правого соседа
+    string parent = 5;         // UUID родителя
+    string ctime = 6;          // Время создания
+    repeated string flags = 7; // Флаги
+    string src = 8;            // Источник
+    bytes data = 9;            // Данные
+}
+
+message OrbMetaObject {
+    int64 id = 1;              // ID
+    string u = 2;              // UUID
+    string ctime = 3;          // Время создания
+    string type = 4;           // Тип
+    int64 handle = 5;          // Handle
+    repeated string flags = 6; // Флаги
+}
