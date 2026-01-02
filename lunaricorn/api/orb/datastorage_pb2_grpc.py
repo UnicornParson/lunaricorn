@@ -25,8 +25,9 @@ if _version_not_supported:
     )
 
 
-class DataStorageServiceStub(object):
-    """Missing associated documentation comment in .proto file."""
+class OrbDataServiceStub(object):
+    """Обновленный протокол с поддержкой Orb объектов
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -35,43 +36,59 @@ class DataStorageServiceStub(object):
             channel: A grpc.Channel.
         """
         self.PushData = channel.unary_unary(
-                '/datastorage.DataStorageService/PushData',
+                '/lunaricorn.orb.OrbDataService/PushData',
                 request_serializer=datastorage__pb2.PushDataRequest.SerializeToString,
-                response_deserializer=datastorage__pb2.PushDataResponse.FromString,
+                response_deserializer=datastorage__pb2.PushResponse.FromString,
                 _registered_method=True)
         self.PushMeta = channel.unary_unary(
-                '/datastorage.DataStorageService/PushMeta',
+                '/lunaricorn.orb.OrbDataService/PushMeta',
                 request_serializer=datastorage__pb2.PushMetaRequest.SerializeToString,
-                response_deserializer=datastorage__pb2.PushMetaResponse.FromString,
-                _registered_method=True)
-        self.FetchMeta = channel.unary_unary(
-                '/datastorage.DataStorageService/FetchMeta',
-                request_serializer=datastorage__pb2.FetchMetaRequest.SerializeToString,
-                response_deserializer=datastorage__pb2.FetchMetaResponse.FromString,
+                response_deserializer=datastorage__pb2.PushResponse.FromString,
                 _registered_method=True)
         self.FetchData = channel.unary_unary(
-                '/datastorage.DataStorageService/FetchData',
-                request_serializer=datastorage__pb2.FetchDataRequest.SerializeToString,
+                '/lunaricorn.orb.OrbDataService/FetchData',
+                request_serializer=datastorage__pb2.FetchRequest.SerializeToString,
                 response_deserializer=datastorage__pb2.FetchDataResponse.FromString,
+                _registered_method=True)
+        self.FetchMeta = channel.unary_unary(
+                '/lunaricorn.orb.OrbDataService/FetchMeta',
+                request_serializer=datastorage__pb2.FetchRequest.SerializeToString,
+                response_deserializer=datastorage__pb2.FetchMetaResponse.FromString,
+                _registered_method=True)
+        self.PushOrbData = channel.unary_unary(
+                '/lunaricorn.orb.OrbDataService/PushOrbData',
+                request_serializer=datastorage__pb2.OrbDataRequest.SerializeToString,
+                response_deserializer=datastorage__pb2.OrbResponse.FromString,
+                _registered_method=True)
+        self.PushOrbMeta = channel.unary_unary(
+                '/lunaricorn.orb.OrbDataService/PushOrbMeta',
+                request_serializer=datastorage__pb2.OrbMetaRequest.SerializeToString,
+                response_deserializer=datastorage__pb2.OrbResponse.FromString,
+                _registered_method=True)
+        self.FetchOrbData = channel.unary_unary(
+                '/lunaricorn.orb.OrbDataService/FetchOrbData',
+                request_serializer=datastorage__pb2.FetchOrbRequest.SerializeToString,
+                response_deserializer=datastorage__pb2.OrbDataResponse.FromString,
+                _registered_method=True)
+        self.FetchOrbMeta = channel.unary_unary(
+                '/lunaricorn.orb.OrbDataService/FetchOrbMeta',
+                request_serializer=datastorage__pb2.FetchOrbRequest.SerializeToString,
+                response_deserializer=datastorage__pb2.OrbMetaResponse.FromString,
                 _registered_method=True)
 
 
-class DataStorageServiceServicer(object):
-    """Missing associated documentation comment in .proto file."""
+class OrbDataServiceServicer(object):
+    """Обновленный протокол с поддержкой Orb объектов
+    """
 
     def PushData(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Существующие методы для совместимости
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def PushMeta(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def FetchMeta(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -83,39 +100,91 @@ class DataStorageServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def FetchMeta(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
-def add_DataStorageServiceServicer_to_server(servicer, server):
+    def PushOrbData(self, request, context):
+        """Новые методы для работы с Orb объектами
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PushOrbMeta(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def FetchOrbData(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def FetchOrbMeta(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_OrbDataServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'PushData': grpc.unary_unary_rpc_method_handler(
                     servicer.PushData,
                     request_deserializer=datastorage__pb2.PushDataRequest.FromString,
-                    response_serializer=datastorage__pb2.PushDataResponse.SerializeToString,
+                    response_serializer=datastorage__pb2.PushResponse.SerializeToString,
             ),
             'PushMeta': grpc.unary_unary_rpc_method_handler(
                     servicer.PushMeta,
                     request_deserializer=datastorage__pb2.PushMetaRequest.FromString,
-                    response_serializer=datastorage__pb2.PushMetaResponse.SerializeToString,
-            ),
-            'FetchMeta': grpc.unary_unary_rpc_method_handler(
-                    servicer.FetchMeta,
-                    request_deserializer=datastorage__pb2.FetchMetaRequest.FromString,
-                    response_serializer=datastorage__pb2.FetchMetaResponse.SerializeToString,
+                    response_serializer=datastorage__pb2.PushResponse.SerializeToString,
             ),
             'FetchData': grpc.unary_unary_rpc_method_handler(
                     servicer.FetchData,
-                    request_deserializer=datastorage__pb2.FetchDataRequest.FromString,
+                    request_deserializer=datastorage__pb2.FetchRequest.FromString,
                     response_serializer=datastorage__pb2.FetchDataResponse.SerializeToString,
+            ),
+            'FetchMeta': grpc.unary_unary_rpc_method_handler(
+                    servicer.FetchMeta,
+                    request_deserializer=datastorage__pb2.FetchRequest.FromString,
+                    response_serializer=datastorage__pb2.FetchMetaResponse.SerializeToString,
+            ),
+            'PushOrbData': grpc.unary_unary_rpc_method_handler(
+                    servicer.PushOrbData,
+                    request_deserializer=datastorage__pb2.OrbDataRequest.FromString,
+                    response_serializer=datastorage__pb2.OrbResponse.SerializeToString,
+            ),
+            'PushOrbMeta': grpc.unary_unary_rpc_method_handler(
+                    servicer.PushOrbMeta,
+                    request_deserializer=datastorage__pb2.OrbMetaRequest.FromString,
+                    response_serializer=datastorage__pb2.OrbResponse.SerializeToString,
+            ),
+            'FetchOrbData': grpc.unary_unary_rpc_method_handler(
+                    servicer.FetchOrbData,
+                    request_deserializer=datastorage__pb2.FetchOrbRequest.FromString,
+                    response_serializer=datastorage__pb2.OrbDataResponse.SerializeToString,
+            ),
+            'FetchOrbMeta': grpc.unary_unary_rpc_method_handler(
+                    servicer.FetchOrbMeta,
+                    request_deserializer=datastorage__pb2.FetchOrbRequest.FromString,
+                    response_serializer=datastorage__pb2.OrbMetaResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'datastorage.DataStorageService', rpc_method_handlers)
+            'lunaricorn.orb.OrbDataService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('datastorage.DataStorageService', rpc_method_handlers)
+    server.add_registered_method_handlers('lunaricorn.orb.OrbDataService', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class DataStorageService(object):
-    """Missing associated documentation comment in .proto file."""
+class OrbDataService(object):
+    """Обновленный протокол с поддержкой Orb объектов
+    """
 
     @staticmethod
     def PushData(request,
@@ -131,9 +200,9 @@ class DataStorageService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/datastorage.DataStorageService/PushData',
+            '/lunaricorn.orb.OrbDataService/PushData',
             datastorage__pb2.PushDataRequest.SerializeToString,
-            datastorage__pb2.PushDataResponse.FromString,
+            datastorage__pb2.PushResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -158,36 +227,9 @@ class DataStorageService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/datastorage.DataStorageService/PushMeta',
+            '/lunaricorn.orb.OrbDataService/PushMeta',
             datastorage__pb2.PushMetaRequest.SerializeToString,
-            datastorage__pb2.PushMetaResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def FetchMeta(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/datastorage.DataStorageService/FetchMeta',
-            datastorage__pb2.FetchMetaRequest.SerializeToString,
-            datastorage__pb2.FetchMetaResponse.FromString,
+            datastorage__pb2.PushResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -212,9 +254,144 @@ class DataStorageService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/datastorage.DataStorageService/FetchData',
-            datastorage__pb2.FetchDataRequest.SerializeToString,
+            '/lunaricorn.orb.OrbDataService/FetchData',
+            datastorage__pb2.FetchRequest.SerializeToString,
             datastorage__pb2.FetchDataResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def FetchMeta(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/lunaricorn.orb.OrbDataService/FetchMeta',
+            datastorage__pb2.FetchRequest.SerializeToString,
+            datastorage__pb2.FetchMetaResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PushOrbData(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/lunaricorn.orb.OrbDataService/PushOrbData',
+            datastorage__pb2.OrbDataRequest.SerializeToString,
+            datastorage__pb2.OrbResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PushOrbMeta(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/lunaricorn.orb.OrbDataService/PushOrbMeta',
+            datastorage__pb2.OrbMetaRequest.SerializeToString,
+            datastorage__pb2.OrbResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def FetchOrbData(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/lunaricorn.orb.OrbDataService/FetchOrbData',
+            datastorage__pb2.FetchOrbRequest.SerializeToString,
+            datastorage__pb2.OrbDataResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def FetchOrbMeta(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/lunaricorn.orb.OrbDataService/FetchOrbMeta',
+            datastorage__pb2.FetchOrbRequest.SerializeToString,
+            datastorage__pb2.OrbMetaResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -9,7 +9,7 @@ if [ ! -f "datastorage.proto" ]; then
 fi
 
 echo "Building Docker image for protobuf generation..."
-docker build -t protobuf-gen-python .
+docker build --no-cache --progress=plain -t protobuf-gen-python .
 
 echo "Generating Python protobuf files..."
 docker run --rm \
