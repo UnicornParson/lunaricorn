@@ -16,7 +16,6 @@ class ClusterEngine:
     counter = 0
 
     def __init__(self):
-        logger.info(f"@@ make cluster"
         if ClusterEngine.config is None:
             raise ValueError("Config is not loaded")
         

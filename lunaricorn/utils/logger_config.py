@@ -2,7 +2,10 @@ import logging
 import logging.handlers
 from pathlib import Path
 from datetime import datetime
-
+from queue import Queue
+import time
+import requests
+import logging_loki
 class AutoFlushFileHandler(logging.handlers.RotatingFileHandler):
     def __init__(self, filename):
         super().__init__(filename, maxBytes=100*1024*1024, backupCount=10, encoding='utf-8')
@@ -10,6 +13,37 @@ class AutoFlushFileHandler(logging.handlers.RotatingFileHandler):
     def emit(self, record):
         super().emit(record)
         self.flush()
+
+def wait_for_loki_ready(host="loki", port=3100):
+    """Waits for Loki to return 'ready' status."""
+    url = f"http://{host}:{port}/ready"
+    print(f"Waiting for Loki at {url}")
+    start_time = time.time()
+    last_status_time = time.time()
+    
+    while True:
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200 and response.text.strip() == "ready":
+                print(f"Loki is ready! Response: {response.text.strip()}")
+                return True
+        except:
+            pass
+        current_time = time.time()
+        if current_time - last_status_time >= 30:
+            elapsed = int(current_time - start_time)
+            print(f"Still waiting for Loki to become ready... ({elapsed} seconds)")
+            last_status_time = current_time
+        time.sleep(10)
+
+def set_loki_handler(logger, host="loki", port=3100, appname="lunaricorn_unknown"):
+    wait_for_loki_ready(host, port)
+    handler = logging_loki.LokiQueueHandler(
+        Queue(-1),
+        url=f"http://{host}:{port}/loki/api/v1/push",
+        tags={"application": str(appname)},
+    )
+    logger.addHandler(handler)
 
 def setup_logging(logger_name="portal_api", logs_dir="/opt/lunaricorn/portal_data/logs"):
     """

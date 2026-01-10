@@ -14,3 +14,5 @@ tqdm
 python-logging-loki
 grpcio
 requests
+pytest
+protobuf

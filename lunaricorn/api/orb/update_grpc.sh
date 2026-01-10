@@ -20,5 +20,8 @@ docker run --rm \
     --grpc_python_out=. \
     datastorage.proto
 
+echo "Fixing imports in datastorage_pb2_grpc.py..."
+sed -i 's/^import datastorage_pb2 as datastorage__pb2$/from . import datastorage_pb2 as datastorage__pb2/' datastorage_pb2_grpc.py
+
 echo "Done! Generated files:"
 ls -la datastorage_pb2*.py

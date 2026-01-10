@@ -11,7 +11,10 @@ RUN pip install --no-cache-dir -r /opt/lunaricorn/orb/app/lunaricorn/requirement
 
 # Set working directory to the application directory
 WORKDIR /opt/lunaricorn/orb/app/internal
-RUN python -m grpc_tools.protoc -I. --python_out=.. --grpc_python_out=.. datastorage.proto
+
+# auto update
+#RUN python -m grpc_tools.protoc -I. --python_out=.. --grpc_python_out=.. datastorage.proto
+
 WORKDIR /opt/lunaricorn/orb/app
 
 # Expose api ports

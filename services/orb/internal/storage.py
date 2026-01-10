@@ -1,5 +1,16 @@
 import json
-import uuid
+try:
+    from uuid import uuid7
+except ImportError:
+    try:
+        from uuid7 import uuid7 as uuid7_std
+        uuid7 = lambda: uuid7_std().to_uuid()
+    except ImportError:
+        raise ImportError(
+            "Требуется Python 3.14+ или установка пакета:\n"
+            "pip install uuid7-standard"
+        )
+    
 from lunaricorn.utils.db_manager import *
 import lunaricorn.api.signaling as lsig
 import logging
@@ -7,9 +18,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from .orb_database_manager import *
 from .orb_types import *
-from .meta_object import *
-from .orb_data_object import *
-
+from lunaricorn.types import OrbDataObject, OrbMetaObject, OrbDataSybtypes
 class StorageError(Exception):
     pass
 
@@ -392,3 +401,33 @@ class DataStorage:
             return None
         data_obj = OrbDataObject.from_record(db_record)
         return data_obj
+    
+    def push_orb_data(self, data_obj: OrbDataObject) -> OrbDataObject:
+        """Push OrbDataObject to storage (alias for push_data)."""
+        return self.push_data(data_obj)
+    
+    def push_orb_meta(self, meta_obj: OrbMetaObject) -> OrbMetaObject:
+        """Push OrbMetaObject to storage (alias for push_meta)."""
+        return self.push_meta(meta_obj)
+    
+    def fetch_orb_data(self, identifier: str) -> Optional[OrbDataObject]:
+        """Fetch OrbDataObject by UUID identifier."""
+        try:
+            # Try to parse as UUID
+            u = uuid.UUID(identifier)
+            return self.fetch_data(str(u))
+        except ValueError:
+            # If not a valid UUID, return None
+            return None
+    
+    def fetch_orb_meta(self, identifier: str) -> Optional[OrbMetaObject]:
+        """Fetch OrbMetaObject by identifier (ID or UUID)."""
+        try:
+            # Try to parse as integer ID
+            meta_id = int(identifier)
+            return self.fetch_meta(meta_id)
+        except ValueError:
+            # If not an integer, try to find by UUID
+            # This requires adding a method to search by UUID
+            # For now, return None
+            return None
