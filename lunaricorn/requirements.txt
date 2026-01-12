@@ -14,3 +14,5 @@ tqdm
 python-logging-loki
 grpcio
 requests
+pika>=1.3.2
+protobuf

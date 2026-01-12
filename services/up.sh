@@ -11,10 +11,25 @@ mkdir -p ${LUNARICORN_HOME}/leader_data
 mkdir -p ${LUNARICORN_HOME}/portal_data
 mkdir -p ${LUNARICORN_HOME}/pg_data
 
+BUILD=false
+
+while getopts "b" opt; do
+  case "$opt" in
+    b)
+      BUILD=true
+      ;;
+  esac
+done
+
 # Exit immediately if a command exits with a non-zero status
 set -e
 docker compose down -v
-./build.sh
+if [ "$BUILD" = true ]; then
+    echo "Running build.sh..."
+    ./build.sh
+else
+    echo "Skipping build.sh (use -b to enable)"
+fi
 
 # Print info message
 echo "Starting services using docker-compose.yaml..."

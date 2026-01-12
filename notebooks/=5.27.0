@@ -1,8 +1,0 @@
-Requirement already satisfied: protobuf in /opt/conda/lib/python3.11/site-packages (6.33.2)
-Requirement already satisfied: feedparser in /opt/conda/lib/python3.11/site-packages (6.0.12)
-Requirement already satisfied: requests in /opt/conda/lib/python3.11/site-packages (2.32.5)
-Requirement already satisfied: sgmllib3k in /opt/conda/lib/python3.11/site-packages (from feedparser) (1.0.0)
-Requirement already satisfied: charset_normalizer<4,>=2 in /opt/conda/lib/python3.11/site-packages (from requests) (3.4.4)
-Requirement already satisfied: idna<4,>=2.5 in /opt/conda/lib/python3.11/site-packages (from requests) (3.11)
-Requirement already satisfied: urllib3<3,>=1.21.1 in /opt/conda/lib/python3.11/site-packages (from requests) (2.4.0)
-Requirement already satisfied: certifi>=2017.4.17 in /opt/conda/lib/python3.11/site-packages (from requests) (2025.11.12)

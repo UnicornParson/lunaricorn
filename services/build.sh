@@ -2,12 +2,15 @@
 set -e
 
 start_time=$(date +%s)
+echo "Building maintenance service..."
+pushd maintenance > /dev/null
+./build.sh
+popd > /dev/null
 
 echo "Building data/pg service..."
 pushd data/pg > /dev/null
 ./rebuild_image.sh
 popd > /dev/null
-
 
 echo "Building leader service..."
 pushd leader > /dev/null

@@ -9,6 +9,8 @@ services:
     volumes:
       - ${LUNARICORN_HOME}/leader_data:/opt/lunaricorn/leader_data
     environment:
+      - MAINTENANCE_HOST=192.168.0.18
+      - MAINTENANCE_PORT=8006
       - PYTHONUNBUFFERED=1
       - db_type=postgresql
       - db_host=lunaricorn-pg
@@ -59,7 +61,7 @@ services:
     image: grafana/loki:main-3fc14f7
     container_name: lunaricorn-loki
     ports:
-      - "8004:3100"    # Loki API (прием логов)
+      - "8004:3100"
     volumes:
       - ./data/loki:/etc/loki
       - ${LUNARICORN_HOME}/loki-storage:/loki
@@ -88,7 +90,20 @@ services:
       - loki
     networks:
       - lunaricorn-network
-
+  maintenance:
+    build:
+      context: ./maintenance
+      dockerfile: Dockerfile
+    container_name: lunaricorn-maintenance
+    ports:
+      - 8006:5672
+      - 15672:15672
+    volumes:
+      - ${LUNARICORN_HOME}/maintenance:/app/data/
+      - ${LUNARICORN_HOME}/rmq:/var/log/rabbitmq/
+    networks:
+      - lunaricorn-network
+    restart: unless-stopped
   pg:
     build:
       context: ./data/pg
