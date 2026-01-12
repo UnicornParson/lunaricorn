@@ -57,39 +57,6 @@ services:
       retries: 3
       start_period: 40s
 
-  loki:
-    image: grafana/loki:main-3fc14f7
-    container_name: lunaricorn-loki
-    ports:
-      - "8004:3100"
-    volumes:
-      - ./data/loki:/etc/loki
-      - ${LUNARICORN_HOME}/loki-storage:/loki
-    command:
-      - "-config.file=/etc/loki/local-config.yaml"
-      - "-config.expand-env=true"
-    restart: unless-stopped
-    networks:
-      - lunaricorn-network
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: lunaricorn-grafana
-    ports:
-      - "8005:3000"    # Grafana UI (просмотр логов)
-    volumes:
-      - ${LUNARICORN_HOME}/grafana-data:/var/lib/grafana
-      - ./data/grafana/provisioning:/etc/grafana/provisioning
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_AUTH_ANONYMOUS_ENABLED=true     # Включает анонимный вход
-      - GF_AUTH_DISABLE_LOGIN_FORM=false   # Отключает форму входа  
-    restart: unless-stopped
-    depends_on:
-      - loki
-    networks:
-      - lunaricorn-network
   maintenance:
     build:
       context: ./maintenance
@@ -195,5 +162,3 @@ networks:
   lunaricorn-network:
     driver: bridge
     name: lunaricorn-network
-volumes:
-  loki-rules: # Docker сам создаст том с правильными правами

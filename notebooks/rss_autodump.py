@@ -37,14 +37,14 @@ async def main():
 
     loader = rss_loader.RSSLoaderClient(agent_id="notebook_agent", working_dir="./tmp/")
     convertor = lunaricorn.data.DataConvertor()
-    #sig_cfg = lsig.SignalingClientConfig("192.168.0.18", 5555, 5556, 5557)
-    #loader.connect_to_lunaricorn(sig_cfg)
+    sig_cfg = lsig.SignalingClientConfig("192.168.0.18", 5555, 5556, 5557)
+    loader.connect_to_lunaricorn(sig_cfg)
     #entries = await loader.load("https://www.cncf.io/feed/")
     entries = await loader.load("https://habr.com/ru/rss/articles/?fl=ru")
     entries.extend(await loader.load("https://habr.com/ru/rss/articles/top/weekly/?fl=ru"))
     #entries.extend(await loader.load("https://tproger.ru/feed"))
     #entries.extend(await loader.load("https://proglib.io/feed"))
-    #loader.disconnect_lunaricorn()
+    loader.disconnect_lunaricorn()
     loader = None
 
 asyncio.run(main())

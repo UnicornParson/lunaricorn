@@ -19,7 +19,7 @@ class MaintenanceClient:
     PORT = None
     QUEUE_NAME = "incoming_json"
 
-    HEARTBEAT = 30
+    HEARTBEAT = 10
     BLOCKED_TIMEOUT = 10
 
     # Устанавливаем логгер для pika, чтобы избежать рекурсии
