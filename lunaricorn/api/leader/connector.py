@@ -34,7 +34,7 @@ class LeaderConnector:
         self._registration_timer = None
         self._registration_stop_event = threading.Event()
         self._registered_service = None
-        self._registration_interval = 2 # s
+        self._registration_interval = 30 # s
         
         logger.info(f"LeaderConnector initialized with base URL: {self.base_url}")
     

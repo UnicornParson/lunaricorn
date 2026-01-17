@@ -3,6 +3,7 @@ import logging.handlers
 from pathlib import Path
 from datetime import datetime
 import os
+from lunaricorn.utils.maintenance import *
 
 def is_docker():
     # Check for the presence of the .dockerenv file
@@ -89,5 +90,5 @@ def setup_signaling_logging(logger_name="signaling_api"):
     # Create specific logger for this application
     app_logger = logging.getLogger(logger_name)
     app_logger.info("Logging system initialized with file rotation")
-    
+    setup_maintenance_logging(owner="signaling", token=f"signaling_{apptoken()}")
     return app_logger 

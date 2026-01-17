@@ -2,6 +2,7 @@ import pika
 import json
 import sys
 import time
+import re
 from datetime import datetime
 from pika.exceptions import AMQPConnectionError
 
@@ -13,6 +14,10 @@ OUTPUT_FILE = "/app/data/messages.log"
 STATS_INTERVAL_SEC = 180
 CONNECT_RETRIES = 300
 CONNECT_DELAY_SEC = 1
+
+LEVEL_RE = re.compile(r"\[(DEBUG|INFO|WARNING|ERROR|CRITICAL)\]")
+PY_LOG_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}\s+")
+NON_MERGE_LEVELS = {"WARNING", "ERROR", "CRITICAL"}
 # ==================
 
 
@@ -44,6 +49,36 @@ def main():
 
     processed_since_last = 0
     last_stats_time = time.time()
+    current_group = {
+        "owner": None,
+        "message": None,
+        "level": None,
+        "count": 0,
+        "line": None,
+    }
+
+    def flush_group():
+        if current_group["count"] == 0:
+            return
+
+        line = current_group["line"]
+        count = current_group["count"]
+
+        if count > 1:
+            # Берем оригинальную строку без ..repeated
+            original_line = current_group["line"]
+            line = f"{original_line} ..repeated {count} times."
+
+        with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+            f.flush()
+
+        # Полностью сбрасываем группу
+        current_group["owner"] = None
+        current_group["message"] = None
+        current_group["level"] = None
+        current_group["count"] = 0
+        current_group["line"] = None
 
     def print_stats_if_needed():
         nonlocal processed_since_last, last_stats_time
@@ -70,7 +105,6 @@ def main():
             raw = body.decode("utf-8")
             data = json.loads(raw)
 
-            # строгая проверка формата
             for key in ("o", "t", "m", "dt", "type"):
                 if key not in data:
                     raise ValueError(f"missing field '{key}'")
@@ -80,20 +114,43 @@ def main():
             message = data["m"]
             dt = data["dt"]
             msg_type = data["type"]
+            normalized_message = PY_LOG_PREFIX_RE.sub("", message)
+            # определяем уровень
+            m = LEVEL_RE.search(message)
+            level = m.group(1) if m else None
 
-            line = f"{dt} [{msg_type}] {owner}::{token} {message}"
+            line = f"{dt} [{msg_type}] {owner}::{token} {normalized_message}"
 
-            with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
-                f.write(line + "\n")
-                f.flush()
+            # сообщения с высоким уровнем — всегда сразу
+            if level in NON_MERGE_LEVELS:
+                flush_group()
+                with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+                    f.flush()
+            else:
+                # проверяем, можно ли склеить
+                if (
+                    current_group["count"] > 0
+                    and current_group["owner"] == owner
+                    and current_group["message"] == normalized_message
+                    and current_group["level"] == level
+                ):
+                    current_group["count"] += 1
+                    current_group["line"] = line
+                else:
+                    flush_group()
+                    current_group.update(
+                        owner=owner,
+                        message=normalized_message,
+                        level=level,
+                        count=1,
+                        line=line,
+                    )
 
             ch.basic_ack(delivery_tag=method.delivery_tag)
-
             processed_since_last += 1
             print_stats_if_needed()
-
         except Exception as e:
-            # формат неверный — печатаем в консоль
             try:
                 bad_msg = body.decode("utf-8")
             except Exception:
@@ -101,7 +158,6 @@ def main():
 
             print(f"INVALID MESSAGE: {e}")
             print(bad_msg)
-            # ack не отправляем
 
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(
@@ -117,4 +173,5 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
+        flush_group()
         sys.exit(0)

@@ -2,7 +2,6 @@ import uvicorn
 import yaml
 from lunaricorn.utils.logger_config import setup_logging
 
-
 def load_config():
     with open("cfg/config.yaml", "r") as f:
         config = yaml.safe_load(f)
@@ -10,6 +9,7 @@ def load_config():
 
 if __name__ == "__main__":
     logger = setup_logging("portal_main")
+
     logger.info("Starting Portal API with uvicorn")
     
     try:

@@ -11,7 +11,7 @@ from lunaricorn.utils.logger_config import *
 from lunaricorn.utils.maintenance import *
 
 logger = setup_logging("leader_api", "/opt/lunaricorn/leader_data/logs")
-setup_maintenance_logging(owner="leader", token=f"leader_{apptoken}")
+setup_maintenance_logging(owner="leader", token=f"leader_{apptoken()}")
 
 logger.info("Leader API started")
 app = Flask(__name__)

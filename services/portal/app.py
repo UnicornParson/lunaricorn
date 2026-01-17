@@ -14,9 +14,10 @@ import sys
 import os
 from lunaricorn.api.leader import ConnectorUtils
 from lunaricorn.utils.logger_config import setup_logging
+from lunaricorn.utils.maintenance import *
 
 logger = setup_logging("portal_app", "/opt/lunaricorn/portal_data/logs")
-
+setup_maintenance_logging(owner="portal", token=f"portal_{apptoken()}")
 # Global shutdown flag for graceful termination
 shutdown_event = threading.Event()
 retry_thread = None
