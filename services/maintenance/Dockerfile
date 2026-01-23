@@ -13,15 +13,21 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
-# Конфиги и код
-COPY consumer.py .
+COPY consumer.py orchestrator.py producer.py .
+
 COPY rabbitmq.conf /etc/rabbitmq/rabbitmq.conf
 
 # Каталог для данных
 RUN mkdir -p /app/data
 
 # Открываем порт RabbitMQ
+# rmq port
 EXPOSE 5672
-EXPOSE 15672
 
-CMD ["bash", "-c", "rabbitmq-server -detached && exec python3 consumer.py"]
+# rmq ui
+EXPOSE 15672 
+
+# http api
+EXPOSE 8000
+
+CMD ["python3", "orchestrator.py"]

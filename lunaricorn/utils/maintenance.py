@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
 import pika
+from typing import Optional, Dict, Any
 from pika.exceptions import AMQPConnectionError, ChannelClosedByBroker
 import time
 import os
@@ -8,6 +9,7 @@ import logging
 import sys
 import threading
 import string
+import requests
 
 _BASE62_ALPHABET = string.digits + string.ascii_letters  # 0-9A-Za-z
 def base62_encode(num: int) -> str:
@@ -30,14 +32,20 @@ class MaintenanceClient:
     HOST = None
     PORT = None
     QUEUE_NAME = "incoming_json"
+    HTTP_BASE_URL = "http://localhost:8000"
 
     HEARTBEAT = 10
     BLOCKED_TIMEOUT = 10
+    HTTP_TIMEOUT = 10.0
+    HTTP_MAX_RETRIES = 3
+    HTTP_RETRY_DELAY = 1.0
+    HTTP_WAIT_POLL_INTERVAL = 1.0  # Default poll interval
 
     _connection: pika.BlockingConnection | None = None
     _channel: pika.channel.Channel | None = None
     _lock = threading.Lock()
-
+    _http_session: requests.Session | None = None
+    _http_lock = threading.Lock()
     @staticmethod
     def _get_channel() -> pika.channel.Channel:
         with MaintenanceClient._lock:
@@ -107,6 +115,59 @@ class MaintenanceClient:
         raise RuntimeError("RabbitMQ is not ready") from last_error
 
     @staticmethod
+    def wait_for_http_service(timeout_sec: Optional[int] = None, 
+                            poll_interval_sec: Optional[float] = None,
+                            endpoint: str = "/health") -> bool:
+        timeout_sec = timeout_sec or MaintenanceClient.HTTP_WAIT_TIMEOUT
+        poll_interval_sec = poll_interval_sec or MaintenanceClient.HTTP_WAIT_POLL_INTERVAL
+        
+        deadline = time.time() + timeout_sec
+        last_error = None
+        attempt = 0
+        
+        sys.stderr.write(f"Waiting for HTTP service at {MaintenanceClient.HTTP_BASE_URL}{endpoint}...\n")
+        
+        while time.time() < deadline:
+            attempt += 1
+            try:
+                # Create a temporary session for the check
+                with requests.Session() as session:
+                    response = session.get(
+                        f"{MaintenanceClient.HTTP_BASE_URL}{endpoint}",
+                        timeout=5.0  # Short timeout for health checks
+                    )
+                    
+                    if response.status_code == 200:
+                        sys.stderr.write(f"HTTP service is ready (attempt {attempt})\n")
+                        return True
+                    else:
+                        sys.stderr.write(f"HTTP service returned status {response.status_code} (attempt {attempt})\n")
+                        last_error = f"HTTP {response.status_code}"
+                        
+            except requests.exceptions.ConnectionError as e:
+                sys.stderr.write(f"Connection failed (attempt {attempt}): {e}\n")
+                last_error = str(e)
+            except requests.exceptions.Timeout as e:
+                sys.stderr.write(f"Timeout (attempt {attempt})\n")
+                last_error = "timeout"
+            except Exception as e:
+                sys.stderr.write(f"Error (attempt {attempt}): {e}\n")
+                last_error = str(e)
+            
+            # Check if we should continue
+            if time.time() >= deadline:
+                break
+                
+            # Wait before next attempt
+            time.sleep(poll_interval_sec)
+        
+        # If we get here, we timed out
+        raise RuntimeError(
+            f"HTTP service at {MaintenanceClient.HTTP_BASE_URL} is not ready after {timeout_sec} seconds. "
+            f"Last error: {last_error}"
+        )
+
+    @staticmethod
     def push_maintenance_msg(type: str, owner: str, token: str, message: str):
         payload = {
             "o": owner,
@@ -141,6 +202,74 @@ class MaintenanceClient:
         except Exception as e:
             sys.stderr.write(f"Failed to publish message: {e} \n")
 
+    @staticmethod
+    def _get_http_session() -> requests.Session:
+        """Get or create HTTP session with connection pooling"""
+        with MaintenanceClient._http_lock:
+            if MaintenanceClient._http_session is None:
+                MaintenanceClient._http_session = requests.Session()
+                # Configure session
+                MaintenanceClient._http_session.headers.update({
+                    "Content-Type": "application/json",
+                    "User-Agent": "MaintenanceClient/1.0.0"
+                })
+            return MaintenanceClient._http_session
+
+    @staticmethod
+    def _make_http_request(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Make HTTP request with retry logic"""
+        session = MaintenanceClient._get_http_session()
+        last_exception = None
+        
+        for attempt in range(MaintenanceClient.HTTP_MAX_RETRIES):
+            try:
+                response = session.post(
+                    url,
+                    json=payload,
+                    timeout=MaintenanceClient.HTTP_TIMEOUT
+                )
+                response.raise_for_status()
+                return response.json()
+                
+            except requests.exceptions.RequestException as e:
+                last_exception = e
+                sys.stderr.write(f"HTTP request failed (attempt {attempt + 1}/{MaintenanceClient.HTTP_MAX_RETRIES}): {e} \n")
+                
+                if attempt < MaintenanceClient.HTTP_MAX_RETRIES - 1:
+                    time.sleep(MaintenanceClient.HTTP_RETRY_DELAY * (2 ** attempt))  # Exponential backoff
+                else:
+                    sys.stderr.write(f"All {MaintenanceClient.HTTP_MAX_RETRIES} HTTP attempts failed \n")
+                    raise last_exception
+                    
+        raise last_exception
+
+    @staticmethod
+    def push_maintenance_msg_http(type: str, owner: str, token: str, message: str):
+
+        payload = {
+            "o": owner,
+            "t": token,
+            "m": message,
+            "dt": datetime.now(timezone.utc).isoformat(),
+            "type": type,
+        }
+        try:
+            # Send HTTP request to FastAPI endpoint
+            response = MaintenanceClient._make_http_request(
+                f"{MaintenanceClient.HTTP_BASE_URL}/log",
+                payload
+            )
+            
+            sys.stderr.write(f"HTTP message sent successfully: {owner}::{token} \n")
+            return response
+            
+        except requests.exceptions.RequestException as e:
+            # Re-raise for caller to handle
+            raise
+            
+        except Exception as e:
+            sys.stderr.write(f"Unexpected error during HTTP push: {e} \n")
+            return None
 
     @staticmethod
     def push_log_message(owner: str, token: str, message: str):
@@ -154,7 +283,45 @@ class MaintenanceClient:
         except Exception as e:
             sys.stderr.write(f"Error during log push: {e} \n")
 
+    @staticmethod
+    def push_log_message_http(owner: str, token: str, message: str) -> Optional[Dict[str, Any]]:
+        """
+        Convenience method to send log messages via HTTP
+        Uses type="log" by default
+        """
+        try:
+            return MaintenanceClient.push_maintenance_msg_http(
+                type="log",
+                owner=owner,
+                token=token,
+                message=message,
+            )
+        except Exception as e:
+            sys.stderr.write(f"Error during HTTP log push: {e} \n")
+            return None
+        
+    @staticmethod
+    def http_health_check() -> Optional[Dict[str, Any]]:
+        """Check if HTTP endpoint is healthy"""
+        try:
+            session = MaintenanceClient._get_http_session()
+            response = session.get(
+                f"{MaintenanceClient.HTTP_BASE_URL}/health",
+                timeout=MaintenanceClient.HTTP_TIMEOUT
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            sys.stderr.write(f"HTTP health check failed: {e} \n")
+            return None
 
+    @staticmethod
+    def close_http_session():
+        """Close HTTP session to release resources"""
+        with MaintenanceClient._http_lock:
+            if MaintenanceClient._http_session:
+                MaintenanceClient._http_session.close()
+                MaintenanceClient._http_session = None
 class MaintenanceLogHandler(logging.Handler):
     _local = threading.local()
     def __init__(self, owner: str, token: str):
@@ -173,7 +340,7 @@ class MaintenanceLogHandler(logging.Handler):
         try:
             msg = self.format(record)
             
-            MaintenanceClient.push_log_message(
+            MaintenanceClient.push_log_message_http(
                 owner=self.owner,
                 token=self.token,
                 message=msg,
@@ -181,6 +348,31 @@ class MaintenanceLogHandler(logging.Handler):
         except Exception as e:
             sys.stderr.write(f"log push failed: {e}\n")
 
+class MaintenanceLogHandlerMq(logging.Handler):
+    _local = threading.local()
+    def __init__(self, owner: str, token: str):
+        super().__init__()
+        self.owner = owner
+        self.token = token
+
+    def emit(self, record: logging.LogRecord):
+        if getattr(self._local, "in_emit", False):
+            return
+
+        self._local.in_emit = True
+        if record.name in ["__pika", "pika"]:
+            print(f"pika {record}")
+            return
+        try:
+            msg = self.format(record)
+            
+            MaintenanceClient.push_log_message_http(
+                owner=self.owner,
+                token=self.token,
+                message=msg,
+            )
+        except Exception as e:
+            sys.stderr.write(f"log push failed: {e}\n")
 
 def setup_maintenance_logging(owner: str, token: str):
     host = os.getenv("MAINTENANCE_HOST")
@@ -196,9 +388,10 @@ def setup_maintenance_logging(owner: str, token: str):
 
     MaintenanceClient.HOST = host
     MaintenanceClient.PORT = port
-
+    MaintenanceClient.HTTP_BASE_URL = f"http://{host}:{port}"
     # Ждём брокер
-    MaintenanceClient.wait_for_broker()
+    wait_timeout = 60 * 5 # 5m
+    MaintenanceClient.wait_for_http_service(timeout_sec=wait_timeout)
 
     handler = MaintenanceLogHandler(owner=owner, token=token)
     handler.setLevel(logging.INFO)
@@ -210,5 +403,6 @@ def setup_maintenance_logging(owner: str, token: str):
 
     root_logger = logging.getLogger()
     root_logger.addHandler(handler)
+
 
 

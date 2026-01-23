@@ -10,7 +10,7 @@ services:
       - ${LUNARICORN_HOME}/leader_data:/opt/lunaricorn/leader_data
     environment:
       - MAINTENANCE_HOST=192.168.0.18
-      - MAINTENANCE_PORT=8006
+      - MAINTENANCE_PORT=${MAINTENANCE_API_PORT}
       - PYTHONUNBUFFERED=1
       - db_type=postgresql
       - db_host=lunaricorn-pg
@@ -65,6 +65,7 @@ services:
     ports:
       - 8006:5672
       - 15672:15672
+      - ${MAINTENANCE_API_PORT}:8000
     volumes:
       - ${LUNARICORN_HOME}/maintenance:/app/data/
       - ${LUNARICORN_HOME}/rmq:/var/log/rabbitmq/
