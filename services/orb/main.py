@@ -17,7 +17,7 @@ from grpc_app import GRPC_serve, GRPCServer
 
 # Import the Flask app from rest_app
 from rest_app import create_app
-
+from lunaricorn.utils.maintenance import *
 def start_grpc_server(storage, host: str = '0.0.0.0', port: int = 50051) -> tuple[GRPCServer, threading.Thread]:
     """
     Start GRPC server in a separate thread and return server instance and thread.
@@ -92,6 +92,7 @@ def stop_grpc_server(grpc_server: GRPCServer, grpc_thread: threading.Thread, tim
 
 if __name__ == "__main__":
     logger = setup_orb_logging("orb_main")
+    setup_maintenance_logging(owner="orb", token=f"orb_{apptoken()}")
     logger.info("Starting Orb Service")
     try:
         config = internal.load_config()

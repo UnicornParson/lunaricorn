@@ -19,6 +19,8 @@ RABBIT_HOST = "localhost"
 QUEUE_NAME = "incoming_json"
 RABBIT_USER = "guest"
 RABBIT_PASSWORD = "guest"
+MAX_RETRIES = 3
+RETRY_DELAY = 1  # секунды
 # ==================
 
 # Global variables for connection
@@ -109,35 +111,46 @@ def ensure_connection():
             raise RuntimeError("Failed to restore RabbitMQ connection")
     
     return True
-
 def publish_message_safe(message: dict):
-    """Safely publish message with connection verification"""
-    global rabbit_channel
+    """Безопасная отправка сообщения с обработкой ошибок Pika"""
+    global rabbit_connection, rabbit_channel
     
-    try:
-        # Verify connection
-        ensure_connection()
-        
-        # Publish message
-        rabbit_channel.basic_publish(
-            exchange='',
-            routing_key=QUEUE_NAME,
-            body=json.dumps(message),
-            properties=pika.BasicProperties(
-                delivery_mode=2,  # persistent message
-                content_type='application/json',
-                timestamp=int(datetime.now().timestamp())
-            )
-        )
-        
-        logger.debug(f"Message sent to queue {QUEUE_NAME}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error sending message: {e}")
-        # Try to reconnect and send again
+    for attempt in range(MAX_RETRIES):
         try:
-            if reconnect_rabbit():
+            with connection_lock:
+                # Проверяем и восстанавливаем соединение
+                if (rabbit_connection is None or rabbit_channel is None or 
+                    not rabbit_connection.is_open or not rabbit_channel.is_open):
+                    
+                    # Закрываем старые соединения
+                    try:
+                        if rabbit_channel:
+                            rabbit_channel.close()
+                        if rabbit_connection:
+                            rabbit_connection.close()
+                    except:
+                        pass
+                    
+                    # Создаем новое соединение
+                    credentials = pika.PlainCredentials(RABBIT_USER, RABBIT_PASSWORD)
+                    parameters = pika.ConnectionParameters(
+                        host=RABBIT_HOST,
+                        credentials=credentials,
+                        heartbeat=30,
+                        blocked_connection_timeout=10,
+                        socket_timeout=5,
+                        stack_timeout=5,
+                        connection_attempts=3,
+                        retry_delay=1
+                    )
+                    
+                    rabbit_connection = pika.BlockingConnection(parameters)
+                    rabbit_channel = rabbit_connection.channel()
+                    rabbit_channel.queue_declare(queue=QUEUE_NAME, durable=True)
+                    
+                    logger.info(f"Reconnected to RabbitMQ. Queue: {QUEUE_NAME}")
+                
+                # Отправляем сообщение
                 rabbit_channel.basic_publish(
                     exchange='',
                     routing_key=QUEUE_NAME,
@@ -148,12 +161,24 @@ def publish_message_safe(message: dict):
                         timestamp=int(datetime.now().timestamp())
                     )
                 )
-                logger.info("Message sent after reconnection")
+                
+                logger.debug(f"Message sent to queue {QUEUE_NAME}")
                 return True
-        except Exception as retry_e:
-            logger.error(f"Error during retry send: {retry_e}")
-            
-        return False
+                
+        except pika.exceptions.StreamLostError as e:
+            logger.warning(f"Stream lost on attempt {attempt + 1}: {e}")
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(RETRY_DELAY)
+                continue
+            else:
+                logger.error(f"Failed to send message after {MAX_RETRIES} attempts")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Unexpected error sending message: {e}")
+            return False
+    
+    return False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

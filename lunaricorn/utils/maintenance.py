@@ -46,6 +46,22 @@ class MaintenanceClient:
     _lock = threading.Lock()
     _http_session: requests.Session | None = None
     _http_lock = threading.Lock()
+
+    
+    http_headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip, deflate, br",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) "
+            "Gecko/20100101 Firefox/122.0"
+        ),
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        "Connection": "close",
+    }
+
     @staticmethod
     def _get_channel() -> pika.channel.Channel:
         with MaintenanceClient._lock:
@@ -203,45 +219,40 @@ class MaintenanceClient:
             sys.stderr.write(f"Failed to publish message: {e} \n")
 
     @staticmethod
-    def _get_http_session() -> requests.Session:
-        """Get or create HTTP session with connection pooling"""
-        with MaintenanceClient._http_lock:
-            if MaintenanceClient._http_session is None:
-                MaintenanceClient._http_session = requests.Session()
-                # Configure session
-                MaintenanceClient._http_session.headers.update({
-                    "Content-Type": "application/json",
-                    "User-Agent": "MaintenanceClient/1.0.0"
-                })
-            return MaintenanceClient._http_session
-
-    @staticmethod
     def _make_http_request(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Make HTTP request with retry logic"""
-        session = MaintenanceClient._get_http_session()
+        """Make HTTP request with retry logic (no persistent session)"""
         last_exception = None
-        
+
+
         for attempt in range(MaintenanceClient.HTTP_MAX_RETRIES):
             try:
-                response = session.post(
+                with requests.post(
                     url,
                     json=payload,
-                    timeout=MaintenanceClient.HTTP_TIMEOUT
-                )
-                response.raise_for_status()
-                return response.json()
-                
+                    headers=MaintenanceClient.http_headers,
+                    timeout=MaintenanceClient.HTTP_TIMEOUT,
+                ) as response:
+                    response.raise_for_status()
+                    return response.json()
+
             except requests.exceptions.RequestException as e:
                 last_exception = e
-                sys.stderr.write(f"HTTP request failed (attempt {attempt + 1}/{MaintenanceClient.HTTP_MAX_RETRIES}): {e} \n")
-                
+                sys.stderr.write(
+                    f"HTTP request failed (attempt {attempt + 1}/"
+                    f"{MaintenanceClient.HTTP_MAX_RETRIES}): {e}\n"
+                )
+
                 if attempt < MaintenanceClient.HTTP_MAX_RETRIES - 1:
-                    time.sleep(MaintenanceClient.HTTP_RETRY_DELAY * (2 ** attempt))  # Exponential backoff
+                    time.sleep(
+                        MaintenanceClient.HTTP_RETRY_DELAY * (2 ** attempt)
+                    )  # exponential backoff
                 else:
-                    sys.stderr.write(f"All {MaintenanceClient.HTTP_MAX_RETRIES} HTTP attempts failed \n")
-                    raise last_exception
-                    
+                    sys.stderr.write(
+                        f"All {MaintenanceClient.HTTP_MAX_RETRIES} HTTP attempts failed\n"
+                    )
+                    raise
         raise last_exception
+
 
     @staticmethod
     def push_maintenance_msg_http(type: str, owner: str, token: str, message: str):
@@ -285,10 +296,6 @@ class MaintenanceClient:
 
     @staticmethod
     def push_log_message_http(owner: str, token: str, message: str) -> Optional[Dict[str, Any]]:
-        """
-        Convenience method to send log messages via HTTP
-        Uses type="log" by default
-        """
         try:
             return MaintenanceClient.push_maintenance_msg_http(
                 type="log",
@@ -302,18 +309,19 @@ class MaintenanceClient:
         
     @staticmethod
     def http_health_check() -> Optional[Dict[str, Any]]:
-        """Check if HTTP endpoint is healthy"""
         try:
-            session = MaintenanceClient._get_http_session()
-            response = session.get(
+            with requests.get(
                 f"{MaintenanceClient.HTTP_BASE_URL}/health",
-                timeout=MaintenanceClient.HTTP_TIMEOUT
-            )
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            sys.stderr.write(f"HTTP health check failed: {e} \n")
+                headers=MaintenanceClient.http_headers,
+                timeout=MaintenanceClient.HTTP_TIMEOUT,
+            ) as response:
+                response.raise_for_status()
+                return response.json()
+
+        except requests.exceptions.RequestException as e:
+            sys.stderr.write(f"HTTP health check failed: {e}\n")
             return None
+
 
     @staticmethod
     def close_http_session():
