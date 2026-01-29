@@ -2,6 +2,12 @@
 mkdir -p tmp
 set -e
 IMG_NAME=lunaricorn_leader
+BASE_IMG=lunaricorn_leader_base
+
+if ! docker image inspect "$BASE_IMG" &>/dev/null; then
+    echo "Base image $BASE_IMG not found. Building it first..."
+    "$(dirname "$0")/make_base.sh"
+fi
 
 rm -rvf tmp/lunaricorn.tgz
 tar -cvzf tmp/lunaricorn.tgz ../../lunaricorn

@@ -4,7 +4,7 @@ set -e
 start_time=$(date +%s)
 echo "Building maintenance service..."
 pushd maintenance > /dev/null
-./build.sh
+./make_base.sh
 popd > /dev/null
 
 echo "Building data/pg service..."

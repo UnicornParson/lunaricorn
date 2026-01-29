@@ -1,16 +1,13 @@
 #!/bin/bash
 mkdir -p tmp
 set -e
-IMG_NAME=lunaricorn_orb
-BASE_IMG=lunaricorn_orb_base
+IMG_NAME=lunaricorn_maintenance
+BASE_IMG=lunaricorn_maintenance_base
 
 if ! docker image inspect "$BASE_IMG" &>/dev/null; then
     echo "Base image $BASE_IMG not found. Building it first..."
     "$(dirname "$0")/make_base.sh"
 fi
-
-rm -rvf tmp/lunaricorn.tgz
-tar -cvzf tmp/lunaricorn.tgz ../../lunaricorn
 
 docker build --no-cache --progress=plain -t $IMG_NAME -f Dockerfile . 2>&1 | tee -i tmp/build_app.log
 
