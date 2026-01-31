@@ -1,21 +1,9 @@
-FROM python:3.14.0-trixie
+FROM lunaricorn_signaling_base
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV DEBIAN_FRONTEND=noninteractive
 USER root
-RUN apt update && apt install -y \
-    gcc \
-    g++ \
-    iproute2
 
-RUN mkdir -p /opt/lunaricorn/signaling_data/logs
-COPY cfg/config.yaml /opt/lunaricorn/signaling_data/config.yaml
-COPY requirements.txt /opt/lunaricorn/signaling/app/   
-RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r /opt/lunaricorn/signaling/app/requirements.txt
-
+VOLUME ["/opt/lunaricorn/signaling/app"]
 # Copy application code to the specified directory
 COPY . /opt/lunaricorn/signaling/app/
 ADD tmp/lunaricorn.tgz /opt/lunaricorn/signaling/app
@@ -25,15 +13,13 @@ RUN pip install --no-cache-dir -r /opt/lunaricorn/signaling/app/lunaricorn/requi
 WORKDIR /opt/lunaricorn/signaling/app
 
 # Expose ZeroMQ ports
-EXPOSE 5555 5556 
+EXPOSE 5555 5556
 
 # Expose api port
 EXPOSE 5557
 
 # Set volume for persistent data
 VOLUME ["/opt/lunaricorn/signaling_data"]
-
-
 
 # Run the application
 CMD ["python", "main.py"]

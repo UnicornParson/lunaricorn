@@ -17,14 +17,14 @@ pushd leader > /dev/null
 ./make_base.sh
 popd > /dev/null
 
-echo "Building portal service..."
+echo "Building portal service (base)..."
 pushd portal > /dev/null
-./build.sh
+./make_base.sh
 popd > /dev/null
 
-echo "Building signaling service..."
+echo "Building signaling service (base)..."
 pushd signaling > /dev/null
-./build.sh
+./make_base.sh
 popd > /dev/null
 
 echo "Building orb service..."

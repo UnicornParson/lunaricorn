@@ -8,7 +8,7 @@ fi
 
 echo "Building leader service..."
 pushd leader > /dev/null
-./build.sh
+./make_app.sh
 popd > /dev/null
 
 docker compose stop leader && docker compose rm -f leader

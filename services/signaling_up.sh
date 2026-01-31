@@ -21,7 +21,7 @@ done
 if $flag_f; then
     echo "Building signaling service..."
     pushd signaling > /dev/null
-    ./build.sh
+    ./make_app.sh
     popd > /dev/null
 fi
 docker compose stop signaling && docker compose rm -f signaling

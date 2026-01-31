@@ -8,7 +8,7 @@ fi
 
 echo "Building portal service..."
 pushd portal > /dev/null
-./build.sh
+./make_app.sh
 popd > /dev/null
 
 docker compose stop portal && docker compose rm -f portal

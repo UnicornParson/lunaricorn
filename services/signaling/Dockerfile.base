@@ -1,0 +1,19 @@
+FROM python:3.14.0-trixie
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DEBIAN_FRONTEND=noninteractive
+USER root
+RUN apt update && apt upgrade -y
+RUN apt update && apt install -y \
+    gcc \
+    g++ \
+    iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /opt/lunaricorn/signaling_data/logs
+COPY cfg/config.yaml /opt/lunaricorn/signaling_data/config.yaml
+COPY requirements.txt /opt/lunaricorn/signaling/app/
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir -r /opt/lunaricorn/signaling/app/requirements.txt

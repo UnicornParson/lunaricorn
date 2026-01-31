@@ -1,25 +1,14 @@
-FROM python:3.14.0-trixie
+FROM lunaricorn_portal_base
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV DEBIAN_FRONTEND=noninteractive
 USER root
-RUN apt update && apt install -y \
-    gcc \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN mkdir -p /opt/lunaricorn/portal/logs
-COPY cfg/config.yaml /opt/lunaricorn/portal/data/config.yaml
-COPY requirements.txt /opt/lunaricorn/portal/app/   
 
 RUN pip install --no-cache-dir -r /opt/lunaricorn/portal/app/requirements.txt
-
+VOLUME ["/opt/lunaricorn/portal/app"]
 # Copy application code to the specified directory
 COPY . /opt/lunaricorn/portal/app/
 ADD tmp/lunaricorn.tgz /opt/lunaricorn/portal/app
 RUN pip install --no-cache-dir -r /opt/lunaricorn/portal/app/lunaricorn/requirements.txt
+
 # Set working directory to the application directory
 WORKDIR /opt/lunaricorn/portal/app
 
