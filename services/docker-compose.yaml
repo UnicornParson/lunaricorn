@@ -101,7 +101,8 @@ services:
       dockerfile: Dockerfile
     container_name: lunaricorn-orb
     ports:
-      - "${ORB_API_PORT}:8080"
+      - "${ORB_API_PORT}:50051"
+      - "${ORB_REST_PORT}:8080"
     volumes:
       - ${LUNARICORN_HOME}/orb_data:/opt/lunaricorn/orb/data
       - ${LUNARICORN_HOME}/orb_storage:/opt/lunaricorn/orb/file_storage

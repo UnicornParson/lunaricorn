@@ -4,17 +4,7 @@ from .object import *
 from lunaricorn.utils.db_manager import *
 from datetime import datetime, timezone
 import json
-if sys.version_info >= (3, 14):
-    from uuid import uuid7
-else:
-    try:
-        from uuid7 import uuid7 as uuid7_std
-        uuid7 = lambda: uuid7_std().to_uuid()
-    except ImportError:
-        raise ImportError(
-            "Для Python < 3.14 требуется пакет uuid7-standard\n"
-            "Установите: pip install uuid7-standard"
-        )
+import uuid
 
 class OrbDataSybtypes(Enum):
     Json = "@json"
@@ -69,9 +59,7 @@ class OrbDataObject(LunaObject):
         Returns:
             OrbDataObject: Initialized instance
         """
-        import uuid
-        import json
-        from datetime import datetime
+
         
         # Parse UUID
         u = uuid.UUID(record['u']) if isinstance(record['u'], str) else record['u']

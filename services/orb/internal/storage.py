@@ -1,16 +1,5 @@
 import json
-try:
-    from uuid import uuid7
-except ImportError:
-    try:
-        from uuid7 import uuid7 as uuid7_std
-        uuid7 = lambda: uuid7_std().to_uuid()
-    except ImportError:
-        raise ImportError(
-            "Требуется Python 3.14+ или установка пакета:\n"
-            "pip install uuid7-standard"
-        )
-    
+import uuid 
 from lunaricorn.utils.db_manager import *
 import lunaricorn.api.signaling as lsig
 import logging
@@ -284,10 +273,10 @@ class DataStorage:
             
 
             # Check if this is a new record (id is None, <= 0, or doesn't exist)
-            is_new_record = (not hasattr(data_obj, 'u') or data_obj.u is None or data_obj.u == uuid.uuid7())
+            is_new_record = (not hasattr(data_obj, 'u') or data_obj.u is None or data_obj.u == uuid.uuid1())
             if is_new_record:
                 # make new one
-                data_obj.u = uuid.uuid7()
+                data_obj.u = uuid.uuid1()
                 data_obj.ctime = datetime.now(timezone.utc).replace(tzinfo=None)
 
             # Prepare data for database operation
@@ -341,7 +330,7 @@ class DataStorage:
                 'data_type': getattr(meta_obj, 'data_type', '@json'),
                 'flags': getattr(meta_obj, 'flags', []),
                 'src': getattr(meta_obj, 'handle', 0),
-                'u': getattr(meta_obj, 'u', uuid.uuid7()),
+                'u': getattr(meta_obj, 'u', uuid.uuid1()),
                 'ctime': utime_s()
             }
 

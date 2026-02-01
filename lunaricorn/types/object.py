@@ -2,21 +2,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 import sys
-
-if sys.version_info >= (3, 14):
-    # Python 3.14+ имеет нативный uuid7
-    from uuid import uuid7
-else:
-    # Для старых версий используем uuid7-standard
-    try:
-        from uuid7 import uuid7 as uuid7_std
-        uuid7 = lambda: uuid7_std().to_uuid()
-    except ImportError:
-        raise ImportError(
-            "Для Python < 3.14 требуется пакет uuid7-standard\n"
-            "Установите: pip install uuid7-standard uuid-utils uuid7"
-        )
-    
+import uuid
+  
 from datetime import datetime, timezone
 class BaseObjectType(Enum):
     Base = "@base"
@@ -30,12 +17,12 @@ def utime_s() -> str:
 @dataclass
 class LunaObject:
     """Base class for all Luna objects with serialization capabilities"""
-    u: uuid7
+    u: uuid.uuid1
     type: BaseObjectType
 
     def __post_init__(self):
         """Initialize type after object creation"""
-        self.u = uuid7()
+        self.u = uuid.uuid1()
         self.type = BaseObjectType.Base
 
     def toDict(self) -> dict:

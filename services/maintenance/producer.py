@@ -9,10 +9,94 @@ from contextlib import asynccontextmanager
 from typing import Optional
 import threading
 import uvicorn
+import os
 
-# Configure logger
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+DEFAULT_LOG_CONFIG = """
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {
+        "detailed": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "INFO",
+            "formatter": "detailed",
+            "stream": "ext://sys.stdout"
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "INFO",
+            "formatter": "detailed",
+            "filename": null,
+            "maxBytes": 104857600,
+            "backupCount": 20,
+            "encoding": "utf8"
+        }
+    },
+    "loggers": {
+        "": {
+            "level": "INFO",
+            "handlers": ["console", "file"]
+        }
+    }
+}
+"""
+DATA_DIR="/app/data"
+LOG_CONFIG = f"{DATA_DIR}/producer_logging_config.json"  # Путь к файлу конфигурации
+
+
+# ======================================================
+# logging
+def make_logging_config():
+    with open(LOG_CONFIG, 'w', encoding='utf-8') as f:
+        f.write(DEFAULT_LOG_CONFIG)
+
+def setup_logging():
+    # Создаем директорию для логов, если ее нет
+    os.makedirs(DATA_DIR, exist_ok=True)
+    
+    # Создаем конфигурационный файл, если его нет
+    if not os.path.exists(LOG_CONFIG):
+        try:
+            with open(LOG_CONFIG, 'w', encoding='utf-8') as f:
+                f.write(DEFAULT_LOG_CONFIG)
+            logger = logging.getLogger(__name__)
+            logger.info(f"Создан файл конфигурации: {LOG_CONFIG}")
+        except Exception as e:
+            print(f"Ошибка при создании конфигурационного файла: {e}")
+            # Создаем базовый логгер для вывода ошибки
+            logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+            return logging.getLogger()
+    
+    try:
+        # Читаем конфигурацию
+        with open(LOG_CONFIG, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Устанавливаем путь к файлу лога
+        log_file_path = f"{DATA_DIR}/producer.log"
+        config["handlers"]["file"]["filename"] = log_file_path
+        
+        # Применяем конфигурацию
+        logging.config.dictConfig(config)
+        
+        # Проверяем, что файл создается
+        logger = logging.getLogger(__name__)
+        logger.info(f"Логирование настроено. Файл лога: {log_file_path}")
+        
+        return logger
+    except Exception as e:
+        print(f"Ошибка при настройке логирования: {e}")
+        # Создаем базовый логгер для вывода ошибок
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        return logging.getLogger()
+logger = setup_logging()
+
 
 # ===== CONFIG =====
 RABBIT_HOST = "localhost"
