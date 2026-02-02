@@ -12,23 +12,15 @@ import os
 from lunaricorn.api.leader import ConnectorUtils as leader
 from lunaricorn.api.signaling import SignalingClient as signaling
 
-# Create Flask app
 app = Flask(__name__)
-
-# global data storage
 storage = None
 
-
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Health check endpoint
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
     try:
-        # Simple health check - just return that the service is running
         return jsonify({
             'status': 'healthy',
             'timestamp': time.time(),
@@ -41,7 +33,6 @@ def health_check():
             'error': str(e)
         }), 500
 
-# Additional endpoints can be added here
 @app.route('/', methods=['GET'])
 def root():
     """Root endpoint"""
@@ -50,7 +41,7 @@ def root():
         'status': 'running'
     })
 
-# Error handlers
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({'error': 'Not found'}), 404
@@ -59,7 +50,6 @@ def not_found(error):
 def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
-# Global variables for tracking service state
 service_running = True
 
 def signal_handler(sig, frame):
@@ -69,11 +59,9 @@ def signal_handler(sig, frame):
     service_running = False
     sys.exit(0)
 
-# Register signal handlers
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
-# Export the app for use in main.py
 def create_app(orb_storage):
     global storage
     storage = orb_storage

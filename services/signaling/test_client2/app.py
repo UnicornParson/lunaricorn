@@ -37,7 +37,7 @@ except Exception as e:
 for i in range(10):
     responce = client.push_event(
         event_type="test_event",
-        payload={"message": "Hello, World!", "value": i, "u": str(uuid.uuid4())},
+        payload={"message": "Hello, World!", "value": i, "u": str(uuid.uuid1())},
         source="test_client",
         tags=["test", "example"]
     )

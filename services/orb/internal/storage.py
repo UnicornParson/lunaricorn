@@ -1,5 +1,5 @@
 import json
-import uuid 
+import uuid
 from lunaricorn.utils.db_manager import *
 import lunaricorn.api.signaling as lsig
 import logging
@@ -47,8 +47,6 @@ class DataStorage:
             self.logger.info("Database connection initialized for orb service")
             self.sig_cfg = lsig.SignalingClientConfig(db_cfg.SIGNALING_HOST, db_cfg.SIGNALING_REQ, db_cfg.SIGNALING_PUB, db_cfg.SIGNALING_API)
             self.logger.info(f"connect to signaling {str(self.sig_cfg)}")
-
-
             self.sig_client = lsig.SignalingClient(self.sig_cfg, self.agent_id)
             rc = self.sig_client.connect()
             if not rc:
@@ -68,7 +66,6 @@ class DataStorage:
         return self.db_enabled and self.signaling_enabled and self.ready
 
     def _prepare_data_for_db(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Prepare data for database insertion, converting lists/dicts to JSON strings for jsonb columns"""
         prepared_data = {}
         for key, value in data.items():
             if isinstance(value, (list, dict)):
@@ -95,7 +92,6 @@ class DataStorage:
         return []
 
     def _create_record(self, table_name: str, data: Dict[str, Any], id_field="id") -> int:
-        """Create a new record in the specified table"""
         prepared_data = self._prepare_data_for_db(data)
         self.logger.info(f"@@ _create_record entry  \n data: {data} \n prepared_data: {prepared_data}")
         columns = list(prepared_data.keys())
@@ -127,7 +123,6 @@ class DataStorage:
                                     )
 
     def _get_record(self, table_name: str, record_id: int, columns:list = [], id_field="id") -> Optional[Dict[str, Any]]:
-        """Get a record by ID from the specified table"""
         columns_str = "*"
         if columns is None:
             columns = []
@@ -162,7 +157,6 @@ class DataStorage:
         return None
 
     def _get_table_columns(self, table_name: str) -> List[str]:
-        """Get column names for a table"""
         query = """
             SELECT column_name
             FROM information_schema.columns
@@ -183,7 +177,6 @@ class DataStorage:
         return []
 
     def _update_record(self, table_name: str, record_id, data: Dict[str, Any], id_field="id") -> bool:
-        """Update a record in the specified table"""
         prepared_data = self._prepare_data_for_db(data)
         self.logger.info(f"@@ _update_record entry  \n data: {data} \n prepared_data: {prepared_data}")
         columns = list(prepared_data.keys())
@@ -209,7 +202,6 @@ class DataStorage:
             return False
 
     def _delete_record(self, table_name: str, record_id) -> bool:
-        """Delete a record from the specified table"""
         query = f"""
             DELETE FROM {table_name}
             WHERE id = %s
@@ -249,30 +241,12 @@ class DataStorage:
         return []
 
     def push_data(self, data_obj: OrbDataObject) -> OrbDataObject:
-        """
-        Push OrbDataObject to the database.
-        If record doesn't exist, creates new one. If exists, updates it.
-
-        Args:
-            data_obj (OrbDataObject): OrbDataObject instance to push to database
-
-        Returns:
-            OrbDataObject: Updated object with database ID if new record was created
-
-        Raises:
-            StorageError: If database operation fails
-            BrokenStorageError: If database connection is not available
-            ValueError: If provided object is not an instance
-        """
         if not self.db_enabled:
             self.logger.error("Database is not enabled, cannot push data object")
             raise BrokenStorageError("Database connection is not available")
         if not isinstance(data_obj, OrbDataObject):
             raise ValueError("Expected OrbDataObject instance")
         try:
-            
-
-            # Check if this is a new record (id is None, <= 0, or doesn't exist)
             is_new_record = (not hasattr(data_obj, 'u') or data_obj.u is None or data_obj.u == uuid.uuid1())
             if is_new_record:
                 # make new one
@@ -286,7 +260,6 @@ class DataStorage:
                 data_obj.u = new_id
                 self.notify_signaling(lsig.SignalingEventType.FileOp_new, data_obj.u, data_obj.u)
                 self.logger.info(f"Created new orb_data record with UUID: {data_obj.u}")
-
             else:
                 # Update existing record
                 self.logger.info(f"Updating existing orb_data record with UUID: {data_obj.u}")
@@ -306,26 +279,11 @@ class DataStorage:
             raise StorageError(f"Failed to push data object: {e}")
 
     def push_meta(self, meta_obj: OrbMetaObject) -> OrbMetaObject:
-        """
-        Push OrbMetaObject to the database.
-        If record doesn't exist, creates new one. If exists, updates it.
-
-        Args:
-            meta_obj: OrbMetaObject instance to push to database
-
-        Returns:
-            OrbMetaObject: Updated object with database ID if new record was created
-
-        Raises:
-            StorageError: If database operation fails
-            BrokenStorageError: If database connection is not available
-        """
         if not self.db_enabled:
             self.logger.error("Database is not enabled, cannot push meta object")
             raise BrokenStorageError("Database connection is not available")
 
         try:
-            # Prepare data for database operation
             data = {
                 'data_type': getattr(meta_obj, 'data_type', '@json'),
                 'flags': getattr(meta_obj, 'flags', []),
@@ -346,16 +304,12 @@ class DataStorage:
                 if new_id is None:
                     raise StorageError("Failed to create new orb_meta record")
 
-                # Update the object with the new ID
                 meta_obj.id = new_id
                 self.notify_signaling(lsig.SignalingEventType.FileOp_new, meta_obj.id, data['u'])
                 self.logger.info(f"Created new orb_meta record with ID: {new_id}")
 
             else:
-                # Update existing record
                 self.logger.info(f"Updating existing orb_meta record with ID: {meta_obj.id}")
-
-                # For updates, we don't change the ctime
                 success = self._update_record('public.orb_meta', meta_obj.id, data)
                 if not success:
                     raise StorageError(f"Failed to update orb_meta record with ID: {meta_obj.id}")
@@ -370,7 +324,7 @@ class DataStorage:
         except Exception as e:
             self.logger.error(f"Unexpected error during push_meta operation: {e}")
             raise StorageError(f"Failed to push meta object: {e}")
-        
+
     def fetch_meta(self, id:int):
         if not id:
             raise ValueError("Invalid or missing 'id'")
@@ -390,17 +344,14 @@ class DataStorage:
             return None
         data_obj = OrbDataObject.from_record(db_record)
         return data_obj
-    
+
     def push_orb_data(self, data_obj: OrbDataObject) -> OrbDataObject:
-        """Push OrbDataObject to storage (alias for push_data)."""
         return self.push_data(data_obj)
-    
+
     def push_orb_meta(self, meta_obj: OrbMetaObject) -> OrbMetaObject:
-        """Push OrbMetaObject to storage (alias for push_meta)."""
         return self.push_meta(meta_obj)
-    
+
     def fetch_orb_data(self, identifier: str) -> Optional[OrbDataObject]:
-        """Fetch OrbDataObject by UUID identifier."""
         try:
             # Try to parse as UUID
             u = uuid.UUID(identifier)
@@ -408,9 +359,8 @@ class DataStorage:
         except ValueError:
             # If not a valid UUID, return None
             return None
-    
+
     def fetch_orb_meta(self, identifier: str) -> Optional[OrbMetaObject]:
-        """Fetch OrbMetaObject by identifier (ID or UUID)."""
         try:
             # Try to parse as integer ID
             meta_id = int(identifier)

@@ -9,9 +9,7 @@ def load_config():
 
 if __name__ == "__main__":
     logger = setup_logging("portal_main")
-
     logger.info("Starting Portal API with uvicorn")
-    
     try:
         # Import app from app.py
         from app import app
@@ -21,10 +19,7 @@ if __name__ == "__main__":
         portal_config = config.get("portal", {})
         host = portal_config.get("host", "0.0.0.0")
         port = portal_config.get("port", 8000)
-
         logger.info(f"Starting uvicorn server on {host}:{port}")
-        
-        # Run uvicorn with values from config.yaml
         uvicorn.run(
             "app:app",
             host=host,

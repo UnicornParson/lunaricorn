@@ -6,7 +6,6 @@ class OrbDatabaseManager(DatabaseManager):
         self._last_cursor_description = None
 
     def get_last_cursor_description(self):
-        """Get the description of the last cursor used in execute_query"""
         return self._last_cursor_description
     
     def installer_impl(self, cur):

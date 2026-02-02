@@ -18,19 +18,15 @@ from lunaricorn.utils.maintenance import *
 
 logger = setup_logging("portal_app", "/opt/lunaricorn/portal_data/logs")
 setup_maintenance_logging(owner="portal", token=f"portal_{apptoken()}")
-# Global shutdown flag for graceful termination
 shutdown_event = threading.Event()
 retry_thread = None
 
 app = FastAPI()
-
 app.include_router(cluster.router, prefix="/api/cluster")
-
 app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 
 @app.get("/", tags=["Root"])
 async def root():
-    """Serve the main HTML page"""
     return FileResponse("static/index.html")
 
 @app.get("/favicon.ico", tags=["Root"])
@@ -39,14 +35,12 @@ async def favicon():
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Health check endpoint"""
     logger.debug("Health check endpoint accessed")
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
-    """Custom 404 error handler"""
     logger.warning(f"404 error for path: {request.url.path}")
     return JSONResponse(
         status_code=404,
@@ -55,7 +49,6 @@ async def not_found_handler(request: Request, exc):
 
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc):
-    """Custom 500 error handler"""
     logger.error(f"500 error for path: {request.url.path}, error: {exc}")
     return JSONResponse(
         status_code=500,
@@ -95,7 +88,6 @@ def init_components(config):
         return False
 
 def retry_cluster_connection():
-    """Background thread function to retry cluster connection every 2 seconds"""
     global shutdown_event
     while not shutdown_event.is_set():
         try:
@@ -124,7 +116,6 @@ def retry_cluster_connection():
 
 def register_service():
     logger.info("register_service started")
-    # Register the portal service with the leader using parameters from config
     portal_cfg = ClusterEngine.config.get("portal", {})
     cluster_cfg = ClusterEngine.config.get("cluster", {})
     leader_url = cluster_cfg.get("leader")
@@ -136,7 +127,6 @@ def register_service():
     host = portal_cfg.get("host")
     port = portal_cfg.get("port")
 
-    # Create the connector (if not already provided)
     connector = ConnectorUtils.create_leader_connector(base_url=leader_url)
 
     try:
@@ -155,7 +145,6 @@ def register_service():
         return None
 
 def signal_handler(signum, frame):
-    """Handle shutdown signals gracefully"""
     global shutdown_event, retry_thread
     logger.info(f"Received signal {signum}, initiating graceful shutdown...")
     shutdown_event.set()
@@ -171,7 +160,6 @@ def signal_handler(signum, frame):
     sys.exit(0)
 
 def periodic_register_service():
-    """Periodically call register_service every 5 seconds until shutdown_event is set."""
     while not shutdown_event.is_set():
         try:
             register_service()
@@ -181,25 +169,18 @@ def periodic_register_service():
         if shutdown_event.wait(5):
             break
 
-# Initialize components when module is imported
 logger.info("Starting Portal API with uvicorn")
-
-# Set up signal handlers for graceful shutdown
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
-
-# Initialize components
 config = load_config()
 init_success = init_components(config)
 logger.info(f"init_components finished: {init_success}")
 
-# If initial initialization failed, start retry thread
 if not init_success:
     logger.info("Starting background retry thread for cluster connection")
     retry_thread = threading.Thread(target=retry_cluster_connection, name="RetryClusterConnection", daemon=True)
     retry_thread.start()
     
-# Start the periodic registration in a background thread
 register_thread = threading.Thread(target=periodic_register_service, name="PeriodicRegisterService", daemon=True)
 register_thread.start()
 

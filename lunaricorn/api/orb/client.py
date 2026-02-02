@@ -3,7 +3,7 @@ from grpc import ChannelConnectivity
 from typing import Optional, List, Union
 import uuid
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from google.protobuf.json_format import MessageToDict, ParseDict
 
 from lunaricorn.api.orb.datastorage_pb2 import (
@@ -22,39 +22,15 @@ from lunaricorn.types.orb_meta_object import OrbMetaObject
 
 
 class OrbClient:
-    """
-    Клиент для работы с Orb gRPC API.
-    Предоставляет удобный интерфейс для работы с OrbDataObject и OrbMetaObject.
-    """
-    
     def __init__(self, host: str = 'localhost', port: int = 50051):
-        """
-        Инициализирует Orb клиента.
-        
-        Args:
-            host: Хост gRPC сервера
-            port: Порт gRPC сервера
-        """
         self.channel = grpc.insecure_channel(f'{host}:{port}')
         self.stub = OrbDataServiceStub(self.channel)
         
     def good(self, timeout: float = 2.0) -> bool:
-        """
-        Проверяет, что gRPC-соединение установлено и клиент готов к работе.
-
-        Args:
-            timeout: Время ожидания готовности канала в секундах
-
-        Returns:
-            True если соединение установлено и канал READY, иначе False
-        """
         try:
-            # Быстрая проверка текущего состояния
             state = self.channel.get_state(try_to_connect=True)
             if state == ChannelConnectivity.READY:
                 return True
-
-            # Ожидание готовности канала
             grpc.channel_ready_future(self.channel).result(timeout=timeout)
             return True
 
@@ -64,7 +40,6 @@ class OrbClient:
             return False
 
     def close(self):
-        """Закрывает соединение с сервером."""
         self.channel.close()
     
     def __enter__(self):
@@ -72,12 +47,9 @@ class OrbClient:
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-    
-    # ========== Преобразование объектов ==========
-    
+
     @staticmethod
     def _orb_data_to_proto(orb_data: OrbDataObject) -> ProtoOrbDataObject:
-        """Преобразует OrbDataObject в protobuf сообщение."""
         proto_obj = ProtoOrbDataObject()
         
         # Преобразуем основные поля
@@ -97,8 +69,7 @@ class OrbClient:
             proto_obj.flags.extend(orb_data.flags)
         if orb_data.src:
             proto_obj.src = orb_data.src
-        
-        # Преобразуем данные в зависимости от подтипа
+
         if orb_data.data:
             if orb_data.subtype == OrbDataSybtypes.Json.value:
                 proto_obj.data = json.dumps(orb_data.data).encode('utf-8')
@@ -115,22 +86,16 @@ class OrbClient:
     
     @staticmethod
     def _proto_to_orb_data(proto_obj: ProtoOrbDataObject) -> OrbDataObject:
-        """Преобразует protobuf сообщение в OrbDataObject."""
-        # Парсим UUID поля
         u = uuid.UUID(proto_obj.u) if proto_obj.u else None
         chain_left = uuid.UUID(proto_obj.chain_left) if proto_obj.chain_left else None
         chain_right = uuid.UUID(proto_obj.chain_right) if proto_obj.chain_right else None
         parent = uuid.UUID(proto_obj.parent) if proto_obj.parent else None
-        
-        # Парсим время создания
         ctime = None
         if proto_obj.ctime:
             try:
                 ctime = datetime.fromisoformat(proto_obj.ctime.replace('Z', '+00:00'))
             except ValueError:
-                ctime = datetime.utcnow()
-        
-        # Парсим данные в зависимости от подтипа
+                ctime = datetime.now(timezone.utc)
         data = None
         if proto_obj.data:
             try:
@@ -162,7 +127,6 @@ class OrbClient:
     
     @staticmethod
     def _orb_meta_to_proto(orb_meta: OrbMetaObject) -> ProtoOrbMetaObject:
-        """Преобразует OrbMetaObject в protobuf сообщение."""
         proto_obj = ProtoOrbMetaObject()
         
         if orb_meta.id:
@@ -182,7 +146,6 @@ class OrbClient:
     
     @staticmethod
     def _proto_to_orb_meta(proto_obj: ProtoOrbMetaObject) -> OrbMetaObject:
-        """Преобразует protobuf сообщение в OrbMetaObject."""
         u = uuid.UUID(proto_obj.u) if proto_obj.u else None
         
         # Парсим время создания
@@ -191,7 +154,7 @@ class OrbClient:
             try:
                 ctime = datetime.fromisoformat(proto_obj.ctime.replace('Z', '+00:00'))
             except ValueError:
-                ctime = datetime.utcnow()
+                ctime = datetime.now(timezone.utc)
         
         return OrbMetaObject(
             id=proto_obj.id or 0,
@@ -202,110 +165,43 @@ class OrbClient:
             flags=list(proto_obj.flags)
         )
     
-    # ========== Основные методы API ==========
-    
     def push_orb_data(self, orb_data: OrbDataObject) -> OrbDataObject:
-        """
-        Сохраняет OrbDataObject на сервере.
-        
-        Args:
-            orb_data: Объект данных для сохранения
-            
-        Returns:
-            Сохраненный объект с возможными обновлениями от сервера
-        """
-        # Преобразуем в protobuf
         proto_data = self._orb_data_to_proto(orb_data)
         request = OrbDataRequest(data=proto_data)
-        
-        # Отправляем запрос
         response = self.stub.PushOrbData(request)
         
         if not response.success:
             raise Exception(f"Failed to push orb data: {response.message}")
-        
-        # Возвращаем обновленный объект
         return orb_data
     
     def push_orb_meta(self, orb_meta: OrbMetaObject) -> OrbMetaObject:
-        """
-        Сохраняет OrbMetaObject на сервере.
-        
-        Args:
-            orb_meta: Мета-объект для сохранения
-            
-        Returns:
-            Сохраненный объект с возможными обновлениями от сервера
-        """
-        # Преобразуем в protobuf
         proto_meta = self._orb_meta_to_proto(orb_meta)
         request = OrbMetaRequest(meta=proto_meta)
-        
-        # Отправляем запрос
         response = self.stub.PushOrbMeta(request)
         
         if not response.success:
             raise Exception(f"Failed to push orb meta: {response.message}")
-        
-        # Возвращаем обновленный объект
+
         return orb_meta
     
     def fetch_orb_data(self, identifier: Union[str, uuid.UUID]) -> Optional[OrbDataObject]:
-        """
-        Получает OrbDataObject по идентификатору.
-        
-        Args:
-            identifier: UUID объекта или строка
-            
-        Returns:
-            Найденный объект или None
-        """
-        # Преобразуем идентификатор в строку
         if isinstance(identifier, uuid.UUID):
             identifier = str(identifier)
-        
-        # Создаем запрос
         request = FetchOrbRequest(identifier=identifier, type="data")
-        
-        # Отправляем запрос
         response = self.stub.FetchOrbData(request)
-        
-        # Проверяем ответ
         if not response.data.u:
             return None
-        
-        # Преобразуем protobuf в объект
         return self._proto_to_orb_data(response.data)
     
     def fetch_orb_meta(self, identifier: Union[int, str]) -> Optional[OrbMetaObject]:
-        """
-        Получает OrbMetaObject по идентификатору.
-        
-        Args:
-            identifier: ID объекта или строка
-            
-        Returns:
-            Найденный мета-объект или None
-        """
-        # Преобразуем идентификатор в строку
         if isinstance(identifier, int):
             identifier = str(identifier)
-        
-        # Создаем запрос
         request = FetchOrbRequest(identifier=identifier, type="meta")
-        
-        # Отправляем запрос
         response = self.stub.FetchOrbMeta(request)
-        
-        # Проверяем ответ
         if not response.meta.u:
             return None
-        
-        # Преобразуем protobuf в объект
         return self._proto_to_orb_meta(response.meta)
-    
-    # ========== Утилитарные методы ==========
-    
+
     def create_orb_data(self, 
                        data: dict, 
                        subtype: str = '@json',
@@ -314,29 +210,14 @@ class OrbClient:
                        chain_right: Optional[uuid.UUID] = None,
                        parent: Optional[uuid.UUID] = None,
                        flags: Optional[List[str]] = None) -> OrbDataObject:
-        """
-        Создает новый OrbDataObject и сохраняет его на сервере.
-        
-        Args:
-            data: Данные объекта
-            subtype: Подтип данных ('@json' или '@raw')
-            src: Источник данных
-            chain_left: Левый элемент цепочки
-            chain_right: Правый элемент цепочки
-            parent: Родительский объект
-            flags: Список флагов
-            
-        Returns:
-            Созданный и сохраненный объект
-        """
         orb_data = OrbDataObject(
-            u=uuid.uuid4(),
+            u=uuid.uuid1(),
             src=src,
             data=data,
             chain_left=chain_left,
             chain_right=chain_right,
             parent=parent,
-            ctime=datetime.utcnow(),
+            ctime=datetime.now(timezone.utc),
             flags=flags or [],
             subtype=subtype,
             type="@OrbData"
@@ -348,84 +229,33 @@ class OrbClient:
                        handle: int,
                        obj_type: str = "@OrbMeta",
                        flags: Optional[List[str]] = None) -> OrbMetaObject:
-        """
-        Создает новый OrbMetaObject и сохраняет его на сервере.
-        
-        Args:
-            handle: Хэндл объекта
-            obj_type: Тип объекта
-            flags: Список флагов
-            
-        Returns:
-            Созданный и сохраненный мета-объект
-        """
         orb_meta = OrbMetaObject(
-            id=0,  # Сервер присвоит ID
-            u=uuid.uuid4(),
+            id = 0,  # Сервер присвоит ID
+            u=uuid.uuid1(),
             type=obj_type,
             handle=handle,
-            ctime=datetime.utcnow(),
+            ctime=datetime.now(timezone.utc),
             flags=flags or []
         )
         
         return self.push_orb_meta(orb_meta)
-    
-    # ========== Методы для обратной совместимости ==========
-    
+
     def push_data(self, key: str, data: bytes) -> bool:
-        """
-        Сохраняет сырые данные (для обратной совместимости).
-        
-        Args:
-            key: Ключ данных
-            data: Бинарные данные
-            
-        Returns:
-            True если успешно
-        """
         request = PushDataRequest(key=key, data=data)
         response = self.stub.PushData(request)
         return response.success
     
     def push_meta(self, key: str, meta: bytes) -> bool:
-        """
-        Сохраняет сырые мета-данные (для обратной совместимости).
-        
-        Args:
-            key: Ключ мета-данных
-            meta: Бинарные мета-данные
-            
-        Returns:
-            True если успешно
-        """
         request = PushMetaRequest(key=key, meta=meta)
         response = self.stub.PushMeta(request)
         return response.success
     
     def fetch_data(self, key: str) -> Optional[bytes]:
-        """
-        Получает сырые данные (для обратной совместимости).
-        
-        Args:
-            key: Ключ данных
-            
-        Returns:
-            Бинарные данные или None
-        """
         request = FetchRequest(key=key)
         response = self.stub.FetchData(request)
         return response.data if response.data else None
     
     def fetch_meta(self, key: str) -> Optional[bytes]:
-        """
-        Получает сырые мета-данные (для обратной совместимости).
-        
-        Args:
-            key: Ключ мета-данных
-            
-        Returns:
-            Бинарные мета-данные или None
-        """
         request = FetchRequest(key=key)
         response = self.stub.FetchMeta(request)
         return response.meta if response.meta else None

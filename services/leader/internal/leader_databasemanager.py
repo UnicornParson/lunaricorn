@@ -10,7 +10,6 @@ class LeaderDatabaseManager(DatabaseManager):
         self._last_cursor_description = None
 
     def get_last_cursor_description(self):
-        """Get the description of the last cursor used in execute_query"""
         return self._last_cursor_description
     
     def installer_impl(self, cur):
@@ -22,8 +21,7 @@ class LeaderDatabaseManager(DatabaseManager):
                 type VARCHAR(32) NOT NULL,
                 key VARCHAR(128) NOT NULL,
                 last_update BIGINT NOT NULL DEFAULT 0
-            )
-        ''')
+            )''')
 
         # Create indexes for last_seen table
         cur.execute('''

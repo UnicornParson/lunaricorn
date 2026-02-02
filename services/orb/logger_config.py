@@ -6,15 +6,10 @@ import os
 
 
 def is_docker():
-    # Check for the presence of the .dockerenv file
     if os.path.exists('/.dockerenv'):
         return True
-
-    # Check for Docker-specific environment variables
     if os.path.exists('/.dockerinit'):
         return True
-
-    # Check for cgroup information
     try:
         with open('/proc/1/cgroup', 'rt') as f:
             content = f.read()
