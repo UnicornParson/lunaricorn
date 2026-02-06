@@ -48,4 +48,22 @@ class LeaderDatabaseManager(DatabaseManager):
             ALTER TABLE IF EXISTS cluster_state OWNER to lunaricorn;
         ''')
 
+        # node_state
+        cur.execute('''
+            CREATE TABLE public.node_state
+            (
+                node character varying(128) NOT NULL,
+                token character varying(256) NOT NULL,
+                ok smallint NOT NULL DEFAULT 0,
+                msg text,
+                ex jsonb,
+                PRIMARY KEY (node)
+            );
+        ''')
+        cur.execute('''
+            ALTER TABLE IF EXISTS public.node_state OWNER to lunaricorn;
+        ''')
+        cur.execute('''
+            CREATE INDEX IF NOT EXISTS idx_node_state_ok ON node_state(ok);
+        ''')
         logger.info("Ensured all required tables and indexes exist")

@@ -182,6 +182,50 @@ def api_root():
         "status": "healthy"
     })
 
+@app.route("/v1/nodes/push_message", methods=["POST"])
+def push_node_message():
+   data = request.get_json(force=True)
+   node = data.get("node")
+   ok = data.get("ok")
+   msg = data.get("msg", "ok")
+   ex = data.get("ex", {})
+
+   logger.info(f"Received push_message request for node: {node}")
+   if not leader:
+       logger.error("Leader is not initialized")
+       return make_response(jsonify({"message": "Leader is not initialized"}), 500)
+
+   rc = leader.update_node_state(node, ok, msg, ex)
+   if rc:
+       response = {"status": "updated"}
+   else:
+       return make_response(jsonify({"message": "Failed to update node state"}), 500)
+
+   logger.debug(f"Push_message response: {response}")
+   return jsonify(response)
+
+@app.route("/v1/nodes/states", methods=["GET"])
+def get_node_states():
+   logger.info("Received request to list node states")
+   if not leader:
+       logger.error("Leader is not initialized")
+       return make_response(jsonify({"message": "Leader is not initialized"}), 500)
+   
+   try:
+       states = leader.get_node_states()
+   except NotReadyException as e:
+       logger.error(f"Leader is not ready to start: {e}")
+       return make_response(jsonify({"message": f"Leader is not ready to start {datetime.now().isoformat()}"}), 500)
+   
+   response = {
+       "states": states,
+       "total_count": len(states),
+       "timestamp": datetime.now().isoformat()
+   }
+   logger.debug(f"Node states response: {response}")
+   return jsonify(response)
+
+
 # --- Error handlers ---
 
 @app.errorhandler(404)

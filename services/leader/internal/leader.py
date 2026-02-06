@@ -148,3 +148,11 @@ class Leader:
         current_oid += 1
         self.discover_manager.update_object_id(current_oid)
         return current_oid
+
+    def update_node_state(self, node: str, ok: bool, msg: str = "ok", ex={}):
+        """Update node state in the database."""
+        return self.discover_manager.update_node_state(node, ok, msg, ex)
+
+    def get_node_states(self):
+        """Get node states from the discover manager."""
+        return self.discover_manager.node_states()

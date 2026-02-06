@@ -94,6 +94,68 @@ class DiscoverManagerPG:
         global db_manager
         return db_manager.validate_connection()
 
+    def node_states(self) -> Dict:
+        global db_manager
+        if not self._validate_connection():
+            logger.error("Cannot get node states - no valid database connection")
+            return {}
+        try:
+            records = db_manager.execute_query('''
+                SELECT node, token, ok, msg, ex
+                FROM node_state
+            ''', fetch_all=True)
+
+            result = {}
+            for record in records:
+                record_data = {
+                    'token': record['token'],
+                    'ok': bool(record['ok']), 
+                    'msg': record['msg'],
+                    'ex': record['ex']
+                }
+                result[record['node']] = record_data
+            
+            logger.debug(f"Retrieved {len(result)} node states")
+            return result
+        except Exception as e:
+            logger.error(f"Error getting node states: {e}")
+            return {}
+
+    def update_node_state(self, node: str, ok:bool, msg:str = "ok", ex = {}):
+        global db_manager
+        if not self._validate_connection():
+                logger.error("Cannot update node state - no valid database connection")
+                return False
+        try:
+            ok_int = 1 if ok else 0
+            
+            # Check if record exists
+            existing_record = db_manager.execute_query(
+                "SELECT 1 FROM node_state WHERE node = %s",
+                (node,),
+                fetch_one=True
+            )
+
+            if existing_record:
+                # Update existing record
+                db_manager.execute_query('''
+                    UPDATE node_state
+                    SET ok = %s, msg = %s, ex = %s
+                    WHERE node = %s
+                ''', (ok_int, msg, ex, node))
+                logger.debug(f"Updated existing node state: {node}")
+            else:
+                # Insert new record
+                db_manager.execute_query('''
+                    INSERT INTO node_state (node, token, ok, msg, ex)
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (node, "", ok_int, msg, ex))
+                logger.debug(f"Added new node state: {node}")
+
+            return True
+        except Exception as e:
+            logger.error(f"Error updating node state for {node}: {e}")
+            return False
 
     def update(self, node_name: str, node_type: str, instance_key: str, host: Optional[str] = None, port: Optional[int] = 0) -> bool:
         global db_manager
