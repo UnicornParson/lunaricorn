@@ -1,14 +1,23 @@
-FROM rabbitmq:4.2-management
+FROM python:3.14.0-trixie
 
-# Установка python
-RUN apt-get update && \
-    apt-get install -y python3 python3-pip && \
-    apt-get install -y net-tools iputils-ping curl && \
-    apt-get clean
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DEBIAN_FRONTEND=noninteractive
+USER root
+# Install system dependencies
+RUN apt-get update && apt-get upgrade -y
+RUN apt-get update && apt-get install -y \
+    gcc \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Рабочая директория
-WORKDIR /app
 
-# Python зависимости
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+RUN mkdir -p /opt/app/ 
+RUN mkdir -p /opt/app/data
+
+COPY requirements.txt /opt/app/
+
+# Install Python dependencies
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir -r /opt/app/requirements.txt

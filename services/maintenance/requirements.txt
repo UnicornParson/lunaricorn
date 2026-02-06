@@ -1,4 +1,8 @@
-pika
 fastapi
 uvicorn
 pydantic
+sqlalchemy
+psycopg2-binary
+alembic
+python-dotenv
+pytest
