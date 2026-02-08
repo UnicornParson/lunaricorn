@@ -1,6 +1,8 @@
-from sqlalchemy import create_engine, Column, BigInteger, String, Text, select
+from sqlalchemy import create_engine, Column, BigInteger, String, Text, select, DateTime, func
 from sqlalchemy.orm import declarative_base, Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import inspect
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
 
@@ -40,9 +42,12 @@ class MaintenanceLogModel(Base):
     offset = Column('offset', BigInteger, primary_key=True, autoincrement=True)
     owner = Column(String(256), nullable=False, index=True) 
     token = Column(String(256), nullable=False, index=True)
+    timestamputc = Column(DateTime(timezone=False), 
+                         nullable=False, 
+                         default=lambda: datetime.now(timezone.utc),
+                         server_default=func.now(),
+                         index=True)
     msg = Column(Text, nullable=False)
-
-
 class Storage:
     def __init__(self, db_config):
         if not db_config.valid():
@@ -55,6 +60,9 @@ class Storage:
         self.engine = create_engine(connection_string)
         self.Session = Session
         self._test_connection()
+        inspector = inspect(self.engine)
+        if not inspector.has_table(MaintenanceLogModel.__tablename__):
+            self.install()
     
     def _test_connection(self):
         try:
@@ -78,7 +86,8 @@ class Storage:
                 new_record = MaintenanceLogModel(
                     owner=owner[:256],
                     token=token[:256],
-                    msg=msg
+                    msg=msg,
+                    timestamputc=datetime.now(timezone.utc)
                 )
                 
                 session.add(new_record)
@@ -92,6 +101,7 @@ class Storage:
         try:
             with self.Session(bind=self.engine) as session:
                 query = select(MaintenanceLogModel).where(MaintenanceLogModel.offset > offset)
+                query = query.order_by(MaintenanceLogModel.offset) 
                 if limit is not None:
                     query = query.limit(limit)
                 result = session.execute(query)
@@ -101,6 +111,7 @@ class Storage:
                         'offset': record.offset,
                         'owner': record.owner,
                         'token': record.token,
+                        'dt': record.timestamputc,
                         'msg': record.msg
                     }
                     for record in records
@@ -116,6 +127,7 @@ class Storage:
         try:
             with self.Session(bind=self.engine) as session:
                 query = select(MaintenanceLogModel).where(MaintenanceLogModel.offset == offset)
+                query = query.order_by(MaintenanceLogModel.offset) 
                 result = session.execute(query)
                 record = result.scalar_one_or_none()
                 
