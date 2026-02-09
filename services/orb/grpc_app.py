@@ -9,10 +9,9 @@ from lunaricorn.api.orb import datastorage_pb2_grpc
 from lunaricorn.api.orb.datastorage_pb2 import *
 from lunaricorn.types.orb_data_object import OrbDataObject, OrbDataSybtypes
 from lunaricorn.types.orb_meta_object import OrbMetaObject
+from lunaricorn.utils.maintenance import *
 
-logger = logging.getLogger(__name__)
-logger = logging.getLogger(__name__)
-
+logger = make_logger(owner="orb_grpc", token=f"orb_{apptoken()}")
 class OrbDataService(datastorage_pb2_grpc.OrbDataServiceServicer):
     def __init__(self, data_storage):
 

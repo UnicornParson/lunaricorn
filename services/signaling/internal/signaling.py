@@ -9,9 +9,7 @@ import threading
 from .data_types import *
 from .message_storage import *
 from .test_message_storage  import *
-
-# Add lunaricorn to path for imports
-## sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
+from lunaricorn.utils.maintenance import *
 from lunaricorn.utils.db_manager import *
 
 class SignalingMessageType(Enum):
@@ -24,7 +22,7 @@ class Signaling:
     
     def __init__(self, config: Dict[str, Any], publish_callback):
         self.config = config
-        self.logger = logging.getLogger(__name__)
+        self.logger = make_logger(owner="signaling_main", token=f"signaling_{apptoken()}")
         self.publish_callback = publish_callback
         
         # Subscriber registry

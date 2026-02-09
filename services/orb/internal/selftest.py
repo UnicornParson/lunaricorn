@@ -8,15 +8,11 @@ import pprint
 from .utils  import *
 from datetime import datetime, timezone
 from .storage import *
-
+from lunaricorn.utils.maintenance import *
 class StorageTester:
-    """
-    Test class for DataStorage methods
-    """
-    
     def __init__(self, storage: DataStorage):
         self.storage = storage
-        self.logger = logging.getLogger(__name__)
+        self.logger = make_logger(owner="orb_test", token=f"orb_test_{apptoken()}")
         self.meta_table = "public.orb_meta"
         self.created_ids = []  # Track created records for cleanup
         

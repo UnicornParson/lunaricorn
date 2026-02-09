@@ -46,6 +46,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - CLUSTER_LEADER_URL=http://leader:8000/
+      - MAINTENANCE_HOST=192.168.0.18
+      - MAINTENANCE_PORT=${MAINTENANCE_API_PORT}
     networks:
       - lunaricorn-network
     depends_on:
@@ -140,6 +142,8 @@ services:
       - db_password=${LUNARICORN_PASSWORD}
       - db_name=lunaricorn
       - db_schema=lunaricorn
+      - MAINTENANCE_HOST=192.168.0.18
+      - MAINTENANCE_PORT=${MAINTENANCE_API_PORT}
     networks:
       - lunaricorn-network
     restart: unless-stopped
@@ -170,6 +174,8 @@ services:
       - db_password=${LUNARICORN_PASSWORD}
       - db_name=lunaricorn
       - db_schema=lunaricorn
+      - MAINTENANCE_HOST=192.168.0.18
+      - MAINTENANCE_PORT=${MAINTENANCE_API_PORT}
     networks:
       - lunaricorn-network
     restart: unless-stopped

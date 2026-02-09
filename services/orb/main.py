@@ -18,7 +18,7 @@ from rest_app import create_app
 from lunaricorn.utils.maintenance import *
 
 def start_grpc_server(storage, host: str = '0.0.0.0', port: int = 50051) -> tuple[GRPCServer, threading.Thread]:
-    logger = logging.getLogger(__name__)
+    logger = make_logger(owner="orb_main", token=f"orb_{apptoken()}")
     logger.info(f"Starting GRPC server on {host}:{port}")
     try:
         grpc_server = GRPC_serve(storage, host=host, port=port)
@@ -45,7 +45,7 @@ def start_grpc_server(storage, host: str = '0.0.0.0', port: int = 50051) -> tupl
         raise
 
 def stop_grpc_server(grpc_server: GRPCServer, grpc_thread: threading.Thread, timeout: float = 5.0):
-    logger = logging.getLogger(__name__)
+    logger = make_logger(owner="orb_main", token=f"orb_{apptoken()}")
     
     if not grpc_server:
         logger.warning("No GRPC server instance provided")
@@ -66,8 +66,7 @@ def stop_grpc_server(grpc_server: GRPCServer, grpc_thread: threading.Thread, tim
         logger.error(f"Error stopping GRPC server: {e}")
 
 if __name__ == "__main__":
-    logger = setup_orb_logging("orb_main")
-    setup_maintenance_logging(owner="orb", token=f"orb_{apptoken()}")
+    logger = make_logger(owner="orb_main", token=f"orb_{apptoken()}")
     logger.info("Starting Orb Service")
     try:
         config = internal.load_config()

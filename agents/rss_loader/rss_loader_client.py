@@ -8,7 +8,7 @@ import sqlite3
 import uuid
 from pathlib import Path
 import time
-
+from lunaricorn.utils.maintenance import *
 class RSSLoaderClient():
     def __init__(self, agent_id:str, working_dir:str):
         
@@ -20,7 +20,7 @@ class RSSLoaderClient():
         self.working_dir = Path(working_dir)
         self.sig_config = None
         self.sig_client = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = make_logger(owner="RSSLoaderClient", token=f"RSSLoaderClient_{apptoken()}")
         self.dump_path = self.working_dir / f"{self.agent_id}_dump.txt"
         self.dumper = lunaricorn.net.FileDataDumper(self.dump_path)
         self.logger.info(f"dump to {self.dump_path}")

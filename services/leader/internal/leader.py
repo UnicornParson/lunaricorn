@@ -4,7 +4,7 @@ from typing import Optional
 import yaml
 import logging
 import os
-
+from lunaricorn.utils.maintenance import *
 class NotReadyException(Exception):
     pass
 
@@ -12,9 +12,8 @@ class Leader:
     CONFIG_PATH = "/opt/lunaricorn/leader_data/leader_config.yaml"
     CLUSTER_CONFIG_PATH = "/opt/lunaricorn/leader_data/cluster_config.yaml"
     def __init__(self) -> None:
-        
+        self.logger = make_logger(owner="leader", token=f"leader_{apptoken()}")
         self.config = self._load_config()
-        self.logger = logging.getLogger(__name__)
 
         # Read config file values first
         db_type = self.config.get("discover", {}).get("db_type", "postgresql")

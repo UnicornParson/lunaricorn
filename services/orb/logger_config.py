@@ -3,6 +3,7 @@ import logging.handlers
 from pathlib import Path
 from datetime import datetime
 import os
+from lunaricorn.utils.maintenance import *
 
 
 def is_docker():
@@ -29,15 +30,6 @@ class AutoFlushFileHandler(logging.handlers.RotatingFileHandler):
         self.flush()
 
 def setup_orb_logging(logger_name="orb_api"):
-    """
-    Setup logging configuration for the orb application
-    
-    Args:
-        logger_name (str): Name for the specific logger instance
-    
-    Returns:
-        logging.Logger: Configured logger instance
-    """
     logs_dir = Path("/opt/lunaricorn/orb_data/logs")
     if not is_docker(): # native run
         logs_dir = Path("./logs")
@@ -57,13 +49,10 @@ def setup_orb_logging(logger_name="orb_api"):
             print(f"Warning: Could not backup existing log file: {e}")
     
     # Create new log file
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger = make_logger(owner="orb", token=f"orb_{apptoken()}")
+    logger.setLevel(logging.DEBUG)
     
-    # Clear any existing handlers
-    for handler in logger.handlers[:]:
-        logger.removeHandler(handler)
-    
+  
     # Create formatters
     detailed_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s - %(message)s')
     simple_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -83,7 +72,8 @@ def setup_orb_logging(logger_name="orb_api"):
     logger.addHandler(console_handler)
     
     # Create specific logger for this application
-    app_logger = logging.getLogger(logger_name)
+    app_logger = make_logger(owner="orb", token=f"orb_{apptoken()}")
+    app_logger.setLevel(logging.INFO)
     app_logger.info("Logging system initialized with file rotation")
 
     return app_logger 

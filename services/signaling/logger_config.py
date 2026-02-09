@@ -62,7 +62,7 @@ def setup_signaling_logging(logger_name="signaling_api"):
             print(f"Warning: Could not backup existing log file: {e}")
     
     # Create new log file
-    logger = logging.getLogger()
+    logger = make_logger(owner=logger_name, token=f"signaling_{apptoken()}")
     logger.setLevel(logging.INFO)
     
     # Clear any existing handlers
@@ -88,7 +88,7 @@ def setup_signaling_logging(logger_name="signaling_api"):
     logger.addHandler(console_handler)
     
     # Create specific logger for this application
-    app_logger = logging.getLogger(logger_name)
+    app_logger = make_logger(owner=logger_name, token=f"signaling_{apptoken()}")
     app_logger.info("Logging system initialized with file rotation")
     setup_maintenance_logging(owner="signaling", token=f"signaling_{apptoken()}")
     return app_logger 

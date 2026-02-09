@@ -13,6 +13,7 @@ from zmq_server import ZeroMQSignalingServer
 from api_server import *
 
 import lunaricorn.api.leader as leader
+from lunaricorn.utils.maintenance import *
 
 class NodeController:
     instance = None
@@ -31,7 +32,7 @@ class NodeController:
             NodeController.instance._abort_event.set()
 
     def register_node(self):
-        logger = logging.getLogger(__name__)
+        logger = make_logger(owner="signaling", token=f"signaling_{apptoken()}")
         logger.info(f"Attempting to connect to leader at: {self.leader_url}")
         self.leader_available = leader.ConnectorUtils.test_connection(self.leader_url)
 
@@ -55,7 +56,7 @@ class NodeController:
 
 def load_config():
     config_path = "cfg/config.yaml"
-    logger = logging.getLogger(__name__)
+    logger = make_logger(owner="signaling", token=f"signaling_{apptoken()}")
     logger.info("Shutting down Signaling Server...")
     if not os.path.exists(config_path):
         logger.info("Create default config ")
@@ -101,7 +102,7 @@ def load_config():
 
 def shutdown_handler():
     """Handle graceful shutdown"""
-    logger = logging.getLogger(__name__)
+    logger = make_logger(owner="signaling", token=f"signaling_{apptoken()}")
     logger.info("Shutting down Signaling Server...")
     NodeController.abort_registration()
     ServerApp.stop_api_server()

@@ -8,6 +8,8 @@ from typing import List, Dict, Any, Optional
 from .orb_database_manager import *
 from .orb_types import *
 from lunaricorn.types import OrbDataObject, OrbMetaObject, OrbDataSybtypes
+from lunaricorn.utils.maintenance import *
+
 class StorageError(Exception):
     pass
 
@@ -23,7 +25,7 @@ class DataStorage:
     def __init__(self, db_cfg: OrbConfig):
         self.db_cfg = db_cfg
         self.ready = False
-        self.logger = logging.getLogger(__name__)
+        self.logger = make_logger(owner="orb_storage", token=f"orb_{apptoken()}")
         if not db_cfg.valid():
             raise ValueError("invalid db config")
         try:

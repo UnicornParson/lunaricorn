@@ -227,12 +227,10 @@ async def pull_logs_plain(offset: Optional[int] = Query(default=0, description="
             formatted_logs = []
             for log in logs:
                 timestamp = log.get('dt', 'N/A')
-                owner = log.get('owner', 'N/A')
-                token = log.get('token', 'N/A')
                 message = log.get('msg', 'N/A')
                 log_offset = log.get('offset', 'N/A')
                 
-                formatted_logs.append(f"[{timestamp}] {owner}::{token} (offset: {log_offset}): {message}")
+                formatted_logs.append(f"{log_offset}[{timestamp}]: {message}")
             
             content = "\n".join(formatted_logs)
 
@@ -260,12 +258,10 @@ async def download_logs_plain(offset: Optional[int] = Query(default=0, descripti
             formatted_logs = []
             for log in logs:
                 timestamp = log.get('dt', 'N/A')
-                owner = log.get('owner', 'N/A')
-                token = log.get('token', 'N/A')
                 message = log.get('msg', 'N/A')
                 log_offset = log.get('offset', 'N/A')
                 
-                formatted_logs.append(f"[{timestamp}] {owner}::{token} (offset: {log_offset}): {message}")
+                formatted_logs.append(f"{log_offset}[{timestamp}]: {message}")
             
             content = "\n".join(formatted_logs)
 

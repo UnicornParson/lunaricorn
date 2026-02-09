@@ -11,6 +11,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from internal import *
+from lunaricorn.utils.maintenance import *
 
 class ZeroMQPattern(Enum):
     PUB_SUB = "pub_sub"
@@ -23,8 +24,7 @@ class ZeroMQSignalingServer:
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.logger = logging.getLogger(__name__)
-        
+        self.logger = make_logger(owner="signaling_zmq", token=f"signaling_{apptoken()}")
         # ZeroMQ context
         self.context = zmq.Context()
         

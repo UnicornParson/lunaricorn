@@ -5,10 +5,11 @@ import time
 from typing import List, Dict, Optional
 import logging
 from .leader_databasemanager import *
-logger = logging.getLogger(__name__)
+from lunaricorn.utils.maintenance import *
 
 from lunaricorn.utils.db_manager import DatabaseManager
 
+logger = make_logger(owner="leader", token=f"leader_{apptoken()}")
 db_manager = None
 
 class DiscoverManagerPG:

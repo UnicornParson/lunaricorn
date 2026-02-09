@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 import time as time_module
 from lunaricorn.utils.db_manager import *
-
+from lunaricorn.utils.maintenance import *
 class StorageError(Exception):
     pass
 
@@ -22,7 +22,7 @@ class MessageStorage:
     def __init__(self, db_cfg: DbConfig):
         self.db_cfg = db_cfg
         self.ready = False
-        self.logger = logging.getLogger()
+        self.logger = make_logger(owner="signaling_storage", token=f"signaling_{apptoken()}")
         if not db_cfg.valid():
             raise ValueError("invalid db config")
         try:

@@ -2,7 +2,8 @@ from lunaricorn.utils.db_manager import DatabaseManager
 import logging
 import threading
 
-logger = logging.getLogger(__name__)
+from lunaricorn.utils.maintenance import *
+logger = make_logger(owner="leader", token=f"leader_{apptoken()}")
 
 class LeaderDatabaseManager(DatabaseManager):
     def __init__(self):
@@ -50,7 +51,7 @@ class LeaderDatabaseManager(DatabaseManager):
 
         # node_state
         cur.execute('''
-            CREATE TABLE public.node_state
+            CREATE TABLE IF NOT EXISTS public.node_state
             (
                 node character varying(128) NOT NULL,
                 token character varying(256) NOT NULL,

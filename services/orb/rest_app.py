@@ -1,7 +1,6 @@
 
 from flask import Flask, jsonify
 import logging
-import yaml
 import threading
 import time
 import signal
@@ -11,12 +10,13 @@ import os
 # Import lunaricorn modules
 from lunaricorn.api.leader import ConnectorUtils as leader
 from lunaricorn.api.signaling import SignalingClient as signaling
+from lunaricorn.utils.maintenance import *
 
 app = Flask(__name__)
 storage = None
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = make_logger(owner="orb_rest", token=f"orb_{apptoken()}")
 
 @app.route('/health', methods=['GET'])
 def health_check():

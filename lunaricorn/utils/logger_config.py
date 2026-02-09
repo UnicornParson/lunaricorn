@@ -6,6 +6,7 @@ from queue import Queue
 import time
 import requests
 import logging_loki
+from .maintenance import *
 class AutoFlushFileHandler(logging.handlers.RotatingFileHandler):
     def __init__(self, filename):
         super().__init__(filename, maxBytes=100*1024*1024, backupCount=10, encoding='utf-8')
@@ -70,8 +71,8 @@ def setup_logging(logger_name="portal_api", logs_dir="/opt/lunaricorn/portal_dat
             print(f"Warning: Could not backup existing log file: {e}")
     
     # Create new log file
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger = make_logger(owner=logger_name, token=f"{logger_name}_{apptoken()}")
+    logger.setLevel(logging.DEBUG)
     
     # Clear any existing handlers
     for handler in logger.handlers[:]:
@@ -96,7 +97,8 @@ def setup_logging(logger_name="portal_api", logs_dir="/opt/lunaricorn/portal_dat
     logger.addHandler(console_handler)
     
     # Create specific logger for this application
-    app_logger = logging.getLogger(logger_name)
+    
+    app_logger = make_logger(owner=logger_name, token=f"{logger_name}_{apptoken()}")
     app_logger.info("Logging system initialized with file rotation")
     
     return app_logger 

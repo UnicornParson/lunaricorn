@@ -265,13 +265,10 @@ class MaintenanceClient:
             "type": type,
         }
         try:
-            # Send HTTP request to FastAPI endpoint
             response = MaintenanceClient._make_http_request(
                 f"{MaintenanceClient.HTTP_BASE_URL}/log",
                 payload
             )
-            
-            sys.stderr.write(f"HTTP message sent successfully: {owner}::{token} \n")
             return response
             
         except requests.exceptions.RequestException as e:
@@ -382,7 +379,7 @@ class MaintenanceLogHandlerMq(logging.Handler):
         except Exception as e:
             sys.stderr.write(f"log push failed: {e}\n")
 
-def setup_maintenance_logging(owner: str, token: str):
+def setup_maintenance_logging(owner: str, token: str, logger=logging.getLogger()):
     host = os.getenv("MAINTENANCE_HOST")
     port = os.getenv("MAINTENANCE_PORT")
 
@@ -408,9 +405,11 @@ def setup_maintenance_logging(owner: str, token: str):
         "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     )
     handler.setFormatter(formatter)
-
-    root_logger = logging.getLogger()
-    root_logger.addHandler(handler)
+    logger.addHandler(handler)
 
 
-
+def make_logger(owner: str, token: str):
+    logger=logging.getLogger(token)
+    logger.setLevel(logging.DEBUG)
+    setup_maintenance_logging(owner, token, logger)
+    return logger

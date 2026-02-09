@@ -2,8 +2,9 @@ from fastapi import APIRouter
 import lunaricorn.api.leader as leader
 import logging
 from datetime import datetime
+from lunaricorn.utils.maintenance import *
+logger = make_logger(owner="portal", token=f"portal_{apptoken()}")
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 cluster_not_ready_since = None
 
