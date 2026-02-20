@@ -1,0 +1,4 @@
+requests
+tqdm
+sqlalchemy
+psycopg2-binary
