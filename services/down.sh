@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker compose down -v
+docker compose stop $(docker compose ps --services | grep -v pg)

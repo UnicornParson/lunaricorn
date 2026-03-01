@@ -8,25 +8,9 @@ import os
 import logging
 import sys
 import threading
-import string
 import requests
-
-_BASE62_ALPHABET = string.digits + string.ascii_letters  # 0-9A-Za-z
-def base62_encode(num: int) -> str:
-    if num == 0:
-        return _BASE62_ALPHABET[0]
-    base = len(_BASE62_ALPHABET)
-    chars = []
-    while num:
-        num, rem = divmod(num, base)
-        chars.append(_BASE62_ALPHABET[rem])
-    return ''.join(reversed(chars))
-
-
-def apptoken() -> str:
-    pid = os.getpid()
-    ts_ns = time.time_ns()
-    return f"t{base62_encode(pid)}_{base62_encode(ts_ns)}"
+from .maintenance_utils import *
+from .maintenance_http import *
 
 class MaintenanceClient:
     HOST = None
@@ -36,7 +20,7 @@ class MaintenanceClient:
 
     HEARTBEAT = 10
     BLOCKED_TIMEOUT = 10
-    HTTP_TIMEOUT = 10.0
+    HTTP_TIMEOUT = 1.0
     HTTP_MAX_RETRIES = 3
     HTTP_RETRY_DELAY = 1.0
     HTTP_WAIT_POLL_INTERVAL = 1.0  # Default poll interval
@@ -47,7 +31,9 @@ class MaintenanceClient:
     _http_session: requests.Session | None = None
     _http_lock = threading.Lock()
 
-    
+    _http_inflight = 0
+    _http_inflight_lock = threading.Lock()
+
     http_headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -222,62 +208,40 @@ class MaintenanceClient:
     def _make_http_request(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Make HTTP request with retry logic (no persistent session)"""
         last_exception = None
+        try:
+            with requests.post(
+                url,
+                json=payload,
+                headers=MaintenanceClient.http_headers,
+                timeout=MaintenanceClient.HTTP_TIMEOUT,
+            ) as response:
+                response.raise_for_status()
+                return response.json()
 
-
-        for attempt in range(MaintenanceClient.HTTP_MAX_RETRIES):
-            try:
-                with requests.post(
-                    url,
-                    json=payload,
-                    headers=MaintenanceClient.http_headers,
-                    timeout=MaintenanceClient.HTTP_TIMEOUT,
-                ) as response:
-                    response.raise_for_status()
-                    return response.json()
-
-            except requests.exceptions.RequestException as e:
-                last_exception = e
-                sys.stderr.write(
-                    f"HTTP request failed (attempt {attempt + 1}/"
-                    f"{MaintenanceClient.HTTP_MAX_RETRIES}): {e}\n"
-                )
-
-                if attempt < MaintenanceClient.HTTP_MAX_RETRIES - 1:
-                    time.sleep(
-                        MaintenanceClient.HTTP_RETRY_DELAY * (2 ** attempt)
-                    )  # exponential backoff
-                else:
-                    sys.stderr.write(
-                        f"All {MaintenanceClient.HTTP_MAX_RETRIES} HTTP attempts failed\n"
-                    )
-                    raise
+        except requests.exceptions.RequestException as e:
+            sys.stderr.write(f"cannot send {payload} reason {e}")
         raise last_exception
 
 
     @staticmethod
     def push_maintenance_msg_http(type: str, owner: str, token: str, message: str):
-
-        payload = {
-            "o": owner,
-            "t": token,
-            "m": message,
-            "dt": datetime.now(timezone.utc).isoformat(),
-            "type": type,
-        }
-        try:
-            response = MaintenanceClient._make_http_request(
-                f"{MaintenanceClient.HTTP_BASE_URL}/log",
-                payload
-            )
-            return response
-            
-        except requests.exceptions.RequestException as e:
-            # Re-raise for caller to handle
-            raise
-            
-        except Exception as e:
-            sys.stderr.write(f"Unexpected error during HTTP push: {e} \n")
-            return None
+        with MaintenanceClient._http_inflight_lock:
+            payload = {
+                "o": owner,
+                "t": token,
+                "m": message,
+                "dt": datetime.now(timezone.utc).isoformat(),
+                "type": type,
+            }
+            try:
+                response = MaintenanceClient._make_http_request(
+                    f"{MaintenanceClient.HTTP_BASE_URL}/log",
+                    payload
+                )
+                return response
+            except Exception as e:
+                sys.stderr.write(f"Unexpected error during HTTP push: {e} \n")
+                return None
 
     @staticmethod
     def push_log_message(owner: str, token: str, message: str):

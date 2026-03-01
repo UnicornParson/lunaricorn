@@ -9,8 +9,9 @@ import sys
 from datetime import datetime
 import uuid
 import json
-from maintenance import *
+from .maintenance import *
 logger = make_logger(owner="DatabaseManager", token=f"DatabaseManager_{apptoken()}")
+
 class DbConfig:
     def __init__(self):
         self.db_type = None

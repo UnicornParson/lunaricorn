@@ -23,7 +23,7 @@ done
 
 # Exit immediately if a command exits with a non-zero status
 set -e
-docker compose down -v
+./down.sh
 if [ "$BUILD" = true ]; then
     echo "Running build.sh..."
     ./build.sh
@@ -35,7 +35,8 @@ fi
 echo "Starting services using docker-compose.yaml..."
 
 # Run docker-compose up in detached mode
-docker compose -f docker-compose.yaml up -d --build --force-recreate
+docker compose -f docker-compose.yaml up -d --build --force-recreate \
+  $(docker compose -f docker-compose.yaml ps --services | grep -v '^pg$')
 
 # Print status of the containers
 echo "Current status of containers:"

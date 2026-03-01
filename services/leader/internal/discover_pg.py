@@ -23,12 +23,10 @@ class DiscoverManagerPG:
         self.minconn = minconn
         self.maxconn = maxconn
         if not db_manager:
-            logger.info(f"@@ make LeaderDatabaseManager")
             db_manager = LeaderDatabaseManager()
         else:
-            logger.info(f"@@ db_manager alredy created type: {type(db_manager).__name__}")
+            logger.info(f"db_manager alredy created type: {type(db_manager).__name__}")
         db_manager.initialize(self.host, self.port, self.user, self.password, self.dbname, self.minconn, self.maxconn)
-        logger.info(f"@@ db_manager type: {type(db_manager).__name__}")  # Должно быть "LeaderDatabaseManager"
         db_manager.install_db()
         logger.info("DiscoverManagerPG initialized with global database manager")
 

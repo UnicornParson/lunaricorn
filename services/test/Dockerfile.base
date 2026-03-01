@@ -1,0 +1,31 @@
+FROM python:3.14.0-trixie
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DEBIAN_FRONTEND=noninteractive
+USER root
+# Install system dependencies
+RUN apt-get update && apt-get upgrade -y
+RUN apt-get update && apt-get install -y \
+    gcc \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+
+RUN mkdir -p /opt/app/ 
+RUN mkdir -p /opt/app/data
+
+COPY requirements.txt /opt/app/
+
+# Install Python dependencies
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir -r /opt/app/requirements.txt
+
+
+# Copy requirements file
+COPY requirements.txt /opt/lunaricorn/leader/app/
+
+# Install Python dependencies
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir -r /opt/lunaricorn/leader/app/requirements.txt

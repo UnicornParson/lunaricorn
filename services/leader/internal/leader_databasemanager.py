@@ -14,7 +14,7 @@ class LeaderDatabaseManager(DatabaseManager):
         return self._last_cursor_description
     
     def installer_impl(self, cur):
-        logger.info("@@ LeaderDatabaseManager installer_impl")
+        logger.info("LeaderDatabaseManager installer_impl")
         cur.execute('''
             CREATE TABLE IF NOT EXISTS last_seen (
                 i SERIAL PRIMARY KEY,

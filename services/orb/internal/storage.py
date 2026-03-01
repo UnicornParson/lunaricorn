@@ -235,13 +235,35 @@ class DataStorage:
             fetch_one=False,
             fetch_all=True
         )
-
         if result:
             columns = ['column_name', 'data_type', 'is_nullable', 'column_default']
             return [dict(zip(columns, row)) for row in result]
-
         return []
 
+    def _meta_exists(self, u: uuid.UUID) -> bool:
+        if not self.db_enabled:
+            self.logger.error("Database is not enabled, cannot check meta existence")
+            raise BrokenStorageError("Database connection is not available")
+        query = """ SELECT COUNT(*) FROM public.orb_meta WHERE u = %s """
+        result = self.db_manager.execute_query(
+            query=query,
+            params=(str(u),),
+            fetch_one=True
+        )
+        return result[0] > 0
+
+    def _data_exists(self, u: uuid.UUID) -> bool:
+        if not self.db_enabled:
+            self.logger.error("Database is not enabled, cannot check data existence")
+            raise BrokenStorageError("Database connection is not available")
+        query = """ SELECT COUNT(*) FROM public.orb_meta WHERE u = %s """
+        result = self.db_manager.execute_query(
+            query=query,
+            params=(str(u),),
+            fetch_one=True
+        )
+        return result[0] > 0
+    
     def push_data(self, data_obj: OrbDataObject) -> OrbDataObject:
         if not self.db_enabled:
             self.logger.error("Database is not enabled, cannot push data object")
@@ -249,15 +271,16 @@ class DataStorage:
         if not isinstance(data_obj, OrbDataObject):
             raise ValueError("Expected OrbDataObject instance")
         try:
-            is_new_record = (not hasattr(data_obj, 'u') or data_obj.u is None or data_obj.u == uuid.uuid1())
-            if is_new_record:
+            is_new_record = False
+            if (not hasattr(data_obj, 'u') or data_obj.u is None):
                 # make new one
+                is_new_record = True
                 data_obj.u = uuid.uuid1()
                 data_obj.ctime = datetime.now(timezone.utc).replace(tzinfo=None)
 
             # Prepare data for database operation
             prepared_data = data_obj.to_record()
-            if is_new_record:
+            if is_new_record or not self._data_exists(data_obj.u):
                 new_id = self._create_record('public.orb_data', prepared_data, id_field="u")
                 data_obj.u = new_id
                 self.notify_signaling(lsig.SignalingEventType.FileOp_new, data_obj.u, data_obj.u)
@@ -293,13 +316,14 @@ class DataStorage:
                 'u': getattr(meta_obj, 'u', uuid.uuid1()),
                 'ctime': utime_s()
             }
+            is_new_record = False
+            if (not hasattr(meta_obj, 'u') or meta_obj.u is None):
+                # make new one
+                is_new_record = True
+                meta_obj.u = uuid.uuid1()
+                meta_obj.ctime = datetime.now(timezone.utc).replace(tzinfo=None)
 
-            # Check if this is a new record (id is None, <= 0, or doesn't exist)
-            is_new_record = (not hasattr(meta_obj, 'id') or
-                           meta_obj.id is None or
-                           meta_obj.id <= 0)
-
-            if is_new_record:
+            if is_new_record or not self._meta_exists(meta_obj.u):
                 data['ctime'] = datetime.now(timezone.utc).replace(tzinfo=None)
                 self.logger.info(f"Creating new orb_meta record data: {data}")
                 new_id = self._create_record('public.orb_meta', data)
