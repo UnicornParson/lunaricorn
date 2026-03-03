@@ -55,7 +55,10 @@ endforeach()
 # Application
 # ------------------------------------------------------------------
 # Add executable from main.cpp
-add_executable(maintenance main.cpp)
+add_executable(maintenance 
+    main.cpp
+    storage.cpp
+    )
 
 # Include directories
 target_include_directories(maintenance PRIVATE
