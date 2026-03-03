@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     build-essential python3 libbz2-dev libz-dev libicu-dev cmake wget git-all \
-    g++ libssl-dev libmysqlclient-dev libpq-dev
+    g++ libssl-dev libmysqlclient-dev libpq-dev mc
 
 # BOOST
 RUN mkdir -p /opt/3rd/boost/src
