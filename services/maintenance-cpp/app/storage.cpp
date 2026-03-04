@@ -76,17 +76,16 @@ bool PGStorage::install()
 std::optional<Poco::Int64> PGStorage::push(const std::string& owner, const std::string& token, const std::string& msg)
 {
     try {
-        // Truncate owner and token to 256 characters (as in Python)
         std::string ownerTrunc = owner.substr(0, 256);
         std::string tokenTrunc = token.substr(0, 256);
+        std::string msgCopy = msg;   // non-const copy for use()
 
         Session session(pool_->get());
         Poco::Int64 newOffset = 0;
 
-        // Use RETURNING to obtain the generated serial value
         session << "INSERT INTO maintenance_log (owner, token, timestamputc, msg) "
-                    "VALUES (?, ?, CURRENT_TIMESTAMP, ?) RETURNING offset",
-            use(ownerTrunc), use(tokenTrunc), use(msg),
+                   "VALUES (?, ?, CURRENT_TIMESTAMP, ?) RETURNING offset",
+            use(ownerTrunc), use(tokenTrunc), use(msgCopy),
             into(newOffset), now;
 
         return newOffset;
@@ -153,21 +152,26 @@ std::vector<MaintenanceLogRecord> PGStorage::getAll()
 // Get a single record by its offset.
 std::optional<MaintenanceLogRecord> PGStorage::getByOffset(Poco::Int64 offset)
 {
-    try {
+    try
+    {
         Session session(pool_->get());
         MaintenanceLogRecord rec;
-        session << "SELECT offset, owner, token, timestamputc, msg FROM maintenance_log "
-                    "WHERE offset = ?",
+        Statement stmt(session);
+        stmt << "SELECT offset, owner, token, timestamputc, msg FROM maintenance_log WHERE offset = ?",
             use(offset),
             into(rec.offset),
             into(rec.owner),
             into(rec.token),
             into(rec.timestamputc),
-            into(rec.msg),
-            now;
+            into(rec.msg);
 
+        std::size_t rows = stmt.execute();
+        if (rows == 0)
+            return std::nullopt;
         return rec;
-    } catch (const Exception& e) {
+    }
+    catch (const Exception& e)
+    {
         std::cerr << "Failed to fetch record: " << e.displayText() << std::endl;
         return std::nullopt;
     }
@@ -190,12 +194,16 @@ std::size_t PGStorage::countRecords()
 // Delete a record by offset. Returns true if deleted, false if not found or error.
 bool PGStorage::deleteByOffset(Poco::Int64 offset)
 {
-    try {
+    try
+    {
         Session session(pool_->get());
-        Poco::Int64 rows = 0;
-        session << "DELETE FROM maintenance_log WHERE offset = ?", use(offset), now;
-        return rows > 0; // rows affected
-    } catch (const Exception& e) {
+        Statement stmt(session);
+        stmt << "DELETE FROM maintenance_log WHERE offset = ?", use(offset);
+        Poco::Int64 rows = stmt.execute();
+        return rows > 0;
+    }
+    catch (const Exception& e)
+    {
         std::cerr << "Failed to delete record: " << e.displayText() << std::endl;
         return false;
     }

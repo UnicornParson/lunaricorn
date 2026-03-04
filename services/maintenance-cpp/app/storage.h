@@ -54,29 +54,13 @@ struct MaintenanceLogRecord {
 class PGStorage {
 public:
     explicit PGStorage(const DbConfig& config);
-
-    // Test the connection by executing a simple query
     void testConnection();
-
-    // Create the table and indexes if they do not exist
     bool install();
-
-    // Insert a new record. Returns the generated offset, or std::nullopt on failure.
     std::optional<Poco::Int64> push(const std::string& owner, const std::string& token, const std::string& msg);
-
-    // Retrieve records with offset > given value, ordered by offset.
     std::vector<MaintenanceLogRecord> pull(Poco::Int64 offset = 0, std::optional<int> limit = std::nullopt);
-
-    // Get all records (offset > -1 effectively means all)
     std::vector<MaintenanceLogRecord> getAll();
-
-    // Get a single record by its offset.
     std::optional<MaintenanceLogRecord> getByOffset(Poco::Int64 offset);
-
-    // Count total records in the table.
     std::size_t countRecords();
-
-    // Delete a record by offset. Returns true if deleted, false if not found or error.
     bool deleteByOffset(Poco::Int64 offset);
 
 private:

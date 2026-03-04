@@ -36,6 +36,8 @@ set(POCO_LIBS
     PocoFoundation
     PocoUtil
     PocoNet
+    PocoData
+    PocoDataPostgreSQL
 )
 
 # Create a list of full paths to static POCO libraries
@@ -55,9 +57,10 @@ endforeach()
 # Application
 # ------------------------------------------------------------------
 # Add executable from main.cpp
-add_executable(maintenance 
+add_executable(maintenance
     main.cpp
     storage.cpp
+    endpoint.cpp
     )
 
 # Include directories
