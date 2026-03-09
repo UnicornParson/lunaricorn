@@ -14,13 +14,6 @@
 #include <Poco/DateTimeFormatter.h>
 #include <Poco/Exception.h>
 
-using Poco::Data::Session;
-using Poco::Data::Statement;
-using Poco::Data::SessionPool;
-using Poco::DateTime;
-using Poco::Exception;
-using Poco::DateTimeFormatter;
-
 // -------------------- Configuration structure --------------------
 struct DbConfig {
     std::string dbType;
@@ -46,7 +39,7 @@ struct MaintenanceLogRecord {
     Poco::Int64 offset;
     std::string owner;
     std::string token;
-    DateTime timestamputc;
+    Poco::DateTime timestamputc;
     std::string msg;
 };
 
@@ -64,7 +57,7 @@ public:
     bool deleteByOffset(Poco::Int64 offset);
 
 private:
-    std::unique_ptr<SessionPool> pool_;
+    std::unique_ptr<Poco::Data::SessionPool> pool_;
 
     // Helper to check if the table already exists (by attempting to query it)
     bool tableExists();

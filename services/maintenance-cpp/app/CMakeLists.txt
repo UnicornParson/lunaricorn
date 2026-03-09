@@ -19,7 +19,7 @@ set(BOOST_ROOT "/opt/3rd/boost/bin")
 # Tell CMake to search for static Boost libraries
 set(Boost_USE_STATIC_LIBS ON)
 # Find Boost components (add or remove as needed)
-find_package(Boost REQUIRED COMPONENTS system filesystem)
+find_package(Boost REQUIRED COMPONENTS system filesystem json)
 
 # ------------------------------------------------------------------
 # POCO setup (static)

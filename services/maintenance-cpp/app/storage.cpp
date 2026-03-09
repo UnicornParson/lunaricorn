@@ -26,7 +26,8 @@ PGStorage::PGStorage(const DbConfig& config)
     }
 
     // Create a session pool (minimum 1, maximum 10 connections)
-    pool_ = std::make_unique<SessionPool>(Poco::Data::PostgreSQL::Connector::KEY, connStr, 1, 10);
+    pool_ = std::make_unique<Poco::Data::SessionPool>(
+        Poco::Data::PostgreSQL::Connector::KEY, connStr, 1, 10);
 
     testConnection();
     if (!tableExists()) {
@@ -38,9 +39,9 @@ PGStorage::PGStorage(const DbConfig& config)
 void PGStorage::testConnection()
 {
     try {
-        Session session(pool_->get());
+        Poco::Data::Session session(pool_->get());
         session << "SELECT 1", now;
-    } catch (const Exception& e) {
+    } catch (const Poco::Exception& e) {
         throw std::runtime_error("Failed to connect to database: " + e.displayText());
     }
 }
@@ -49,7 +50,7 @@ void PGStorage::testConnection()
 bool PGStorage::install()
 {
     try {
-        Session session(pool_->get());
+        Poco::Data::Session session(pool_->get());
 
         // Create table
         session << "CREATE TABLE IF NOT EXISTS maintenance_log ("
@@ -66,7 +67,7 @@ bool PGStorage::install()
 
         std::cout << "Table 'maintenance_log' and indexes created successfully" << std::endl;
         return true;
-    } catch (const Exception& e) {
+    } catch (const Poco::Exception& e) {
         std::cerr << "Failed to create table: " << e.displayText() << std::endl;
         return false;
     }
@@ -80,7 +81,7 @@ std::optional<Poco::Int64> PGStorage::push(const std::string& owner, const std::
         std::string tokenTrunc = token.substr(0, 256);
         std::string msgCopy = msg;   // non-const copy for use()
 
-        Session session(pool_->get());
+        Poco::Data::Session session(pool_->get());
         Poco::Int64 newOffset = 0;
 
         session << "INSERT INTO maintenance_log (owner, token, timestamputc, msg) "
@@ -89,7 +90,7 @@ std::optional<Poco::Int64> PGStorage::push(const std::string& owner, const std::
             into(newOffset), now;
 
         return newOffset;
-    } catch (const Exception& e) {
+    } catch (const Poco::Exception& e) {
         std::cerr << "Failed to insert record: " << e.displayText() << std::endl;
         return std::nullopt;
     }
@@ -154,9 +155,9 @@ std::optional<MaintenanceLogRecord> PGStorage::getByOffset(Poco::Int64 offset)
 {
     try
     {
-        Session session(pool_->get());
+        Poco::Data::Session session(pool_->get());
         MaintenanceLogRecord rec;
-        Statement stmt(session);
+        Poco::Data::Statement stmt(session);
         stmt << "SELECT offset, owner, token, timestamputc, msg FROM maintenance_log WHERE offset = ?",
             use(offset),
             into(rec.offset),
@@ -170,7 +171,7 @@ std::optional<MaintenanceLogRecord> PGStorage::getByOffset(Poco::Int64 offset)
             return std::nullopt;
         return rec;
     }
-    catch (const Exception& e)
+    catch (const Poco::Exception& e)
     {
         std::cerr << "Failed to fetch record: " << e.displayText() << std::endl;
         return std::nullopt;
@@ -181,11 +182,11 @@ std::optional<MaintenanceLogRecord> PGStorage::getByOffset(Poco::Int64 offset)
 std::size_t PGStorage::countRecords()
 {
     try {
-        Session session(pool_->get());
+        Poco::Data::Session session(pool_->get());
         std::size_t count = 0;
         session << "SELECT COUNT(*) FROM maintenance_log", into(count), now;
         return count;
-    } catch (const Exception& e) {
+    } catch (const Poco::Exception& e) {
         std::cerr << "Failed to count records: " << e.displayText() << std::endl;
         return 0;
     }
@@ -196,13 +197,13 @@ bool PGStorage::deleteByOffset(Poco::Int64 offset)
 {
     try
     {
-        Session session(pool_->get());
-        Statement stmt(session);
+        Poco::Data::Session session(pool_->get());
+        Poco::Data::Statement stmt(session);
         stmt << "DELETE FROM maintenance_log WHERE offset = ?", use(offset);
         Poco::Int64 rows = stmt.execute();
         return rows > 0;
     }
-    catch (const Exception& e)
+    catch (const Poco::Exception& e)
     {
         std::cerr << "Failed to delete record: " << e.displayText() << std::endl;
         return false;
@@ -213,10 +214,10 @@ bool PGStorage::deleteByOffset(Poco::Int64 offset)
 bool PGStorage::tableExists()
 {
     try {
-        Session session(pool_->get());
+        Poco::Data::Session session(pool_->get());
         session << "SELECT 1 FROM maintenance_log LIMIT 1", now;
         return true;
-    } catch (const Exception&) {
+    } catch (const Poco::Exception&) {
         return false;
     }
 }

@@ -6,6 +6,8 @@
 #include <chrono>
 #include <thread>
 #include <boost/asio/post.hpp>
+#include <boost/json/src.hpp>
+#include <Poco/DateTimeFormatter.h>
 
 // Helper: current time as string "YYYY-MM-DD HH:MM:SS,mmm"
 static std::string current_time_str() {
@@ -20,32 +22,32 @@ static std::string current_time_str() {
 }
 
 // Convert MaintenanceLogRecord to JSON
-nlohmann::json to_json(const MaintenanceLogRecord& record) {
-    // Assuming timestamputc is of type DateTime that can be converted to string
-    // For simplicity, we'll assume it has a .str() method or we convert via time_t
-    std::time_t tt = record.timestamputc; // or appropriate conversion
-    std::tm tm = *std::gmtime(&tt);
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-    std::string dt_str = oss.str();
+json::object to_json(const MaintenanceLogRecord& record) {
+    // Format Poco::DateTime to string "YYYY-MM-DD HH:MM:SS"
+    std::string dt_str = Poco::DateTimeFormatter::format(
+        record.timestamputc, "%Y-%m-%d %H:%M:%S");
 
-    return nlohmann::json{
-        {"offset", record.offset},
-        {"owner", record.owner},
-        {"token", record.token},
-        {"dt", dt_str},
-        {"msg", record.msg}
-    };
+    json::object obj;
+    obj["offset"] = record.offset;
+    obj["owner"] = record.owner;
+    obj["token"] = record.token;
+    obj["dt"] = dt_str;
+    obj["msg"] = record.msg;
+    return obj;
 }
 
 // Parse LogMessage from JSON, filling missing datetime
-std::optional<LogMessage> parse_log_message(const nlohmann::json& j) {
+std::optional<LogMessage> parse_log_message(const json::value& v) {
+    if (!v.is_object()) {
+        return std::nullopt;
+    }
+    const auto& j = v.as_object();
     try {
         LogMessage msg;
-        msg.owner = j.at("o").get<std::string>();
-        msg.token = j.at("t").get<std::string>();
-        msg.message = j.at("m").get<std::string>();
-        msg.type = j.at("type").get<std::string>();
+        msg.owner = json::value_to<std::string>(j.at("o"));
+        msg.token = json::value_to<std::string>(j.at("t"));
+        msg.message = json::value_to<std::string>(j.at("m"));
+        msg.type = json::value_to<std::string>(j.at("type"));
 
         // Trim whitespace (basic)
         auto trim = [](std::string& s) {
@@ -60,8 +62,8 @@ std::optional<LogMessage> parse_log_message(const nlohmann::json& j) {
         if (!msg.valid())
             return std::nullopt;
 
-        if (j.contains("dt") && !j["dt"].is_null()) {
-            msg.datetime = j["dt"].get<std::string>();
+        if (auto it = j.find("dt"); it != j.end() && it->value().is_string()) {
+            msg.datetime = json::value_to<std::string>(it->value());
             trim(*msg.datetime);
         } else {
             msg.datetime = current_time_str();
@@ -158,17 +160,17 @@ void Session::send_response(http::status status, const std::string& content_type
         });
 }
 
-void Session::send_json_response(http::status status, const nlohmann::json& j) {
-    send_response(status, "application/json", j.dump());
+void Session::send_json_response(http::status status, const json::value& j) {
+    send_response(status, "application/json", json::serialize(j));
 }
 
 void Session::send_plain_response(http::status status, const std::string& text,
-                                   const std::vector<http::field>& extra_headers) {
+                                   const std::vector<std::pair<http::field, std::string>>& extra_headers) {
     http::response<http::string_body> res{status, request_.version()};
     res.set(http::field::server, "LogCollector/1.1");
     res.set(http::field::content_type, "text/plain");
     for (const auto& h : extra_headers) {
-        res.set(h.name(), h.value());
+        res.set(h.first, h.second);
     }
     res.body() = text;
     res.prepare_payload();
@@ -196,7 +198,7 @@ void Session::background_post(F&& f) {
 }
 
 void Session::handle_root() {
-    nlohmann::json j;
+    json::object j;
     j["status"] = "online";
     j["service"] = "Log Collector API";
     // Simulate RabbitMQ status: assume connected if storage is valid
@@ -206,27 +208,32 @@ void Session::handle_root() {
 
 void Session::handle_health() {
     if (storage_) {
-        send_json_response(http::status::ok, {{"status", "online"}});
+        json::object j;
+        j["status"] = "online";
+        send_json_response(http::status::ok, j);
     } else {
-        send_json_response(http::status::internal_server_error,
-                           {{"detail", "Internal server error"}});
+        json::object j;
+        j["detail"] = "Internal server error";
+        send_json_response(http::status::internal_server_error, j);
     }
 }
 
 void Session::handle_log_post() {
     // Parse JSON body
-    nlohmann::json j;
-    try {
-        j = nlohmann::json::parse(request_.body());
-    } catch (...) {
-        send_json_response(http::status::bad_request, {{"error", "Invalid JSON"}});
+    boost::system::error_code ec;
+    json::value j = json::parse(request_.body(), ec);
+    if (ec) {
+        json::object err;
+        err["error"] = "Invalid JSON";
+        send_json_response(http::status::bad_request, err);
         return;
     }
 
     auto msg_opt = parse_log_message(j);
     if (!msg_opt) {
-        send_json_response(http::status::bad_request,
-                           {{"error", "Invalid log message format or empty fields"}});
+        json::object err;
+        err["error"] = "Invalid log message format or empty fields";
+        send_json_response(http::status::bad_request, err);
         return;
     }
 
@@ -241,13 +248,15 @@ void Session::handle_log_post() {
     std::cerr << "Received log from " << msg_opt->owner << "::" << msg_opt->token
               << ", type: " << msg_opt->type << std::endl;
 
-    send_json_response(http::status::ok, {{"status", "success"}});
+    json::object resp;
+    resp["status"] = "success";
+    send_json_response(http::status::ok, resp);
 }
 
 void Session::handle_log_pull() {
     // Parse offset query parameter
     int offset = 0;
-    auto target = request_.target().to_string();
+    auto target = std::string(request_.target());
     auto pos = target.find('?');
     if (pos != std::string::npos) {
         // crude parsing, assume "?offset=123"
@@ -259,20 +268,23 @@ void Session::handle_log_pull() {
 
     try {
         auto records = storage_->pull(offset);
-        nlohmann::json logs = nlohmann::json::array();
+        json::array logs;
         for (const auto& rec : records) {
             logs.push_back(to_json(rec));
         }
-        send_json_response(http::status::ok, {{"logs", logs}});
+        json::object resp;
+        resp["logs"] = std::move(logs);
+        send_json_response(http::status::ok, resp);
     } catch (const std::exception& e) {
-        send_json_response(http::status::internal_server_error,
-                           {{"detail", std::string("Internal server error: ") + e.what()}});
+        json::object err;
+        err["detail"] = std::string("Internal server error: ") + e.what();
+        send_json_response(http::status::internal_server_error, err);
     }
 }
 
 void Session::handle_log_pull_plain() {
     int offset = 0;
-    auto target = request_.target().to_string();
+    auto target = std::string(request_.target());
     auto pos = target.find('?');
     if (pos != std::string::npos) {
         auto query = target.substr(pos + 1);
@@ -289,28 +301,27 @@ void Session::handle_log_pull_plain() {
         } else {
             for (const auto& rec : records) {
                 // Format: offset[datetime]: msg
-                std::time_t tt = rec.timestamputc;
-                std::tm tm = *std::gmtime(&tt);
-                char dt_buf[64];
-                std::strftime(dt_buf, sizeof(dt_buf), "%Y-%m-%d %H:%M:%S", &tm);
-                oss << rec.offset << "[" << dt_buf << "]: " << rec.msg << "\n";
+                std::string dt_str = Poco::DateTimeFormatter::format(
+                    rec.timestamputc, "%Y-%m-%d %H:%M:%S");
+                oss << rec.offset << "[" << dt_str << "]: " << rec.msg << "\n";
             }
         }
-        std::vector<http::field> headers;
+        std::vector<std::pair<http::field, std::string>> headers;
         headers.emplace_back(http::field::cache_control, "no-cache, no-store, must-revalidate");
         headers.emplace_back(http::field::pragma, "no-cache");
         headers.emplace_back(http::field::expires, "0");
         headers.emplace_back(http::field::vary, "Accept-Encoding");
         send_plain_response(http::status::ok, oss.str(), headers);
     } catch (const std::exception& e) {
-        send_json_response(http::status::internal_server_error,
-                           {{"detail", std::string("Internal server error: ") + e.what()}});
+        json::object err;
+        err["detail"] = std::string("Internal server error: ") + e.what();
+        send_json_response(http::status::internal_server_error, err);
     }
 }
 
 void Session::handle_log_download_plain() {
     int offset = 0;
-    auto target = request_.target().to_string();
+    auto target = std::string(request_.target());
     auto pos = target.find('?');
     if (pos != std::string::npos) {
         auto query = target.substr(pos + 1);
@@ -326,11 +337,9 @@ void Session::handle_log_download_plain() {
             oss << "No logs available";
         } else {
             for (const auto& rec : records) {
-                std::time_t tt = rec.timestamputc;
-                std::tm tm = *std::gmtime(&tt);
-                char dt_buf[64];
-                std::strftime(dt_buf, sizeof(dt_buf), "%Y-%m-%d %H:%M:%S", &tm);
-                oss << rec.offset << "[" << dt_buf << "]: " << rec.msg << "\n";
+                std::string dt_str = Poco::DateTimeFormatter::format(
+                    rec.timestamputc, "%Y-%m-%d %H:%M:%S");
+                oss << rec.offset << "[" << dt_str << "]: " << rec.msg << "\n";
             }
         }
 
@@ -342,7 +351,7 @@ void Session::handle_log_download_plain() {
         std::strftime(fname_buf, sizeof(fname_buf), "maintenance_%Y%m%d_%H%M%S.txt", &now_tm);
         std::string filename = fname_buf;
 
-        std::vector<http::field> headers;
+        std::vector<std::pair<http::field, std::string>> headers;
         headers.emplace_back(http::field::content_disposition,
                              "attachment; filename=\"" + filename + "\"");
         headers.emplace_back(http::field::cache_control, "no-cache, no-store, must-revalidate");
@@ -351,27 +360,31 @@ void Session::handle_log_download_plain() {
         headers.emplace_back(http::field::vary, "Accept-Encoding");
         send_plain_response(http::status::ok, oss.str(), headers);
     } catch (const std::exception& e) {
-        send_json_response(http::status::internal_server_error,
-                           {{"detail", std::string("Internal server error: ") + e.what()}});
+        json::object err;
+        err["detail"] = std::string("Internal server error: ") + e.what();
+        send_json_response(http::status::internal_server_error, err);
     }
 }
 
 void Session::handle_log_batch_post() {
-    nlohmann::json j;
-    try {
-        j = nlohmann::json::parse(request_.body());
-    } catch (...) {
-        send_json_response(http::status::bad_request, {{"error", "Invalid JSON"}});
+    boost::system::error_code ec;
+    json::value j = json::parse(request_.body(), ec);
+    if (ec) {
+        json::object err;
+        err["error"] = "Invalid JSON";
+        send_json_response(http::status::bad_request, err);
         return;
     }
 
     if (!j.is_array()) {
-        send_json_response(http::status::bad_request, {{"error", "Expected an array"}});
+        json::object err;
+        err["error"] = "Expected an array";
+        send_json_response(http::status::bad_request, err);
         return;
     }
 
     int success_count = 0;
-    for (const auto& item : j) {
+    for (const auto& item : j.as_array()) {
         auto msg_opt = parse_log_message(item);
         if (msg_opt) {
             background_post([msg = *msg_opt](std::shared_ptr<PGStorage> st) {
@@ -383,7 +396,7 @@ void Session::handle_log_batch_post() {
 
     std::cerr << "Received " << success_count << " logs in batch" << std::endl;
 
-    nlohmann::json resp;
+    json::object resp;
     resp["status"] = "success";
     resp["message"] = std::to_string(success_count) + " logs accepted and queued";
     resp["count"] = success_count;

@@ -8,12 +8,13 @@
 #include <thread>
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
-#include <nlohmann/json.hpp>
+#include <boost/json.hpp>
 #include "storage.h"
 
 namespace beast = boost::beast;
 namespace http = beast::http;
 namespace net = boost::asio;
+namespace json = boost::json;
 using tcp = net::ip::tcp;
 
 // Configuration for the server
@@ -38,10 +39,10 @@ struct LogMessage {
 };
 
 // Convert MaintenanceLogRecord to JSON object
-nlohmann::json to_json(const MaintenanceLogRecord& record);
+json::object to_json(const MaintenanceLogRecord& record);
 
 // Parse LogMessage from JSON, filling missing datetime
-std::optional<LogMessage> parse_log_message(const nlohmann::json& j);
+std::optional<LogMessage> parse_log_message(const json::value& j);
 
 // Forward declaration
 class LogCollectorServer;
@@ -58,9 +59,9 @@ private:
     void process_request();
     void send_response(http::status status, const std::string& content_type,
                        const std::string& body, bool add_cors = false);
-    void send_json_response(http::status status, const nlohmann::json& j);
+    void send_json_response(http::status status, const json::value& j);
     void send_plain_response(http::status status, const std::string& text,
-                             const std::vector<http::field>& extra_headers = {});
+                             const std::vector<std::pair<http::field, std::string>>& extra_headers = {});
 
     // Handlers for specific endpoints
     void handle_root();
