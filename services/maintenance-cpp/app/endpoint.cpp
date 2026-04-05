@@ -10,7 +10,7 @@
 #include <Poco/DateTimeFormatter.h>
 
 // Helper: current time as string "YYYY-MM-DD HH:MM:SS,mmm"
-static std::string current_time_str() {
+std::string current_time_str() {
     auto now = std::chrono::system_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
     auto t = std::chrono::system_clock::to_time_t(now);
@@ -110,7 +110,7 @@ void Session::process_request() {
     // Determine target and method
     auto target = request_.target();
     auto method = request_.method();
-
+    std::cout << "[" << current_time_str() << "] call " << target << std::endl;
     try {
         if (method == http::verb::get && target == "/") {
             handle_root();

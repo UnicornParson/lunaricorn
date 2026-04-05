@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "Z:/lunaricorn/services/maintenance-cpp/app"
+    "cmake.sourceDirectory": "Z:/lunaricorn/services/maintenance-cpp/app",
+    "C_Cpp.default.compilerPath": ""
 }

@@ -41,6 +41,8 @@ struct LogMessage {
 // Convert MaintenanceLogRecord to JSON object
 json::object to_json(const MaintenanceLogRecord& record);
 
+std::string current_time_str();
+
 // Parse LogMessage from JSON, filling missing datetime
 std::optional<LogMessage> parse_log_message(const json::value& j);
 

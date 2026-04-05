@@ -65,7 +65,7 @@ services:
 
   maintenance:
     build:
-      context: ./maintenance
+      context: ./maintenance-cpp
       dockerfile: Dockerfile
     container_name: lunaricorn-maintenance
     ports:
@@ -83,6 +83,7 @@ services:
       - db_password=${LUNARICORN_PASSWORD}
       - db_name=lunaricorn
       - db_schema=lunaricorn
+      - WORKERS=4
     restart: unless-stopped
     depends_on:
       pg:

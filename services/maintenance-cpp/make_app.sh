@@ -3,9 +3,13 @@ mkdir -p tmp
 set -e
 IMG_NAME=lunaricorn_maintenance_cpp
 BASE_IMG=lunaricorn_maintenance_cpp_base
-
+BUILDER_TAG=lunaricorn_maintenance_cpp_builder
 if ! docker image inspect "$BASE_IMG" &>/dev/null; then
     echo "Base image $BASE_IMG not found. Building it first..."
+    "$(dirname "$0")/make_base.sh"
+fi
+if ! docker image inspect "$BUILDER_TAG" &>/dev/null; then
+    echo "Base image $BUILDER_TAG not found. Building it first..."
     "$(dirname "$0")/make_base.sh"
 fi
 

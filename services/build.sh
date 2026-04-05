@@ -10,8 +10,13 @@ if ! docker image inspect lunaricorn-pg &>/dev/null; then
     popd > /dev/null
 fi
 
+#echo "Building maintenance service..."
+#pushd maintenance > /dev/null
+#./make_app.sh
+#popd > /dev/null
+
 echo "Building maintenance service..."
-pushd maintenance > /dev/null
+pushd maintenance-cpp > /dev/null
 ./make_app.sh
 popd > /dev/null
 
