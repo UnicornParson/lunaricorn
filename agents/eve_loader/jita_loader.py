@@ -198,13 +198,14 @@ def push_many(engine, records: list, region_id: int) -> int:
         print(f"❌ Неожиданная ошибка: {e}")
         return 0
 
-def main() -> int:
+def load_region(region_id, reg_name) -> bool:
+    print(f"загрузка региона {reg_name}")
     DB_HOST = '192.168.0.18'
     DB_PORT = 8003
     DB_NAME = 'datalake'
     DB_USER = os.getenv('LAKE_USER')
     DB_PASSWORD = os.getenv('LAKE_PASSWORD')
-    region_id = 10000043  # Jita region ID
+
     chunk_size = 1000
     if not DB_USER or not DB_PASSWORD:
         raise EnvironmentError(
@@ -219,19 +220,28 @@ def main() -> int:
     
     all_orders = get_all_market_orders(region_id=region_id, order_type='all')
     if not all_orders:
-        print("⚠️ Не удалось загрузить ни одного ордера. ")
-        return -1
-    print(f"Итого ордеров: {len(all_orders)}")
+        print(f"⚠️ Не удалось загрузить ни одного ордера. {reg_name}")
+        return False
+    print(f"Итого ордеров: {len(all_orders)} для региона {reg_name}")
    
     total_records = len(all_orders)
 
-    with tqdm.tqdm(total=total_records, desc="Сохранение ордеров", unit="запись") as pbar:
+    with tqdm.tqdm(total=total_records, desc="Сохранение ордеров {reg_name}", unit="запись") as pbar:
         for start in range(0, total_records, chunk_size):
             chunk = all_orders[start:start + chunk_size]
             saved = push_many(engine, chunk, region_id=region_id)
             pbar.update(len(chunk))
             if saved != len(chunk):
                 tqdm.tqdm.write(f"⚠️ Чанк [{start}:{start+len(chunk)}]: сохранено {saved} из {len(chunk)}")
-
+    return True
 if __name__ == "__main__":
-    sys.exit(main())
+    regions = {
+        "jita_region_id" : 10000002,
+        "amarr_region_id" : 10000043,
+        "hek_region_id" : 10000042,
+        "dodixie_region_id" : 10000032,
+        "rens_region_id" : 10000030
+    }
+    for reg_name, reg_id in regions.items():
+        load_region(reg_id, reg_name)
+        time.sleep(3.0)
