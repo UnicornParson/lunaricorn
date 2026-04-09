@@ -8,8 +8,16 @@
 #include <boost/asio/post.hpp>
 #include <boost/json/src.hpp>
 #include <Poco/DateTimeFormatter.h>
+#if DEBUG
+#define DPRINT(s) std::cout << "[" << current_time_str() << "] point " << __FILE__ << " f:(" << __FUNCTION__ << ")." << __LINE__ << " : " << s << std::endl << std::flush
+#define POINT std::cerr << "[" << current_time_str() << "] point " << __FILE__ << " f:(" << __FUNCTION__ << ")." << __LINE__ << std::endl << std::flush
+#else
+#define POINT 
+#define DPRINT(s) 
+#endif // DEBUG
 
-// Helper: current time as string "YYYY-MM-DD HH:MM:SS,mmm"
+constexpr int ACTIVE_REQUESTS_WARN_LIMIT { 10 };
+
 std::string current_time_str() {
     auto now = std::chrono::system_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
@@ -23,6 +31,7 @@ std::string current_time_str() {
 
 // Convert MaintenanceLogRecord to JSON
 json::object to_json(const MaintenanceLogRecord& record) {
+    POINT;
     // Format Poco::DateTime to string "YYYY-MM-DD HH:MM:SS"
     std::string dt_str = Poco::DateTimeFormatter::format(
         record.timestamputc, "%Y-%m-%d %H:%M:%S");
@@ -111,76 +120,101 @@ void Session::process_request() {
     auto target = request_.target();
     auto method = request_.method();
     std::cout << "[" << current_time_str() << "] call " << target << std::endl;
+    POINT;
     try {
         if (method == http::verb::get && target == "/") {
+            POINT;
             handle_root();
+            POINT;
         } else if (method == http::verb::get && target == "/health") {
+            POINT;
             handle_health();
+            POINT;
         } else if (method == http::verb::post && target == "/log") {
+            POINT;
             handle_log_post();
+            POINT;
         } else if (method == http::verb::get && target.starts_with("/log/pull")) {
+            POINT;
+            DPRINT("on pull. t: " << target);
             // Check if it's /log/pull or /log/pull-plain or /log/download-plain
-            if (target == "/log/pull") {
+            if (target == "/log/pull" || target.find("/log/pull?") == 0) {
                 handle_log_pull();
-            } else if (target == "/log/pull-plain") {
+            } else if (target == "/log/pull-plain" || target.find("/log/pull-plain?") == 0) {
                 handle_log_pull_plain();
-            } else if (target == "/log/download-plain") {
+            } else if (target == "/log/download-plain" || target.find("/log/download-plain?") == 0) {
                 handle_log_download_plain();
             } else {
                 send_json_response(http::status::not_found, {{"error", "Not found"}});
             }
+            POINT;
         } else if (method == http::verb::post && target == "/log/batch") {
+            POINT;
             handle_log_batch_post();
+            POINT;
         } else {
+            POINT;
             send_json_response(http::status::not_found, {{"error", "Not found"}});
+            POINT;
         }
     } catch (const std::exception& e) {
+        POINT;
         std::cerr << "Exception in process_request: " << e.what() << std::endl;
         send_json_response(http::status::internal_server_error,
                            {{"error", "Internal server error"}});
+        POINT;
     }
+    POINT;
 }
 
 void Session::send_response(http::status status, const std::string& content_type,
-                            const std::string& body, bool add_cors) {
-    http::response<http::string_body> res{status, request_.version()};
-    res.set(http::field::server, "LogCollector/1.1");
-    res.set(http::field::content_type, content_type);
+                            const std::string& body, bool add_cors) 
+{
+    POINT;
+    auto res = std::make_shared<http::response<http::string_body>>(status, request_.version());
+    res->set(http::field::server, "LogCollector/1.1");
+    res->set(http::field::content_type, content_type);
     if (add_cors) {
-        res.set(http::field::access_control_allow_origin, "*");
+        res->set(http::field::access_control_allow_origin, "*");
     }
-    res.body() = body;
-    res.prepare_payload();
+    res->body() = body;
+    res->prepare_payload();
 
     auto self = shared_from_this();
-    http::async_write(socket_, res,
-        [self](beast::error_code ec, std::size_t) {
+    http::async_write(socket_, *res,
+        [self, res](beast::error_code ec, std::size_t) {
             self->socket_.shutdown(tcp::socket::shutdown_send, ec);
             self->server_.decrement_active();
         });
+    POINT;
 }
 
 void Session::send_json_response(http::status status, const json::value& j) {
+    POINT;
     send_response(status, "application/json", json::serialize(j));
+    POINT;
 }
 
 void Session::send_plain_response(http::status status, const std::string& text,
-                                   const std::vector<std::pair<http::field, std::string>>& extra_headers) {
-    http::response<http::string_body> res{status, request_.version()};
-    res.set(http::field::server, "LogCollector/1.1");
-    res.set(http::field::content_type, "text/plain");
+                                   const std::vector<std::pair<http::field, std::string>>& extra_headers) 
+{
+    POINT;
+    auto res = std::make_shared<http::response<http::string_body>>(status, request_.version());
+    res->set(http::field::server, "LogCollector/1.1");
+    res->set(http::field::content_type, "text/plain");
     for (const auto& h : extra_headers) {
-        res.set(h.first, h.second);
+        res->set(h.first, h.second);
     }
-    res.body() = text;
-    res.prepare_payload();
+    res->body() = text;
+    res->prepare_payload();
 
     auto self = shared_from_this();
-    http::async_write(socket_, res,
-        [self](beast::error_code ec, std::size_t) {
+    http::async_write(socket_, *res,
+        [self, res](beast::error_code ec, std::size_t) {
             self->socket_.shutdown(tcp::socket::shutdown_send, ec);
             self->server_.decrement_active();
         });
+    POINT;
 }
 
 template<typename F>
@@ -197,7 +231,9 @@ void Session::background_post(F&& f) {
         });
 }
 
-void Session::handle_root() {
+void Session::handle_root() 
+{
+    POINT;
     json::object j;
     j["status"] = "online";
     j["service"] = "Log Collector API";
@@ -206,16 +242,23 @@ void Session::handle_root() {
     send_json_response(http::status::ok, j);
 }
 
-void Session::handle_health() {
+void Session::handle_health() 
+{
+    POINT;
     if (storage_) {
         json::object j;
         j["status"] = "online";
+        POINT;
         send_json_response(http::status::ok, j);
+        POINT;
     } else {
         json::object j;
         j["detail"] = "Internal server error";
+        POINT;
         send_json_response(http::status::internal_server_error, j);
+        POINT;
     }
+    POINT;
 }
 
 void Session::handle_log_post() {
@@ -245,8 +288,7 @@ void Session::handle_log_post() {
     });
 
     // Log reception
-    std::cerr << "Received log from " << msg_opt->owner << "::" << msg_opt->token
-              << ", type: " << msg_opt->type << std::endl;
+    DPRINT("Received log from " << msg_opt->owner << "::" << msg_opt->token << ", type: " << msg_opt->type);
 
     json::object resp;
     resp["status"] = "success";
@@ -256,18 +298,24 @@ void Session::handle_log_post() {
 void Session::handle_log_pull() {
     // Parse offset query parameter
     int offset = 0;
+    
     auto target = std::string(request_.target());
     auto pos = target.find('?');
+    DPRINT("try pull " << target);
     if (pos != std::string::npos) {
         // crude parsing, assume "?offset=123"
         auto query = target.substr(pos + 1);
         if (query.substr(0, 7) == "offset=") {
             offset = std::stoi(query.substr(7));
+            DPRINT("pull. use offset " << offset);
+        } else {
+            DPRINT("pull. invalid offset [[ " << query << " ]]");
         }
     }
 
     try {
         auto records = storage_->pull(offset);
+        DPRINT("pull. found records " << records.size());
         json::array logs;
         for (const auto& rec : records) {
             logs.push_back(to_json(rec));
@@ -277,6 +325,7 @@ void Session::handle_log_pull() {
         send_json_response(http::status::ok, resp);
     } catch (const std::exception& e) {
         json::object err;
+        DPRINT("pull error " << e.what());
         err["detail"] = std::string("Internal server error: ") + e.what();
         send_json_response(http::status::internal_server_error, err);
     }
@@ -458,14 +507,16 @@ void LogCollectorServer::do_accept() {
 
 void LogCollectorServer::increment_active() {
     active_requests_++;
-    std::cerr << "Active requests: " << active_requests_.load() << std::endl;
+    if (active_requests_.load() >= ACTIVE_REQUESTS_WARN_LIMIT)
+        std::cerr << "Active requests: " << active_requests_.load() << std::endl;
 }
 
 void LogCollectorServer::decrement_active() {
     active_requests_--;
-    std::cerr << "Active requests: " << active_requests_.load() << std::endl;
+    if (active_requests_.load() >= ACTIVE_REQUESTS_WARN_LIMIT)
+        std::cerr << "Active requests: " << active_requests_.load() << std::endl;
 }
 
 int LogCollectorServer::active_requests() const {
-    return active_requests_;
+    return active_requests_.load();
 }

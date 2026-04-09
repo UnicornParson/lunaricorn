@@ -4,6 +4,8 @@ FROM lunaricorn_maintenance_cpp_builder AS builder
 COPY app/ /opt/app/
 WORKDIR /opt/app/
 RUN chmod +x /opt/app/build.sh 
+#ENV BUILD_TYPE=Debug
+ENV BUILD_TYPE=Release
 RUN /opt/app/build.sh
 
 FROM lunaricorn_maintenance_cpp_base
@@ -11,10 +13,12 @@ FROM lunaricorn_maintenance_cpp_base
 COPY --from=builder /opt/app/__build/maintenance /opt/app/bin/maintenance
 COPY --from=builder /opt/3rd/boost/bin/lib /opt/3rd/boost/bin/lib
 COPY --from=builder /opt/3rd/poco/bin/lib /opt/3rd/poco/bin/lib
+RUN ln -s /bin/bash /usr/bin/bh
 
 # Добавляем пути к библиотекам в конфигурацию динамического компоновщика
-RUN echo "/opt/3rd/boost/bin/lib" > /etc/ld.so.conf.d/boost.conf && \
+RUN echo "/opt/3rd/boost/bin/lib" >> /etc/ld.so.conf.d/boost.conf && \
     echo "/opt/3rd/poco/bin/lib" >> /etc/ld.so.conf.d/poco.conf && \
     ldconfig
 
+# ENTRYPOINT ["gdb", "--args", "/opt/app/bin/maintenance"]
 ENTRYPOINT ["/opt/app/bin/maintenance"]

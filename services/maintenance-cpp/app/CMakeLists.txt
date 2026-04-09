@@ -10,7 +10,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Force static linking for all libraries
 set(BUILD_SHARED_LIBS OFF)
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build: Debug or Release" FORCE)
+endif()
 
+# Override default flags for Debug and Release configurations
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -DDEBUG" CACHE STRING "Flags used by the C++ compiler during Debug builds." FORCE)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "Flags used by the C++ compiler during Release builds." FORCE)
 # ------------------------------------------------------------------
 # Boost setup (static)
 # ------------------------------------------------------------------
