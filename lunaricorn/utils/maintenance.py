@@ -344,6 +344,10 @@ class MaintenanceLogHandlerMq(logging.Handler):
             sys.stderr.write(f"log push failed: {e}\n")
 
 def setup_maintenance_logging(owner: str, token: str, logger=logging.getLogger()):
+    mlog.owner = owner
+    mlog.token = token
+    return
+#TODO CLEANUP
     host = os.getenv("MAINTENANCE_HOST")
     port = os.getenv("MAINTENANCE_PORT")
 

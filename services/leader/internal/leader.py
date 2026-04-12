@@ -5,6 +5,7 @@ import yaml
 import logging
 import os
 from lunaricorn.utils.maintenance import *
+from lunaricorn.utils import mlog
 class NotReadyException(Exception):
     pass
 
@@ -47,7 +48,7 @@ class Leader:
             minconn=1,
             maxconn=3
         )
-        self.logger.info("Leader initialized with global database manager")
+        mlog.d("Leader initialized with global database manager")
     def shutdown(self):
         if self.discover_manager:
             self.discover_manager.shutdown()
@@ -58,7 +59,7 @@ class Leader:
             with open(self.CONFIG_PATH, "r") as f:
                 return yaml.safe_load(f)
         except Exception as e:
-            self.logger.error(f"Error loading configuration: {e}")
+            mlog.e(f"Error loading configuration: {e}")
             raise e
     
     def get_cluster_config(self) -> dict:
@@ -67,7 +68,7 @@ class Leader:
             with open(self.CLUSTER_CONFIG_PATH, "r") as f:
                 return yaml.safe_load(f)
         except Exception as e:
-            self.logger.error(f"Error loading cluster configuration: {e}")
+            mlog.e(f"Error loading cluster configuration: {e}")
             raise e
     
     def _get_alive(self):
@@ -105,10 +106,10 @@ class Leader:
                 missing_nodes.append(required_node)
         
         if missing_nodes:
-            self.logger.warning(f"Missing required nodes: {missing_nodes}. Required: {required_nodes}, Alive: {list(alive_node_names)}")
+            mlog.w(f"Missing required nodes: {missing_nodes}. Required: {required_nodes}, Alive: {list(alive_node_names)}")
             return False
         
-        self.logger.info(f"All required nodes are alive. Required: {required_nodes}, Alive: {list(alive_node_names)}")
+        mlog.d(f"All required nodes are alive. Required: {required_nodes}, Alive: {list(alive_node_names)}")
         return True
     
     def update_node(self, node_name: str, node_type: str, instance_key: str, host: Optional[str] = None, port: Optional[int] = 0):

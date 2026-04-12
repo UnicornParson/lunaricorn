@@ -16,4 +16,7 @@ COPY cfg/config.yaml /opt/lunaricorn/portal/data/config.yaml
 COPY requirements.txt /opt/lunaricorn/portal/app/
 
 RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r /opt/lunaricorn/portal/app/requirements.txt
+RUN pip install --no-cache-dir --default-timeout=100 \
+    --index-url https://mirrors.aliyun.com/pypi/simple/ \
+    --trusted-host mirrors.aliyun.com \
+    -r /opt/lunaricorn/portal/app/requirements.txt

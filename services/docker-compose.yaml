@@ -70,9 +70,6 @@ services:
     container_name: lunaricorn-maintenance
     ports:
       - ${MAINTENANCE_API_PORT}:8000
-    volumes:
-      - ${LUNARICORN_HOME}/maintenance:/app/data/
-      - ${LUNARICORN_HOME}/rmq:/var/log/rabbitmq/
     networks:
       - lunaricorn-network
     environment:

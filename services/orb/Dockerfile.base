@@ -16,4 +16,7 @@ RUN mkdir -p /opt/lunaricorn/orb/file_storage
 RUN mkdir -p /opt/lunaricorn/orb/app
 COPY requirements.txt /opt/lunaricorn/orb/app/   
 RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r /opt/lunaricorn/orb/app/requirements.txt
+RUN pip install --no-cache-dir --default-timeout=100 \
+    --index-url https://mirrors.aliyun.com/pypi/simple/ \
+    --trusted-host mirrors.aliyun.com \
+    -r /opt/lunaricorn/orb/app/requirements.txt

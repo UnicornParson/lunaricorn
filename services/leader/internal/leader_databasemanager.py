@@ -3,6 +3,7 @@ import logging
 import threading
 
 from lunaricorn.utils.maintenance import *
+from lunaricorn.utils import mlog
 logger = make_logger(owner="leader", token=f"leader_{apptoken()}")
 
 class LeaderDatabaseManager(DatabaseManager):
@@ -14,7 +15,7 @@ class LeaderDatabaseManager(DatabaseManager):
         return self._last_cursor_description
     
     def installer_impl(self, cur):
-        logger.info("LeaderDatabaseManager installer_impl")
+        mlog.d("LeaderDatabaseManager installer_impl")
         cur.execute('''
             CREATE TABLE IF NOT EXISTS last_seen (
                 i SERIAL PRIMARY KEY,
@@ -67,4 +68,4 @@ class LeaderDatabaseManager(DatabaseManager):
         cur.execute('''
             CREATE INDEX IF NOT EXISTS idx_node_state_ok ON node_state(ok);
         ''')
-        logger.info("Ensured all required tables and indexes exist")
+        mlog.d("Ensured all required tables and indexes exist")

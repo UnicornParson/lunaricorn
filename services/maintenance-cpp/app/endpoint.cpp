@@ -174,6 +174,7 @@ void Session::send_response(http::status status, const std::string& content_type
     auto res = std::make_shared<http::response<http::string_body>>(status, request_.version());
     res->set(http::field::server, "LogCollector/1.1");
     res->set(http::field::content_type, content_type);
+    res->set(http::field::connection, "close");
     if (add_cors) {
         res->set(http::field::access_control_allow_origin, "*");
     }
@@ -202,6 +203,7 @@ void Session::send_plain_response(http::status status, const std::string& text,
     auto res = std::make_shared<http::response<http::string_body>>(status, request_.version());
     res->set(http::field::server, "LogCollector/1.1");
     res->set(http::field::content_type, "text/plain");
+    res->set(http::field::connection, "close");
     for (const auto& h : extra_headers) {
         res->set(h.first, h.second);
     }

@@ -13,4 +13,4 @@ from . import maintenance
 
 __all__ = ['DatabaseManager', 'DbConfig', "Dbutils", 
            'setup_logging', 'set_loki_handler', 'wait_for_loki_ready',
-           'setup_maintenance_logging', 'MaintenanceLogHandler', 'MaintenanceClient', 'MaintenanceClientMq', 'apptoken']
+           'setup_maintenance_logging', 'MaintenanceLogHandler', 'MaintenanceClient', 'MaintenanceClientMq', 'apptoken', 'mlog']

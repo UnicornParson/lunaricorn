@@ -8,7 +8,7 @@ from .leader_databasemanager import *
 from lunaricorn.utils.maintenance import *
 
 from lunaricorn.utils.db_manager import DatabaseManager
-
+from lunaricorn.utils import mlog
 logger = make_logger(owner="leader", token=f"leader_{apptoken()}")
 db_manager = None
 
@@ -25,10 +25,10 @@ class DiscoverManagerPG:
         if not db_manager:
             db_manager = LeaderDatabaseManager()
         else:
-            logger.info(f"db_manager alredy created type: {type(db_manager).__name__}")
+            mlog.d(f"db_manager alredy created type: {type(db_manager).__name__}")
         db_manager.initialize(self.host, self.port, self.user, self.password, self.dbname, self.minconn, self.maxconn)
         db_manager.install_db()
-        logger.info("DiscoverManagerPG initialized with global database manager")
+        mlog.d("DiscoverManagerPG initialized with global database manager")
 
     def shutdown(self):
         global db_manager
@@ -40,9 +40,9 @@ class DiscoverManagerPG:
             if self.pool:
                 self.pool.closeall()
             self.pool = SimpleConnectionPool(self.minconn, self.maxconn, **self.conn_params)
-            logger.info("Connection pool created successfully")
+            mlog.d("Connection pool created successfully")
         except Exception as e:
-            logger.error(f"Failed to create connection pool: {e}")
+            mlog.e(f"Failed to create connection pool: {e}")
             raise
 
     def _get_conn(self):
@@ -55,11 +55,11 @@ class DiscoverManagerPG:
 
     def _reset_pool(self):
         try:
-            logger.warning("Resetting connection pool due to exhaustion")
+            mlog.w("Resetting connection pool due to exhaustion")
             self._create_pool()
-            logger.info("Connection pool reset successfully")
+            mlog.d("Connection pool reset successfully")
         except Exception as e:
-            logger.error(f"Failed to reset connection pool: {e}")
+            mlog.e(f"Failed to reset connection pool: {e}")
             raise
 
     def _get_connection_context(self):
@@ -82,7 +82,7 @@ class DiscoverManagerPG:
                 'pool_used': self.pool.get_used()
             }
         except Exception as e:
-            logger.error(f"Error getting pool status: {e}")
+            mlog.e(f"Error getting pool status: {e}")
             return {}
 
     def _is_pool_valid(self):
@@ -96,7 +96,7 @@ class DiscoverManagerPG:
     def node_states(self) -> Dict:
         global db_manager
         if not self._validate_connection():
-            logger.error("Cannot get node states - no valid database connection")
+            mlog.e("Cannot get node states - no valid database connection")
             return {}
         try:
             records = db_manager.execute_query('''
@@ -114,16 +114,16 @@ class DiscoverManagerPG:
                 }
                 result[record['node']] = record_data
             
-            logger.debug(f"Retrieved {len(result)} node states")
+            mlog.d(f"Retrieved {len(result)} node states")
             return result
         except Exception as e:
-            logger.error(f"Error getting node states: {e}")
+            mlog.e(f"Error getting node states: {e}")
             return {}
 
     def update_node_state(self, node: str, ok:bool, msg:str = "ok", ex = {}):
         global db_manager
         if not self._validate_connection():
-                logger.error("Cannot update node state - no valid database connection")
+                mlog.e("Cannot update node state - no valid database connection")
                 return False
         try:
             ok_int = 1 if ok else 0
@@ -142,24 +142,24 @@ class DiscoverManagerPG:
                     SET ok = %s, msg = %s, ex = %s
                     WHERE node = %s
                 ''', (ok_int, msg, ex, node))
-                logger.debug(f"Updated existing node state: {node}")
+                mlog.d(f"Updated existing node state: {node}")
             else:
                 # Insert new record
                 db_manager.execute_query('''
                     INSERT INTO node_state (node, token, ok, msg, ex)
                     VALUES (%s, %s, %s, %s, %s)
                 ''', (node, "", ok_int, msg, ex))
-                logger.debug(f"Added new node state: {node}")
+                mlog.d(f"Added new node state: {node}")
 
             return True
         except Exception as e:
-            logger.error(f"Error updating node state for {node}: {e}")
+            mlog.e(f"Error updating node state for {node}: {e}")
             return False
 
     def update(self, node_name: str, node_type: str, instance_key: str, host: Optional[str] = None, port: Optional[int] = 0) -> bool:
         global db_manager
         if not self._validate_connection():
-            logger.error("Cannot update node - no valid database connection")
+            mlog.e("Cannot update node - no valid database connection")
             return False
         current_timestamp = int(time.time())
         try:
@@ -175,24 +175,24 @@ class DiscoverManagerPG:
                     UPDATE last_seen
                     SET name = %s, type = %s, last_update = %s, key = %s
                     WHERE key = %s ''', (node_name, node_type, current_timestamp, instance_key, instance_key))
-                logger.debug(f"Updated existing node: {node_name} ({instance_key})")
+                mlog.d(f"Updated existing node: {node_name} ({instance_key})")
             else:
                 # Insert new record
                 db_manager.execute_query('''
                     INSERT INTO last_seen (name, type, key, last_update)
                     VALUES (%s, %s, %s, %s)
                 ''', (node_name, node_type, instance_key, current_timestamp))
-                logger.debug(f"Added new node: {node_name} ({instance_key})")
+                mlog.d(f"Added new node: {node_name} ({instance_key})")
 
             return True
         except Exception as e:
-            logger.error(f"Error updating node {node_name}: {e}")
+            mlog.e(f"Error updating node {node_name}: {e}")
             return False
 
     def list(self, offset: int) -> List[Dict]:
         global db_manager
         if not self._validate_connection():
-            logger.error("Cannot list nodes - no valid database connection")
+            mlog.e("Cannot list nodes - no valid database connection")
             return []
         current_timestamp = int(time.time())
         cutoff_timestamp = current_timestamp - offset
@@ -205,7 +205,7 @@ class DiscoverManagerPG:
             ''', (cutoff_timestamp,), fetch_all=True)
 
             result = []
-            logger.error(f"@@ found {len(records)} after cutoff {cutoff_timestamp}")
+            mlog.e(f"@@ found {len(records)} after cutoff {cutoff_timestamp}")
             for record in records:
                 result.append({
                     'id': record['i'],
@@ -215,16 +215,16 @@ class DiscoverManagerPG:
                     'last_update': record['last_update'],
                     'age_seconds': current_timestamp - record['last_update']
                 })
-            logger.debug(f"Retrieved {len(result)} active nodes (offset: {offset}s)")
+            mlog.d(f"Retrieved {len(result)} active nodes (offset: {offset}s)")
             return result
         except Exception as e:
-            logger.error(f"Error listing nodes: {e}")
+            mlog.e(f"Error listing nodes: {e}")
             return []
 
     def get_by_key(self, instance_key: str) -> Optional[Dict]:
         global db_manager
         if not self._validate_connection():
-            logger.error("Cannot get node by key - no valid database connection")
+            mlog.e("Cannot get node by key - no valid database connection")
             return None
         try:
             record = db_manager.execute_query('''
@@ -243,13 +243,13 @@ class DiscoverManagerPG:
                 }
             return None
         except Exception as e:
-            logger.error(f"Error getting node by key {instance_key}: {e}")
+            mlog.e(f"Error getting node by key {instance_key}: {e}")
             return None
 
     def delete_old_records(self, max_age_seconds: int) -> int:
         global db_manager
         if not self._validate_connection():
-            logger.error("Cannot delete old records - no valid database connection")
+            mlog.e("Cannot delete old records - no valid database connection")
             return 0
 
         current_timestamp = int(time.time())
@@ -258,16 +258,16 @@ class DiscoverManagerPG:
         try:
             deleted_count = db_manager.execute_query('''DELETE FROM last_seen WHERE last_update < %s''', (cutoff_timestamp,))
 
-            logger.info(f"Deleted {deleted_count} old records (older than {max_age_seconds}s)")
+            mlog.d(f"Deleted {deleted_count} old records (older than {max_age_seconds}s)")
             return deleted_count
         except Exception as e:
-            logger.error(f"Error deleting old records: {e}")
+            mlog.e(f"Error deleting old records: {e}")
             return 0
 
     def get_statistics(self) -> Dict:
         global db_manager
         if not self._validate_connection():
-            logger.error("Cannot get statistics - no valid database connection")
+            mlog.e("Cannot get statistics - no valid database connection")
             return {}
 
         try:
@@ -293,13 +293,13 @@ class DiscoverManagerPG:
                 'current_timestamp': int(time.time())
             }
         except Exception as e:
-            logger.error(f"Error getting statistics: {e}")
+            mlog.e(f"Error getting statistics: {e}")
             return {}
 
     def get_object_id(self) -> Optional[int]:
         global db_manager
         if not self._validate_connection():
-            logger.error("Cannot get OBJECT_ID - no valid database connection")
+            mlog.e("Cannot get OBJECT_ID - no valid database connection")
             return 0
 
         try:
@@ -310,13 +310,13 @@ class DiscoverManagerPG:
             )
             return result[0] if result else 0
         except Exception as e:
-            logger.error(f"Error getting OBJECT_ID: {e}")
+            mlog.e(f"Error getting OBJECT_ID: {e}")
             return 0
 
     def update_object_id(self, object_id: int) -> bool:
         global db_manager
         if not self._validate_connection():
-            logger.error("Cannot update OBJECT_ID - no valid database connection")
+            mlog.e("Cannot update OBJECT_ID - no valid database connection")
             return False
 
         try:
@@ -327,16 +327,16 @@ class DiscoverManagerPG:
                 DO UPDATE SET i = EXCLUDED.i
             ''', ('OBJECT_ID', object_id))
 
-            logger.debug(f"Updated OBJECT_ID to: {object_id}")
+            mlog.d(f"Updated OBJECT_ID to: {object_id}")
             return True
         except Exception as e:
-            logger.error(f"Error updating OBJECT_ID: {e}")
+            mlog.e(f"Error updating OBJECT_ID: {e}")
             return False
 
     def get_message_id(self) -> Optional[int]:
         global db_manager
         if not self._validate_connection():
-            logger.error("Cannot get MESSAGE_ID - no valid database connection")
+            mlog.e("Cannot get MESSAGE_ID - no valid database connection")
             return 0
 
         try:
@@ -347,13 +347,13 @@ class DiscoverManagerPG:
             )
             return result[0] if result else 0
         except Exception as e:
-            logger.error(f"Error getting MESSAGE_ID: {e}")
+            mlog.e(f"Error getting MESSAGE_ID: {e}")
             return 0
 
     def update_message_id(self, message_id: int) -> bool:
         global db_manager
         if not self._validate_connection():
-            logger.error("Cannot update MESSAGE_ID - no valid database connection")
+            mlog.e("Cannot update MESSAGE_ID - no valid database connection")
             return False
         try:
             db_manager.execute_query('''
@@ -363,10 +363,10 @@ class DiscoverManagerPG:
                 DO UPDATE SET i = EXCLUDED.i
             ''', ('MESSAGE_ID', message_id))
 
-            logger.debug(f"Updated MESSAGE_ID to: {message_id}")
+            mlog.d(f"Updated MESSAGE_ID to: {message_id}")
             return True
         except Exception as e:
-            logger.error(f"Error updating MESSAGE_ID: {e}")
+            mlog.e(f"Error updating MESSAGE_ID: {e}")
             return False
 
     def __del__(self):

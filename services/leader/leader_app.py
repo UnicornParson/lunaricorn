@@ -9,16 +9,18 @@ from lunaricorn.utils.db_manager import DatabaseManager
 import atexit
 from lunaricorn.utils.logger_config import *
 from lunaricorn.utils.maintenance import *
+from lunaricorn.utils.maintenance_http import *
+
 
 logger = make_logger(owner="leader", token=f"leader_{apptoken()}")
-logger.info("Leader API started")
+mlog.d("Leader API started")
 
 app = Flask(__name__)
 
 try:
     leader = Leader()
 except Exception as e:
-    logger.error(f"Failed to initialize Leader: {e}")
+    mlog.e(f"Failed to initialize Leader: {e}")
     leader = None
 
 
@@ -32,29 +34,29 @@ def im_alive():
     port = data.get("port", 0)
     additional = data.get("additional", None)
 
-    logger.info(f"Received im_alive notification from {node_name} (type: {node_type})")
+    mlog.d(f"Received im_alive notification from {node_name} (type: {node_type})")
     if not leader:
-        logger.error("Leader is not initialized")
+        mlog.e("Leader is not initialized")
         return make_response(jsonify({"message": "Leader is not initialized"}), 500)
 
     # Input validation (mimics Pydantic)
     if not node_name or not isinstance(node_name, str):
-        logger.error("Invalid or missing node_name in im_alive request")
+        mlog.e("Invalid or missing node_name in im_alive request")
         return make_response(jsonify({"message": "Invalid or missing node_name"}), 500)
     if not node_type or not isinstance(node_type, str):
-        logger.error("Invalid or missing node_type in im_alive request")
+        mlog.e("Invalid or missing node_type in im_alive request")
         return make_response(jsonify({"message": "Invalid or missing node_type"}), 500)
     if not instance_key or not isinstance(instance_key, str):
-        logger.error("Invalid or missing instance_key in im_alive request")
+        mlog.e("Invalid or missing instance_key in im_alive request")
         return make_response(jsonify({"message": "Invalid or missing instance_key"}), 500)
     if host is not None and not isinstance(host, str):
-        logger.error("Invalid host field in im_alive request: must be a string")
+        mlog.e("Invalid host field in im_alive request: must be a string")
         return make_response(jsonify({"message": "Invalid host field: must be a string"}), 500)
     if port is not None and not isinstance(port, int):
-        logger.error("Invalid port field in im_alive request: must be an integer")
+        mlog.e("Invalid port field in im_alive request: must be an integer")
         return make_response(jsonify({"message": "Invalid port field: must be an integer"}), 500)
     if additional is not None and not isinstance(additional, dict):
-        logger.error("Invalid additional field in im_alive request: must be a dictionary")
+        mlog.e("Invalid additional field in im_alive request: must be a dictionary")
         return make_response(jsonify({"message": "Invalid additional field: must be a dictionary"}), 500)
 
     rc = leader.update_node(node_name, node_type, instance_key, host, port)
@@ -63,19 +65,19 @@ def im_alive():
     else:
         return make_response(jsonify({"message": "Failed to update node"}), 500)
 
-    logger.debug(f"Im_alive response: {response}")
+    mlog.d(f"Im_alive response: {response}")
     return jsonify(response)
 
 @app.route("/v1/list", methods=["GET"])
 def list_services():
-    logger.info("Received request to list services")
+    mlog.d("Received request to list services")
     if not leader:
-        logger.error("Leader is not initialized")
+        mlog.e("Leader is not initialized")
         return make_response(jsonify({"message": "Leader is not initialized"}), 500)
     try:
         services = leader.get_list()
     except NotReadyException as e:
-        logger.error(f"Leader is not ready to start: {e}")
+        mlog.e(f"Leader is not ready to start: {e}")
         return make_response(jsonify({"message": f"Leader is not ready to start {datetime.now().isoformat()}"}), 500)
     response = {
         "services": services,
@@ -88,7 +90,7 @@ def list_services():
 def discover_services():
     data = request.get_json(force=True)
     query = data.get("query", "")
-    logger.info(f"Received discovery request with query: {query}")
+    mlog.d(f"Received discovery request with query: {query}")
     # TODO: Implement real discovery logic if needed
     response = {
         "query": query,
@@ -96,7 +98,7 @@ def discover_services():
         "total_count": 0,
         "timestamp": datetime.now().isoformat()
     }
-    logger.debug(f"Discover services response: {response}")
+    mlog.d(f"Discover services response: {response}")
     return jsonify(response)
 
 @app.route("/v1/test", methods=["GET"])
@@ -105,50 +107,50 @@ def test():
 
 @app.route("/v1/clusterinfo", methods=["GET"])
 def get_cluster_info():
-    logger.info("Received request for cluster information")
+    mlog.d("Received request for cluster information")
     if leader is None or not hasattr(leader, 'detailed_status'):
-        logger.error("Leader is not initialized or missing required method")
+        mlog.e("Leader is not initialized or missing required method")
         return make_response(jsonify({"message": "Leader service is initializing"}), 503)
     return jsonify(leader.detailed_status())
 
 @app.route("/v1/getenv", methods=["GET"])
 def get_environment():
-    logger.info("Received request for environment information")
+    mlog.d("Received request for environment information")
     if leader is None or not leader.ready():
-        logger.error("Leader is not ready to start")
+        mlog.e("Leader is not ready to start")
         return make_response(jsonify({"message": "Leader is not ready to start"}), 500)
     try:
         cluster_config = leader.get_cluster_config()
     except Exception as e:
-        logger.error(f"Error getting cluster configuration: {e}")
+        mlog.e(f"Error getting cluster configuration: {e}")
         return make_response(jsonify({"message": "Error getting cluster configuration"}), 500)
     response = {
         "cfg": cluster_config,
         "core": "1.0.0",
         "timestamp": datetime.now().isoformat()
     }
-    logger.debug(f"Get environment response: {response}")
+    mlog.d(f"Get environment response: {response}")
     return jsonify(response)
 
 @app.route("/v1/utils/get_mid", methods=["GET"])
 def get_mid():
-    logger.info("Received request for next message id")
+    mlog.d("Received request for next message id")
     if leader is None:
-        logger.error("Leader is not ready to start")
+        mlog.e("Leader is not ready to start")
         return make_response(jsonify({"message": "Leader is not ready to start"}), 500)
     return jsonify({"mid": leader.get_next_message_id()})
 
 @app.route("/v1/utils/get_oid", methods=["GET"])
 def get_oid():
-    logger.info("Received request for next object id")
+    mlog.d("Received request for next object id")
     if leader is None:
-        logger.error("Leader is not ready to start")
+        mlog.e("Leader is not ready to start")
         return make_response(jsonify({"message": "Leader is not ready to start"}), 500)
     return jsonify({"oid": leader.get_next_object_id()})
 
 @app.route("/", methods=["GET"])
 def root():
-    logger.debug("Root endpoint accessed")
+    mlog.d("Root endpoint accessed")
     return jsonify({
         "message": "Leader API - Service Discovery and Health Monitoring",
         "version": "1.0.0",
@@ -158,12 +160,12 @@ def root():
 
 @app.route("/health", methods=["GET"])
 def health_check():
-    logger.debug("Health check endpoint accessed")
+    mlog.d("Health check endpoint accessed")
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
 @app.route("/v1", methods=["GET"])
 def api_root():
-    logger.debug("API root endpoint accessed")
+    mlog.d("API root endpoint accessed")
     return jsonify({
         "message": "Leader API v1",
         "version": "1.0.0",
@@ -189,9 +191,9 @@ def push_node_message():
    msg = data.get("msg", "ok")
    ex = data.get("ex", {})
 
-   logger.info(f"Received push_message request for node: {node}")
+   mlog.d(f"Received push_message request for node: {node}")
    if not leader:
-       logger.error("Leader is not initialized")
+       mlog.e("Leader is not initialized")
        return make_response(jsonify({"message": "Leader is not initialized"}), 500)
 
    rc = leader.update_node_state(node, ok, msg, ex)
@@ -200,20 +202,20 @@ def push_node_message():
    else:
        return make_response(jsonify({"message": "Failed to update node state"}), 500)
 
-   logger.debug(f"Push_message response: {response}")
+   mlog.d(f"Push_message response: {response}")
    return jsonify(response)
 
 @app.route("/v1/nodes/states", methods=["GET"])
 def get_node_states():
-   logger.info("Received request to list node states")
+   mlog.d("Received request to list node states")
    if not leader:
-       logger.error("Leader is not initialized")
+       mlog.e("Leader is not initialized")
        return make_response(jsonify({"message": "Leader is not initialized"}), 500)
    
    try:
        states = leader.get_node_states()
    except NotReadyException as e:
-       logger.error(f"Leader is not ready to start: {e}")
+       mlog.e(f"Leader is not ready to start: {e}")
        return make_response(jsonify({"message": f"Leader is not ready to start {datetime.now().isoformat()}"}), 500)
    
    response = {
@@ -221,7 +223,7 @@ def get_node_states():
        "total_count": len(states),
        "timestamp": datetime.now().isoformat()
    }
-   logger.debug(f"Node states response: {response}")
+   mlog.d(f"Node states response: {response}")
    return jsonify(response)
 
 
@@ -233,7 +235,7 @@ def not_found_handler(e):
 
 @app.errorhandler(Exception)
 def general_exception_handler(e):
-    logger.exception("Unhandled exception occurred")
+    mlog.e(f"Unhandled exception occurred {e}")
     code = 500
     if isinstance(e, HTTPException):
         code = e.code
@@ -244,10 +246,10 @@ if __name__ == "__main__":
     #wait_for_loki_ready(host="loki", port=3100)
     # Register shutdown handler
     def shutdown_handler():
-        logger.info("Shutting down Leader API...")
+        mlog.d("Shutting down Leader API...")
         if leader:
             leader.shutdown()
-        logger.info("Leader API shutdown complete")
+        mlog.d("Leader API shutdown complete")
     
     atexit.register(shutdown_handler)
     

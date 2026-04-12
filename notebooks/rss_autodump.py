@@ -42,8 +42,9 @@ async def main():
     #entries = await loader.load("https://www.cncf.io/feed/")
     entries = await loader.load("https://habr.com/ru/rss/articles/?fl=ru")
     entries.extend(await loader.load("https://habr.com/ru/rss/articles/top/weekly/?fl=ru"))
-    #entries.extend(await loader.load("https://tproger.ru/feed"))
-    #entries.extend(await loader.load("https://proglib.io/feed"))
+    entries.extend(await loader.load("https://www.linux.org.ru/section-rss.jsp?section=6"))
+    entries.extend(await loader.load("https://tproger.ru/feed"))
+    entries.extend(await loader.load("https://proglib.io/feed"))
     loader.disconnect_lunaricorn()
     loader = None
 

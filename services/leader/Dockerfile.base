@@ -21,4 +21,7 @@ COPY requirements.txt /opt/lunaricorn/leader/app/
 
 # Install Python dependencies
 RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r /opt/lunaricorn/leader/app/requirements.txt
+RUN pip install --no-cache-dir --default-timeout=100 \
+    --index-url https://mirrors.aliyun.com/pypi/simple/ \
+    --trusted-host mirrors.aliyun.com \
+    -r /opt/lunaricorn/leader/app/requirements.txt
