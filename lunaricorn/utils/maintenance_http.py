@@ -16,6 +16,14 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException, ConnectionError
 from urllib3.util.retry import Retry
 import inspect
+import asyncio
+import os
+import traceback
+from typing import List, Dict, Optional, Tuple
+
+import aiohttp
+from aiohttp import ClientTimeout, ClientResponseError, ClientConnectorError
+
 
 # --- Local project modules ---
 from .maintenance_utils import *
@@ -205,7 +213,7 @@ class MaintenanceClient_old:
             return None
         finally:
             MaintenanceClient_old._close_http_session()
-
+'''
 class LogCollectorClient:
     default = None
     i_lock = threading.Lock()
@@ -235,13 +243,27 @@ class LogCollectorClient:
             pool_maxsize=pool_maxsize,
             max_retries=Retry(total=0)
         )
-        self.session.mount('http://', adapter)
-        self.session.mount('https://', adapter)
+        self.session.headers.update({
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip, deflate, br",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) "
+                "Gecko/20100101 Firefox/122.0"
+            ),
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Connection": "close",
+        })
+        self.session.mount('http://', HTTPAdapter(max_retries=1, pool_connections=10, pool_maxsize=10))
+        self.session.mount('https://', HTTPAdapter(max_retries=1, pool_connections=10, pool_maxsize=10))
         self._lock = threading.Lock()  # push lock
         self.timeout = 10
         self.max_retries = 3
         self.retries_delay = 0.1
         self.reties_requested = 0
+
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
@@ -339,9 +361,189 @@ class LogCollectorClient:
     def close(self):
         """Закрыть сессию и освободить ресурсы."""
         self.session.close()
+'''
+class LogCollectorClient:
+    _default = None
+    _init_lock = asyncio.Lock()
 
+    @classmethod
+    async def instance(cls) -> "LogCollectorClient":
+        """Асинхронный синглтон."""
+        async with cls._init_lock:
+            if cls._default is None:
+                host = os.getenv('MAINTENANCE_HOST')
+                port_str = os.getenv('MAINTENANCE_PORT')
 
-class mlog:
+                if host is None:
+                    raise ValueError("Переменная окружения MAINTENANCE_HOST не задана")
+                if port_str is None:
+                    raise ValueError("Переменная окружения MAINTENANCE_PORT не задана")
+
+                port = int(port_str)
+                base_url = f"http://{host}:{port}"
+                cls._default = LogCollectorClient(base_url)
+                await cls._default._init_session()
+            return cls._default
+
+    def __init__(self, base_url: str, pool_connections: int = 10, pool_maxsize: int = 20):
+        self.base_url = base_url.rstrip('/')
+        self._pool_connections = pool_connections
+        self._pool_maxsize = pool_maxsize
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._request_lock = asyncio.Lock()          # аналог threading.Lock
+        self.timeout = 10
+        self.max_retries = 3
+        self.retries_delay = 0.1
+        self.retries_requested = 0
+
+    async def _init_session(self):
+        """Создаёт сессию aiohttp с нужными настройками."""
+        connector = aiohttp.TCPConnector(
+            limit=self._pool_maxsize,               # общее кол-во соединений
+            limit_per_host=self._pool_connections,  # на один хост
+            enable_cleanup_closed=True,
+        )
+        timeout = ClientTimeout(total=self.timeout)
+
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip, deflate, br",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) "
+                "Gecko/20100101 Firefox/122.0"
+            ),
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Connection": "close",
+        }
+
+        self._session = aiohttp.ClientSession(
+            connector=connector,
+            timeout=timeout,
+            headers=headers
+        )
+
+    def _url(self, path: str) -> str:
+        return f"{self.base_url}{path}"
+
+    async def _handle_response(self, response: aiohttp.ClientResponse):
+        """Обрабатывает ответ: проверяет статус, возвращает JSON или текст."""
+        response.raise_for_status()
+        content_type = response.headers.get('content-type', '')
+        if 'application/json' in content_type:
+            return await response.json()
+        return await response.text()
+
+    async def get_status(self) -> dict:
+        """Получить статус сервера."""
+        async with self._session.get(self._url('/')) as resp:
+            return await self._handle_response(resp)
+
+    async def health_check(self) -> bool:
+        """Проверка здоровья сервера."""
+        try:
+            async with self._session.get(self._url('/health')) as resp:
+                resp.raise_for_status()
+                return True
+        except (ClientResponseError, ClientConnectorError, asyncio.TimeoutError):
+            return False
+
+    async def send_log(self, owner: str, token: str, message: str, log_type: str,
+                       datetime: Optional[str] = None) -> dict:
+        """Отправить один лог (с повторными попытками)."""
+        payload = {"o": owner, "t": token, "m": message, "type": log_type}
+        if datetime:
+            payload["dt"] = datetime
+
+        last_exception = None
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                # Блокировка на уровне запроса, как в оригинале
+                async with self._request_lock:
+                    async with self._session.post(self._url('/log'), json=payload, timeout=2) as resp:
+                        resp.raise_for_status()
+                        return await resp.json()
+            except (ClientConnectorError, asyncio.TimeoutError, ClientResponseError) as e:
+                traceback.print_tb(e.__traceback__)
+                self.retries_requested += 1
+                last_exception = e
+                if attempt < self.max_retries:
+                    await asyncio.sleep(self.retries_delay)
+            except Exception as e:
+                raise e
+
+        if last_exception:
+            raise last_exception
+
+    async def send_logs_batch(self, logs: List[Dict]) -> dict:
+        """Отправить батч логов (с повторными попытками)."""
+        payload = []
+        for log in logs:
+            item = {"o": log["owner"], "t": log["token"], "m": log["message"], "type": log["type"]}
+            if "datetime" in log:
+                item["dt"] = log["datetime"]
+            payload.append(item)
+
+        last_exception = None
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                async with self._request_lock:
+                    async with self._session.post(self._url('/log/batch'), json=payload, timeout=2) as resp:
+                        resp.raise_for_status()
+                        return await resp.json()
+            except (ClientConnectorError, asyncio.TimeoutError, ClientResponseError) as e:
+                traceback.print_tb(e.__traceback__)
+                self.retries_requested += 1
+                last_exception = e
+                if attempt < self.max_retries:
+                    await asyncio.sleep(self.retries_delay)
+            except Exception as e:
+                raise e
+
+        raise last_exception
+
+    async def pull_logs(self, offset: int = 0) -> List[dict]:
+        """Получить логи в виде списка словарей."""
+        async with self._session.get(self._url('/log/pull'), params={"offset": offset}) as resp:
+            data = await self._handle_response(resp)
+            return data.get("logs", [])
+
+    async def pull_logs_plain(self, offset: int = 0) -> str:
+        """Получить логи в виде простого текста."""
+        async with self._session.get(self._url('/log/pull-plain'), params={"offset": offset}) as resp:
+            resp.raise_for_status()
+            return await resp.text()
+
+    async def download_logs_plain(self, offset: int = 0) -> Tuple[str, str]:
+        """Скачать логи как текстовый файл. Возвращает (содержимое, имя_файла)."""
+        async with self._session.get(self._url('/log/download-plain'), params={"offset": offset}) as resp:
+            resp.raise_for_status()
+            cd = resp.headers.get('content-disposition', '')
+            filename = "logs.txt"
+            if 'filename=' in cd:
+                parts = cd.split('filename=')
+                if len(parts) > 1:
+                    filename = parts[1].strip('"\'')
+            text = await resp.text()
+            return text, filename
+
+    async def close(self):
+        """Закрыть сессию и освободить ресурсы."""
+        if self._session and not self._session.closed:
+            await self._session.close()
+
+    async def __aenter__(self):
+        if self._session is None:
+            await self._init_session()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
+'''
+class mlog_old:
     owner: str = ""
     token: str = ""
     @staticmethod
@@ -363,9 +565,9 @@ class mlog:
     def log(msg: str):
         caller_info = mlog._get_caller_info()
         full_msg = f"{caller_info} {msg}"
-        client = LogCollectorClient.instance()
+        client = await LogCollectorClient_async.instance()
         try:
-            client.send_log(mlog.owner, mlog.token, full_msg, "log")
+            await client.send_log(mlog.owner, mlog.token, full_msg, "log")
         except Exception as e:
             print(f"mlogging error {e}")
 
@@ -378,6 +580,85 @@ class mlog:
     @staticmethod
     def e(msg: str):
         mlog.log(f"[ ERROR ] {msg}")
+'''
+
+
+class mlog:
+    owner: str = ""
+    token: str = ""
+
+    _loop: Optional[asyncio.AbstractEventLoop] = None
+    _thread: Optional[threading.Thread] = None
+    _client: Optional[LogCollectorClient] = None
+    _init_lock = threading.Lock()
+
+    @classmethod
+    def _ensure_loop_and_client(cls):
+        """Запускает цикл событий в фоновом потоке и инициализирует клиента (один раз)."""
+        with cls._init_lock:
+            if cls._loop is not None and not cls._loop.is_closed():
+                return
+
+            # Создаём и запускаем цикл в daemon-потоке
+            cls._loop = asyncio.new_event_loop()
+            cls._thread = threading.Thread(target=cls._run_loop, daemon=True)
+            cls._thread.start()
+
+            # Инициализируем клиента внутри этого цикла (синхронно ждём)
+            future = asyncio.run_coroutine_threadsafe(cls._init_client(), cls._loop)
+            future.result(timeout=10)  # ждём успешного создания клиента
+
+    @classmethod
+    def _run_loop(cls):
+        asyncio.set_event_loop(cls._loop)
+        cls._loop.run_forever()
+
+    @classmethod
+    async def _init_client(cls):
+        cls._client = await LogCollectorClient.instance()
+
+    @staticmethod
+    def _get_caller_info() -> str:
+        """Определяет, откуда вызван логгер (файл:функция:строка)."""
+        stack = inspect.stack()
+        for frame_info in stack[2:]:
+            func = frame_info.function
+            if func in ('log', 'd', 'w', 'e'):
+                continue
+            filename = os.path.basename(frame_info.filename)
+            lineno = frame_info.lineno
+            return f"{filename}:{func}:{lineno}"
+        return "unknown:unknown:0"
+
+    @classmethod
+    def log(cls, msg: str):
+        caller_info = cls._get_caller_info()
+        full_msg = f"{caller_info} {msg}"
+
+        # Гарантируем, что цикл и клиент готовы
+        cls._ensure_loop_and_client()
+
+        # Отправляем лог асинхронно, но ждём результат (синхронно)
+        future = asyncio.run_coroutine_threadsafe(
+            cls._client.send_log(cls.owner, cls.token, full_msg, "log"),
+            cls._loop
+        )
+        try:
+            future.result(timeout=5)   # таймаут на отправку одного лога
+        except Exception as e:
+            print(f"mlogging error: {e}")
+
+    @classmethod
+    def d(cls, msg: str):
+        cls.log(f"[ DEBUG ] {msg}")
+
+    @classmethod
+    def w(cls, msg: str):
+        cls.log(f"[WARNING] {msg}")
+
+    @classmethod
+    def e(cls, msg: str):
+        cls.log(f"[ ERROR ] {msg}")
 
 class MaintenanceLogHandler(logging.Handler):
     _local = threading.local()
