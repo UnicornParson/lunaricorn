@@ -6,11 +6,50 @@
 #include <sstream>
 #include <random>
 #include <iomanip>
+#include <charconv>
 #include <yaml-cpp/yaml.h>  // Requires yaml-cpp library
 
 namespace lunaricorn {
 
 namespace {
+    int parse_alive_timeout(const json::object& config, int fallback = 10) {
+        auto it = config.find("discover");
+        if (it == config.end() || !it->value().is_object()) {
+            return fallback;
+        }
+
+        const auto& discover_obj = it->value().as_object();
+        auto timeout_it = discover_obj.find("alive_timeout");
+        if (timeout_it == discover_obj.end()) {
+            return fallback;
+        }
+
+        const json::value& timeout_value = timeout_it->value();
+        if (timeout_value.is_int64()) {
+            return static_cast<int>(timeout_value.as_int64());
+        }
+        if (timeout_value.is_uint64()) {
+            return static_cast<int>(timeout_value.as_uint64());
+        }
+        if (timeout_value.is_double()) {
+            return static_cast<int>(timeout_value.as_double());
+        }
+
+        if (timeout_value.is_string()) {
+            const std::string raw = timeout_value.as_string().c_str();
+            int parsed = fallback;
+            auto [ptr, ec] = std::from_chars(raw.data(), raw.data() + raw.size(), parsed);
+            if (ec == std::errc() && ptr == raw.data() + raw.size()) {
+                return parsed;
+            }
+            MLOG_W("Invalid alive_timeout value '{}', using default {}", raw, fallback);
+            return fallback;
+        }
+
+        MLOG_W("Invalid alive_timeout type, using default {}", fallback);
+        return fallback;
+    }
+
     json::value yaml_to_json(const YAML::Node& node) {
         if (node.IsMap()) {
             json::object obj;
@@ -78,16 +117,7 @@ json::array Leader::get_list() {
         throw NotReadyException("Leader is not ready to start");
     }
     std::lock_guard<std::mutex> lock(mutex_);
-    int alive_timeout = 10;
-    if (auto it = config_.find("discover"); it != config_.end()) {
-        if (auto timeout_it = it->value().as_object().find("alive_timeout"); timeout_it != it->value().as_object().end()) {
-            try {
-                alive_timeout = boost::json::value_to<int>(timeout_it->value());
-            } catch (...) {
-                alive_timeout = std::stoi(boost::json::value_to<std::string>(timeout_it->value()));
-            }
-        }
-    }
+    int alive_timeout = parse_alive_timeout(config_);
 
     auto now = std::chrono::steady_clock::now();
     json::array result;
@@ -108,16 +138,7 @@ json::array Leader::get_list() {
 
 bool Leader::ready() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    int alive_timeout = 10;
-    if (auto it = config_.find("discover"); it != config_.end()) {
-        if (auto timeout_it = it->value().as_object().find("alive_timeout"); timeout_it != it->value().as_object().end()) {
-            try {
-                alive_timeout = boost::json::value_to<int>(timeout_it->value());
-            } catch (...) {
-                alive_timeout = std::stoi(boost::json::value_to<std::string>(timeout_it->value()));
-            }
-        }
-    }
+    int alive_timeout = parse_alive_timeout(config_);
 
     // Get required nodes from config
     std::set<std::string> required;
@@ -170,17 +191,7 @@ json::object Leader::detailed_status() {
         summary[req] = "off";
     }
 
-    int alive_timeout = 10;
-    if (auto it = config_.find("discover"); it != config_.end() && it->value().is_object()) {
-        const auto& discover_obj = it->value().as_object();
-        if (auto timeout_it = discover_obj.find("alive_timeout"); timeout_it != discover_obj.end()) {
-            try {
-                alive_timeout = boost::json::value_to<int>(timeout_it->value());
-            } catch (const std::exception& e) {
-                MLOG_W("Invalid alive_timeout value: {}", e.what());
-            }
-        }
-    }
+    int alive_timeout = parse_alive_timeout(config_);
 
     auto now = std::chrono::steady_clock::now();
     for (const auto& [name, info] : nodes_) {
