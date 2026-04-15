@@ -26,6 +26,13 @@ set(BOOST_ROOT "/opt/3rd/boost/bin")
 set(Boost_USE_STATIC_LIBS ON)
 # Find Boost components (add or remove as needed)
 find_package(Boost REQUIRED COMPONENTS system filesystem json)
+include(FetchContent)
+FetchContent_Declare(
+  yaml-cpp
+  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+  GIT_TAG yaml-cpp-0.9.0   # Can be a tag (yaml-cpp-x.x.x), a commit hash, or a branch name (master)
+)
+FetchContent_MakeAvailable(yaml-cpp)
 
 # ------------------------------------------------------------------
 # POCO setup (static)
@@ -70,7 +77,9 @@ add_subdirectory(apilib)
 # Add executable from main.cpp
 add_executable(leader
     main.cpp
-    )
+    endpoint.cpp
+    leader.cpp
+)
 
 # Include directories
 target_include_directories(leader PRIVATE
@@ -81,9 +90,12 @@ target_include_directories(leader PRIVATE
 
 # Link libraries (static)
 target_link_libraries(leader
-    ${Boost_LIBRARIES}
+    Boost::json
+    Boost::system
+    Boost::filesystem
     ${POCO_LIBRARIES}
     lunaricorn_api
+    yaml-cpp::yaml-cpp
 )
 
 # On Linux, static linking may require pthread and dl

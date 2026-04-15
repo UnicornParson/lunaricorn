@@ -7,7 +7,8 @@
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/JSON/Stringifier.h>
 
-using namespace lunaricorn;
+namespace lunaricorn
+{
 
 LogCollectorClient& LogCollectorClient::instance() {
     static std::once_flag init_flag;
@@ -303,3 +304,7 @@ std::pair<std::string, std::string> LogCollectorClient::download_logs_plain(int 
 void LogCollectorClient::close() {
     // No persistent session, nothing to close explicitly.
 }
+
+
+
+} // namespace lunaricorn

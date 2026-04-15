@@ -11,12 +11,11 @@
 #include <boost/json.hpp>
 #include "storage.h"
 
-namespace beast = boost::beast;
-namespace http = beast::http;
-namespace net = boost::asio;
-namespace json = boost::json;
-using tcp = net::ip::tcp;
 
+namespace lunaricorn
+{
+
+using tcp = boost::asio::ip::tcp;
 // Configuration for the server
 struct ServerConfig {
     std::string address = "0.0.0.0";
@@ -39,12 +38,12 @@ struct LogMessage {
 };
 
 // Convert MaintenanceLogRecord to JSON object
-json::object to_json(const MaintenanceLogRecord& record);
+boost::json::object to_json(const MaintenanceLogRecord& record);
 
-std::string current_time_str();
+
 
 // Parse LogMessage from JSON, filling missing datetime
-std::optional<LogMessage> parse_log_message(const json::value& j);
+std::optional<LogMessage> parse_log_message(const boost::json::value& j);
 
 // Forward declaration
 class LogCollectorServer;
@@ -57,13 +56,13 @@ public:
 
 private:
     void do_read();
-    void on_read(beast::error_code ec, std::size_t bytes_transferred);
+    void on_read(boost::beast::error_code ec, std::size_t bytes_transferred);
     void process_request();
-    void send_response(http::status status, const std::string& content_type,
+    void send_response(boost::beast::http::status status, const std::string& content_type,
                        const std::string& body, bool add_cors = false);
-    void send_json_response(http::status status, const json::value& j);
-    void send_plain_response(http::status status, const std::string& text,
-                             const std::vector<std::pair<http::field, std::string>>& extra_headers = {});
+    void send_json_response(boost::beast::http::status status, const boost::json::value& j);
+    void send_plain_response(boost::beast::http::status status, const std::string& text,
+                             const std::vector<std::pair<boost::beast::http::field, std::string>>& extra_headers = {});
 
     // Handlers for specific endpoints
     void handle_root();
@@ -79,8 +78,8 @@ private:
     void background_post(F&& f);
 
     tcp::socket socket_;
-    beast::flat_buffer buffer_;
-    http::request<http::string_body> request_;
+    boost::beast::flat_buffer buffer_;
+    boost::beast::http::request<boost::beast::http::string_body> request_;
     std::shared_ptr<PGStorage> storage_;
     LogCollectorServer& server_;
 };
@@ -98,7 +97,7 @@ public:
     void stop();
 
     // Access to I/O context for posting background tasks
-    net::io_context& io_context() { return ioc_; }
+    boost::asio::io_context& io_context() { return ioc_; }
 
     // Track active requests (optional, like semaphore in Python)
     void increment_active();
@@ -108,7 +107,7 @@ public:
 private:
     void do_accept();
 
-    net::io_context ioc_;
+    boost::asio::io_context ioc_;
     tcp::acceptor acceptor_;
     std::shared_ptr<PGStorage> storage_;
     ServerConfig config_;
@@ -116,3 +115,5 @@ private:
     std::atomic<int> active_requests_{0};
     bool stopped_{false};
 };
+
+} // namespace lunaricorn

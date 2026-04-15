@@ -24,6 +24,7 @@ set(POCO_LIBS
     PocoNet
     PocoData
     PocoDataPostgreSQL
+    PocoJSON
 )
 
 set(POCO_LIBRARIES "")
@@ -38,7 +39,10 @@ foreach(LIB ${POCO_LIBS})
 endforeach()
 
 add_library(lunaricorn_api STATIC
-    maintenance
+    maintenance.cpp
+    config.cpp
+    lunaricorn.cpp
+    mlog.cpp
 )
 
 target_include_directories(lunaricorn_api
@@ -52,8 +56,10 @@ target_include_directories(lunaricorn_api
 
 target_link_libraries(lunaricorn_api
     PUBLIC
-        ${Boost_LIBRARIES}
-        ${POCO_LIBRARIES}
+    Boost::json
+    Boost::system
+    Boost::filesystem
+    ${POCO_LIBRARIES}
 )
 
 if(UNIX)

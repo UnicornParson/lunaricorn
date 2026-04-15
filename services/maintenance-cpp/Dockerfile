@@ -6,10 +6,14 @@ WORKDIR /opt/app/
 RUN chmod +x /opt/app/build.sh 
 #ENV BUILD_TYPE=Debug
 ENV BUILD_TYPE=Release
+RUN mkdir -p /opt/tmp && mkdir -p /opt/app/apilib
+ADD tmp/lunaricorn.tgz /opt/tmp
+RUN cp -rvf /opt/tmp/lunaricorn/cpp/*  /opt/app/apilib
 RUN /opt/app/build.sh
 
-FROM lunaricorn_maintenance_cpp_base
+# ------------------------------------------------------------------------
 
+FROM lunaricorn_maintenance_cpp_base
 COPY --from=builder /opt/app/__build/maintenance /opt/app/bin/maintenance
 COPY --from=builder /opt/3rd/boost/bin/lib /opt/3rd/boost/bin/lib
 COPY --from=builder /opt/3rd/poco/bin/lib /opt/3rd/poco/bin/lib

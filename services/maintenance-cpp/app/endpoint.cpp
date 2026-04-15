@@ -8,26 +8,14 @@
 #include <boost/asio/post.hpp>
 #include <boost/json/src.hpp>
 #include <Poco/DateTimeFormatter.h>
-#if DEBUG
-#define DPRINT(s) std::cout << "[" << current_time_str() << "] point " << __FILE__ << " f:(" << __FUNCTION__ << ")." << __LINE__ << " : " << s << std::endl << std::flush
-#define POINT std::cerr << "[" << current_time_str() << "] point " << __FILE__ << " f:(" << __FUNCTION__ << ")." << __LINE__ << std::endl << std::flush
-#else
-#define POINT 
-#define DPRINT(s) 
-#endif // DEBUG
+#include <lunaricorn.h>
 
+using namespace lunaricorn;
 constexpr int ACTIVE_REQUESTS_WARN_LIMIT { 10 };
+using namespace boost;
+using namespace boost::beast;
 
-std::string current_time_str() {
-    auto now = std::chrono::system_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-    auto t = std::chrono::system_clock::to_time_t(now);
-    std::tm tm = *std::localtime(&t);
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S") << ','
-        << std::setfill('0') << std::setw(3) << ms.count();
-    return oss.str();
-}
+namespace lunaricorn {
 
 // Convert MaintenanceLogRecord to JSON
 json::object to_json(const MaintenanceLogRecord& record) {
@@ -82,6 +70,8 @@ std::optional<LogMessage> parse_log_message(const json::value& v) {
         return std::nullopt;
     }
 }
+
+
 
 // Session implementation
 Session::Session(tcp::socket socket, std::shared_ptr<PGStorage> storage, LogCollectorServer& server)
@@ -522,3 +512,5 @@ void LogCollectorServer::decrement_active() {
 int LogCollectorServer::active_requests() const {
     return active_requests_.load();
 }
+
+} // namespace lunaricorn

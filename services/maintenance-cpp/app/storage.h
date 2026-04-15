@@ -15,28 +15,10 @@
 #include <Poco/DateTimeFormatter.h>
 #include <Poco/Exception.h>
 #include <Poco/Data/TypeHandler.h>
+#include <lunaricorn.h>
 
-// -------------------- Configuration structure --------------------
-struct DbConfig {
-    std::string dbType;
-    std::string dbHost;
-    std::string dbPort;
-    std::string dbUser;
-    std::string dbPassword;
-    std::string dbDbname;
-
-    inline bool valid() const {
-        return !dbType.empty() && !dbHost.empty() && !dbPort.empty() &&
-               !dbUser.empty() && !dbPassword.empty() && !dbDbname.empty();
-    }
-
-    inline std::string toStr() const 
-    {
-        return dbUser + "@" + dbHost + ":" + dbPort + "/" + dbDbname;
-    }
-};
-
-// -------------------- Record structure (result) --------------------
+namespace lunaricorn
+{
 struct MaintenanceLogRecord {
     Poco::Int64 offset;
     std::string owner;
@@ -44,20 +26,21 @@ struct MaintenanceLogRecord {
     Poco::DateTime timestamputc;
     std::string msg;
 };
+} // namespace lunaricorn
 
 namespace Poco 
 {
     namespace Data
     {
         template <>
-        class TypeHandler<MaintenanceLogRecord>
+        class TypeHandler<lunaricorn::MaintenanceLogRecord>
         {
         public:
             static std::size_t size()
             {
                 return 5; // o, owner, token, timestamputc, msg
             }
-            static void bind(std::size_t pos, const MaintenanceLogRecord& obj, AbstractBinder::Ptr pBinder, AbstractBinder::Direction dir)
+            static void bind(std::size_t pos, const lunaricorn::MaintenanceLogRecord& obj, AbstractBinder::Ptr pBinder, AbstractBinder::Direction dir)
             {
                 // Если понадобится вставка/обновление — реализуйте здесь
                 pBinder->bind(pos, obj.offset);
@@ -67,12 +50,12 @@ namespace Poco
                 pBinder->bind(pos + 4, obj.msg);
             }
         
-            static void prepare(std::size_t pos, const MaintenanceLogRecord& obj, AbstractPreparator::Ptr pPrep)
+            static void prepare(std::size_t pos, const lunaricorn::MaintenanceLogRecord& obj, AbstractPreparator::Ptr pPrep)
             {
                 throw Poco::NotImplementedException("MaintenanceLogRecord does not support binding (prepare)");
             }
         
-            static void extract(std::size_t pos, MaintenanceLogRecord& obj, const MaintenanceLogRecord& defVal, AbstractExtractor::Ptr pExt)
+            static void extract(std::size_t pos, lunaricorn::MaintenanceLogRecord& obj, const lunaricorn::MaintenanceLogRecord& defVal, AbstractExtractor::Ptr pExt)
             {
                 if (!pExt->extract(pos, obj.offset)) obj.offset = defVal.offset;
                 if (!pExt->extract(pos + 1, obj.owner)) obj.owner = defVal.owner;
@@ -84,8 +67,11 @@ namespace Poco
     } // namespace Data
 } // namespace Poco
 
-// -------------------- Storage class --------------------
-class PGStorage {
+namespace lunaricorn
+{
+
+class PGStorage
+{
 public:
     explicit PGStorage(const DbConfig& config);
     void testConnection();
@@ -103,4 +89,6 @@ private:
 
     // Helper to check if the table already exists (by attempting to query it)
     bool tableExists();
-};
+}; // class PGStorage
+
+} // namespace lunaricorn

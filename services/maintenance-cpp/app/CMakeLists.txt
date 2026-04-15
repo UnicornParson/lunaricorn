@@ -37,6 +37,9 @@ set(POCO_INCLUDE_DIR "${POCO_ROOT}/include")
 # POCO library directory (adjust if your libs are elsewhere)
 set(POCO_LIB_DIR "${POCO_ROOT}/lib")
 
+# api
+add_subdirectory(/opt/app/apilib/)
+
 # List of required POCO libraries (add more if needed, e.g., PocoNet, PocoUtil)
 set(POCO_LIBS
     PocoFoundation
@@ -73,12 +76,14 @@ add_executable(maintenance
 target_include_directories(maintenance PRIVATE
     ${Boost_INCLUDE_DIRS}
     ${POCO_INCLUDE_DIR}
+    /opt/app/apilib/
 )
 
 # Link libraries (static)
 target_link_libraries(maintenance
     ${Boost_LIBRARIES}
     ${POCO_LIBRARIES}
+    lunaricorn_api
 )
 
 # On Linux, static linking may require pthread and dl

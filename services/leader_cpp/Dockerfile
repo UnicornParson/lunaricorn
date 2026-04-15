@@ -11,6 +11,8 @@ ADD tmp/lunaricorn.tgz /opt/tmp
 RUN cp -rvf /opt/tmp/lunaricorn/cpp/*  /opt/app/apilib
 RUN /opt/app/build.sh
 
+# ------------------------------------------------------------------------
+
 FROM lunaricorn_leader_cpp_base
 
 COPY --from=builder /opt/app/__build/leader /opt/app/bin/leader

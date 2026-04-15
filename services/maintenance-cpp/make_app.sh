@@ -12,7 +12,8 @@ if ! docker image inspect "$BUILDER_TAG" &>/dev/null; then
     echo "Base image $BUILDER_TAG not found. Building it first..."
     "$(dirname "$0")/make_base.sh"
 fi
-
+rm -rvf tmp/lunaricorn.tgz
+tar -cvzf tmp/lunaricorn.tgz ../../lunaricorn/cpp
 docker build --no-cache --progress=plain -t $IMG_NAME -f Dockerfile . 2>&1 | tee -i tmp/build_app.log
 
 # Check if build was successful

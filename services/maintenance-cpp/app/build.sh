@@ -1,7 +1,13 @@
 #!/bin/bash
 
 set -e
-
+echo ===============================================
+echo @@ /opt/app/
+ls -lh /opt/app/
+echo ===============================================
+echo @@ /opt/app/apilib
+ls -lh /opt/app/apilib
+echo ===============================================
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 
 if [[ "$BUILD_TYPE" != "Debug" && "$BUILD_TYPE" != "Release" ]]; then
