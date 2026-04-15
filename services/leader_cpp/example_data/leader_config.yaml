@@ -1,0 +1,6 @@
+discover:
+  alive_timeout: 20
+  required_nodes:
+    - "signaling"
+    - "orb"
+    - "portal"

@@ -1,7 +1,7 @@
 services:
   leader:
     build:
-      context: ./leader
+      context: ./leader_cpp
       dockerfile: Dockerfile
     container_name: lunaricorn-leader
     ports:

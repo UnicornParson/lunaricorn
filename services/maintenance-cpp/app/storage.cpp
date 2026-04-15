@@ -80,6 +80,7 @@ bool PGStorage::install()
 // Insert a new record. Returns the generated offset, or std::nullopt on failure.
 std::optional<Poco::Int64> PGStorage::push(const std::string& owner, const std::string& token, const std::string& msg)
 {
+    LOG_ACCESS(owner << " [" << token << "] - " << msg);
     try {
         std::string ownerTrunc = owner.substr(0, 256);
         std::string tokenTrunc = token.substr(0, 256);

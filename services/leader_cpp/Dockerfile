@@ -26,5 +26,5 @@ RUN echo "/opt/3rd/boost/bin/lib" >> /etc/ld.so.conf.d/boost.conf && \
     echo "/opt/3rd/poco/bin/lib" >> /etc/ld.so.conf.d/poco.conf && \
     ldconfig
 
-# ENTRYPOINT ["gdb", "--args", "/opt/app/bin/maintenance"]
+#ENTRYPOINT ["gdb", "--args", "/opt/app/bin/leader"]
 ENTRYPOINT ["/opt/app/bin/leader"]

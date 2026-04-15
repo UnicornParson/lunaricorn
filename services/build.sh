@@ -21,7 +21,7 @@ pushd maintenance-cpp > /dev/null
 popd > /dev/null
 
 echo "Building leader service..."
-pushd leader > /dev/null
+pushd leader_cpp > /dev/null
 ./make_app.sh
 popd > /dev/null
 

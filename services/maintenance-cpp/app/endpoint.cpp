@@ -109,7 +109,7 @@ void Session::process_request() {
     // Determine target and method
     auto target = request_.target();
     auto method = request_.method();
-    std::cout << "[" << current_time_str() << "] call " << target << std::endl;
+    DPRINT("[" << current_time_str() << "] call " << target );
     POINT;
     try {
         if (method == http::verb::get && target == "/") {

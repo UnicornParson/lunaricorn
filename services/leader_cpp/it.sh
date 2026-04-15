@@ -33,18 +33,19 @@ echo "==> Запуск контейнера в интерактивном реж
 docker run -it --rm \
     --name "$CONTAINER_NAME" \
     --network "$NETWORK_NAME" \
-    -e MAINTENANCE_HOST=192.168.0.18
-    -e MAINTENANCE_PORT=${MAINTENANCE_API_PORT}
-    -e PYTHONUNBUFFERED=1
-    -e db_type=postgresql
-    -e db_host=lunaricorn-pg
-    -e db_port=5432
-    -e db_user=lunaricorn
-    -e db_password=${LUNARICORN_PASSWORD}
-    -e db_name=lunaricorn
-    -e db_schema=lunaricorn
+    -e MAINTENANCE_HOST=192.168.0.18 \
+    -e MAINTENANCE_PORT=${MAINTENANCE_API_PORT} \
+    -e PYTHONUNBUFFERED=1 \
+    -e db_type=postgresql \
+    -e db_host=lunaricorn-pg \
+    -e db_port=5432 \
+    -e db_user=lunaricorn \
+    -e db_password=${LUNARICORN_PASSWORD} \
+    -e db_name=lunaricorn \
+    -e db_schema=lunaricorn \
     -e WORKERS=4 \
     -p "8001:8000" \
+    -v "$(pwd)/example_data:/opt/lunaricorn/leader_data:rw" \
     "$IMAGE_NAME"
 
 echo "==> Контейнер остановлен и удалён"

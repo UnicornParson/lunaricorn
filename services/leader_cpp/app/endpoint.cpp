@@ -138,9 +138,10 @@ void Endpoint::Session::handle_request() {
 
 void Endpoint::Session::send_response(http::response<http::string_body> res) {
     auto self = shared_from_this();
-    res.prepare_payload();
-    http::async_write(socket_, res,
-        [self](beast::error_code ec, std::size_t) {
+    auto response = std::make_shared<http::response<http::string_body>>(std::move(res));
+    response->prepare_payload();
+    http::async_write(socket_, *response,
+        [self, response](beast::error_code ec, std::size_t) {
             self->socket_.shutdown(tcp::socket::shutdown_send, ec);
         });
 }

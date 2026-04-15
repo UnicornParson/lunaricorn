@@ -16,4 +16,8 @@ std::string current_time_str();
 #define DPRINT(s) 
 #endif // DEBUG
 
+#define LOG_ACCESS(msg) \
+    do { \
+        std::cout << "[" << current_time_str() << "] " << msg << std::endl << std::flush; \
+    } while(0)
 }

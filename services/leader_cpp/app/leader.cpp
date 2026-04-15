@@ -11,7 +11,7 @@
 namespace lunaricorn {
 
 namespace {
-    json::object yaml_to_json(const YAML::Node& node) {
+    json::value yaml_to_json(const YAML::Node& node) {
         if (node.IsMap()) {
             json::object obj;
             for (const auto& it : node) {
@@ -23,22 +23,20 @@ namespace {
             for (const auto& it : node) {
                 arr.push_back(yaml_to_json(it));
             }
-            return json::object{{"__array__", arr}}; // workaround for mixed types
+            return arr;
         } else if (node.IsScalar()) {
-            return json::object{{"__scalar__", node.as<std::string>()}};
+            return boost::json::value(node.as<std::string>());
         }
-        return {};
+        return nullptr;
     }
 
     json::object parse_yaml_file(const std::string& path) {
         try {
             YAML::Node root = YAML::LoadFile(path);
-            auto result = yaml_to_json(root);
-            // If top-level is map, return directly
-            if (root.IsMap()) {
-                return result;
+            json::value result = yaml_to_json(root);
+            if (result.is_object()) {
+                return result.as_object();
             }
-            // Otherwise wrap
             return json::object{{"value", result}};
         } catch (const std::exception& e) {
             MLOG_E("Failed to load YAML file {}: {}", path, e.what());
@@ -83,7 +81,11 @@ json::array Leader::get_list() {
     int alive_timeout = 10;
     if (auto it = config_.find("discover"); it != config_.end()) {
         if (auto timeout_it = it->value().as_object().find("alive_timeout"); timeout_it != it->value().as_object().end()) {
-            alive_timeout = std::stoi(timeout_it->value().as_string().c_str());
+            try {
+                alive_timeout = boost::json::value_to<int>(timeout_it->value());
+            } catch (...) {
+                alive_timeout = std::stoi(boost::json::value_to<std::string>(timeout_it->value()));
+            }
         }
     }
 
@@ -109,7 +111,11 @@ bool Leader::ready() const {
     int alive_timeout = 10;
     if (auto it = config_.find("discover"); it != config_.end()) {
         if (auto timeout_it = it->value().as_object().find("alive_timeout"); timeout_it != it->value().as_object().end()) {
-            alive_timeout = std::stoi(timeout_it->value().as_string().c_str());
+            try {
+                alive_timeout = boost::json::value_to<int>(timeout_it->value());
+            } catch (...) {
+                alive_timeout = std::stoi(boost::json::value_to<std::string>(timeout_it->value()));
+            }
         }
     }
 
@@ -119,7 +125,7 @@ bool Leader::ready() const {
         if (auto req_it = it->value().as_object().find("required_nodes"); req_it != it->value().as_object().end()) {
             if (req_it->value().is_array()) {
                 for (const auto& v : req_it->value().as_array()) {
-                    required.insert(v.as_string().c_str());
+                    required.insert(boost::json::value_to<std::string>(v));
                 }
             }
         }
@@ -144,11 +150,16 @@ bool Leader::ready() const {
 json::object Leader::detailed_status() {
     std::lock_guard<std::mutex> lock(mutex_);
     std::set<std::string> required;
-    if (auto it = config_.find("discover"); it != config_.end()) {
-        if (auto req_it = it->value().as_object().find("required_nodes"); req_it != it->value().as_object().end()) {
+    if (auto it = config_.find("discover"); it != config_.end() && it->value().is_object()) {
+        const auto& discover_obj = it->value().as_object(); // may throw if not object – handle separately
+        if (auto req_it = discover_obj.find("required_nodes"); req_it != discover_obj.end()) {
             if (req_it->value().is_array()) {
                 for (const auto& v : req_it->value().as_array()) {
-                    required.insert(v.as_string().c_str());
+                    if (v.is_string()) {
+                        required.insert(v.as_string().c_str());
+                    } else {
+                        MLOG_W("Required node entry is not a string, skipping");
+                    }
                 }
             }
         }
@@ -158,10 +169,16 @@ json::object Leader::detailed_status() {
     for (const auto& req : required) {
         summary[req] = "off";
     }
+
     int alive_timeout = 10;
-    if (auto it = config_.find("discover"); it != config_.end()) {
-        if (auto timeout_it = it->value().as_object().find("alive_timeout"); timeout_it != it->value().as_object().end()) {
-            alive_timeout = std::stoi(timeout_it->value().as_string().c_str());
+    if (auto it = config_.find("discover"); it != config_.end() && it->value().is_object()) {
+        const auto& discover_obj = it->value().as_object();
+        if (auto timeout_it = discover_obj.find("alive_timeout"); timeout_it != discover_obj.end()) {
+            try {
+                alive_timeout = boost::json::value_to<int>(timeout_it->value());
+            } catch (const std::exception& e) {
+                MLOG_W("Invalid alive_timeout value: {}", e.what());
+            }
         }
     }
 
@@ -183,10 +200,12 @@ json::object Leader::get_cluster_config() {
     return cluster_config_;
 }
 
-std::string Leader::get_next_message_id() {
-    // TODO: implement distributed message id counter
+std::string Leader::get_next_message_id()
+{
     static std::atomic<uint64_t> counter{0};
-    return std::to_string(++counter);
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    const uint64_t nt = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+    return std::to_string(nt) + "_" + std::to_string(counter.fetch_add(1, std::memory_order_relaxed));
 }
 
 std::string Leader::get_next_object_id() {
@@ -227,9 +246,9 @@ json::array Leader::get_node_states() {
 
 std::string Leader::generate_uuid7() const {
     // Simple UUID v7 generator (time-ordered)
-    static std::random_device rd;
-    static std::mt19937_64 gen(rd());
-    static std::uniform_int_distribution<uint64_t> dis;
+    thread_local  std::random_device rd;
+    thread_local  std::mt19937_64 gen(rd());
+    thread_local  std::uniform_int_distribution<uint64_t> dis;
 
     auto now = std::chrono::system_clock::now();
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(

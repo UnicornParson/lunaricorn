@@ -28,11 +28,11 @@ void MLog::log(std::string_view msg, const std::source_location& loc) {
 
     std::string caller_info = get_caller_info(loc);
     std::string full_msg = caller_info + " " + std::string(msg);
-
+    std::cout << full_msg << std::endl;
     try {
         LogCollectorClient::instance().send_log(owner, token, full_msg, "log");
     } catch (const std::exception& e) {
-        std::cerr << "MLog error: " << e.what() << '\n';
+        std::cerr << "MLog error: " << e.what() << std::endl;
     }
 }
 
