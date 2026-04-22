@@ -3,7 +3,10 @@ FROM lunaricorn_orb_base
 USER root
 
 RUN pip install --upgrade pip
-RUN pip install --no-cache-dir pyflakes pycodestyle mypy
+RUN pip install --no-cache-dir --default-timeout=100 \
+    --index-url https://mirrors.aliyun.com/pypi/simple/ \
+    --trusted-host mirrors.aliyun.com \
+    pyflakes pycodestyle mypy
 
 COPY requirements.txt /opt/lunaricorn/orb/app/
 COPY . /opt/lunaricorn/orb/app/

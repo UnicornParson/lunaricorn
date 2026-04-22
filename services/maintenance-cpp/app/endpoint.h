@@ -30,6 +30,7 @@ struct LogMessage {
     std::string message;
     std::string type;
     std::optional<std::string> datetime;  // if missing, will be filled with current time
+    uint64_t counter;
 
     // Validate that required fields are not empty
     bool valid() const {

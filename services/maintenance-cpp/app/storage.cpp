@@ -78,22 +78,33 @@ bool PGStorage::install()
 }
 
 // Insert a new record. Returns the generated offset, or std::nullopt on failure.
-std::optional<Poco::Int64> PGStorage::push(const std::string& owner, const std::string& token, const std::string& msg)
+std::optional<Poco::Int64> PGStorage::push(const std::string& owner, const std::string& token, const std::string& msg, uint64_t counter)
 {
     LOG_ACCESS(owner << " [" << token << "] - " << msg);
     try {
         std::string ownerTrunc = owner.substr(0, 256);
         std::string tokenTrunc = token.substr(0, 256);
-        std::string msgCopy = msg;   // non-const copy for use()
+        std::stringstream msg_ss;
+        msg_ss << "("<<counter<<")" << msg;
+        std::string msgCopy = msg_ss.str();   // non-const copy for use()
         Poco::Int64 newOffset = 0;
         Poco::DateTime now;
 
         std::lock_guard<std::mutex> lock(pool_mutex); 
+        static std::chrono::steady_clock::time_point lastTime = std::chrono::steady_clock::now();
+        static size_t counter = 0;
         Poco::Data::Session session(pool_->get());
         session << "INSERT INTO maintenance_log (owner, token, timestamputc, msg) VALUES ($1, $2, $3, $4) RETURNING o",
             use(ownerTrunc), use(tokenTrunc), use(now), use(msgCopy),
             into(newOffset), Poco::Data::Keywords::now;
-
+        ++counter;
+        auto nowTime = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(nowTime - lastTime).count();
+        if (elapsed >= 1) {
+            std::cout << "Transactions per second: " << counter << std::endl;
+            counter = 0;
+            lastTime = nowTime;
+        }
         return newOffset;
     } catch (const Poco::Exception& e) {
         std::cerr << "Failed to insert record: " << e.displayText() << std::endl;

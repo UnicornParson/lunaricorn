@@ -43,6 +43,7 @@ add_library(lunaricorn_api STATIC
     config.cpp
     lunaricorn.cpp
     mlog.cpp
+    leader_api.cpp
 )
 
 target_include_directories(lunaricorn_api

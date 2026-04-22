@@ -76,7 +76,7 @@ public:
     explicit PGStorage(const DbConfig& config);
     void testConnection();
     bool install();
-    std::optional<Poco::Int64> push(const std::string& owner, const std::string& token, const std::string& msg);
+    std::optional<Poco::Int64> push(const std::string& owner, const std::string& token, const std::string& msg, uint64_t counter);
     std::vector<MaintenanceLogRecord> pull(Poco::Int64 offset = 0, std::optional<int> limit = std::nullopt);
     std::vector<MaintenanceLogRecord> getAll();
     std::optional<MaintenanceLogRecord> getByOffset(Poco::Int64 offset);

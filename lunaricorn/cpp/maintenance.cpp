@@ -9,7 +9,6 @@
 
 namespace lunaricorn
 {
-
 LogCollectorClient& LogCollectorClient::instance() {
     static std::once_flag init_flag;
     static std::unique_ptr<LogCollectorClient> instance_ptr;
@@ -143,85 +142,85 @@ Poco::JSON::Object::Ptr LogCollectorClient::send_log(std::string_view owner,
                                                      std::string_view message,
                                                      std::string_view log_type,
                                                      const std::optional<std::string>& datetime) {
-    return with_retry([&]() -> Poco::JSON::Object::Ptr {
-        Poco::JSON::Object payload;
-        payload.set("o", std::string(owner));
-        payload.set("t", std::string(token));
-        payload.set("m", std::string(message));
-        payload.set("type", std::string(log_type));
-        if (datetime) {
-            payload.set("dt", *datetime);
-        }
 
-        std::ostringstream json_stream;
-        Poco::JSON::Stringifier::stringify(payload, json_stream);
-        std::string json_body = json_stream.str();
+    Poco::JSON::Object payload;
+    payload.set("o", std::string(owner));
+    payload.set("t", std::string(token));
+    payload.set("m", std::string(message));
+    payload.set("type", std::string(log_type));
+    payload.set("c", counter.fetch_add(1, std::memory_order_relaxed));
+    if (datetime) {
+        payload.set("dt", *datetime);
+    }
 
-        Poco::URI uri(build_url("/log"));
-        Poco::Net::HTTPClientSession session(uri.getHost(), uri.getPort());
-        session.setTimeout(Poco::Timespan(2, 0)); // Fixed 2 second timeout for send
+    std::ostringstream json_stream;
+    Poco::JSON::Stringifier::stringify(payload, json_stream);
+    std::string json_body = json_stream.str();
 
-        Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, uri.getPathAndQuery());
-        request.setContentType("application/json");
-        request.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0");
-        request.set("Accept", "application/json");
-        request.set("Accept-Encoding", "gzip, deflate, br");
-        request.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        request.set("Pragma", "no-cache");
-        request.set("Expires", "0");
-        request.set("Connection", "close");
-        request.setContentLength(json_body.size());
+    Poco::URI uri(build_url("/log"));
+    Poco::Net::HTTPClientSession session(uri.getHost(), uri.getPort());
+    session.setTimeout(Poco::Timespan(2, 0)); // Fixed 2 second timeout for send
 
-        std::ostream& request_body = session.sendRequest(request);
-        request_body << json_body;
+    Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, uri.getPathAndQuery());
+    request.setContentType("application/json");
+    request.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0");
+    request.set("Accept", "application/json");
+    request.set("Accept-Encoding", "gzip, deflate, br");
+    request.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    request.set("Pragma", "no-cache");
+    request.set("Expires", "0");
+    request.set("Connection", "close");
+    request.setContentLength(json_body.size());
 
-        Poco::Net::HTTPResponse response;
-        std::istream& response_body = session.receiveResponse(response);
-        return handle_json_response(response, response_body);
-    });
+    std::ostream& request_body = session.sendRequest(request);
+    request_body << json_body;
+
+    Poco::Net::HTTPResponse response;
+    std::istream& response_body = session.receiveResponse(response);
+    return handle_json_response(response, response_body);
 }
 
-Poco::JSON::Object::Ptr LogCollectorClient::send_logs_batch(const std::vector<Poco::JSON::Object::Ptr>& logs) {
-    return with_retry([&]() -> Poco::JSON::Object::Ptr {
-        Poco::JSON::Array batch_array;
-        for (const auto& log : logs) {
-            Poco::JSON::Object item;
-            item.set("o", log->getValue<std::string>("o"));
-            item.set("t", log->getValue<std::string>("t"));
-            item.set("m", log->getValue<std::string>("m"));
-            item.set("type", log->getValue<std::string>("type"));
-            if (log->has("datetime")) {
-                item.set("dt", log->getValue<std::string>("datetime"));
-            }
-            batch_array.add(item);
+Poco::JSON::Object::Ptr LogCollectorClient::send_logs_batch(const std::vector<Poco::JSON::Object::Ptr>& logs)
+{
+    Poco::JSON::Array batch_array;
+    for (const auto& log : logs) {
+        Poco::JSON::Object item;
+        item.set("o", log->getValue<std::string>("o"));
+        item.set("t", log->getValue<std::string>("t"));
+        item.set("m", log->getValue<std::string>("m"));
+        item.set("type", log->getValue<std::string>("type"));
+        item.set("c", counter.fetch_add(1, std::memory_order_relaxed));
+        if (log->has("datetime")) {
+            item.set("dt", log->getValue<std::string>("datetime"));
         }
+        batch_array.add(item);
+    }
 
-        std::ostringstream json_stream;
-        Poco::JSON::Stringifier::stringify(batch_array, json_stream);
-        std::string json_body = json_stream.str();
+    std::ostringstream json_stream;
+    Poco::JSON::Stringifier::stringify(batch_array, json_stream);
+    std::string json_body = json_stream.str();
 
-        Poco::URI uri(build_url("/log/batch"));
-        Poco::Net::HTTPClientSession session(uri.getHost(), uri.getPort());
-        session.setTimeout(Poco::Timespan(2, 0));
+    Poco::URI uri(build_url("/log/batch"));
+    Poco::Net::HTTPClientSession session(uri.getHost(), uri.getPort());
+    session.setTimeout(Poco::Timespan(2, 0));
 
-        Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, uri.getPathAndQuery());
-        request.setContentType("application/json");
-        request.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0");
-        request.set("Accept", "application/json");
-        request.set("Accept-Encoding", "gzip, deflate, br");
-        request.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        request.set("Pragma", "no-cache");
-        request.set("Expires", "0");
-        request.set("Connection", "close");
-        request.setContentLength(json_body.size());
+    Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, uri.getPathAndQuery());
+    request.setContentType("application/json");
+    request.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0");
+    request.set("Accept", "application/json");
+    request.set("Accept-Encoding", "gzip, deflate, br");
+    request.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    request.set("Pragma", "no-cache");
+    request.set("Expires", "0");
+    request.set("Connection", "close");
+    request.setContentLength(json_body.size());
 
-        std::ostream& request_body = session.sendRequest(request);
-        request_body << json_body;
+    std::ostream& request_body = session.sendRequest(request);
+    request_body << json_body;
 
-        Poco::Net::HTTPResponse response;
-        std::istream& response_body = session.receiveResponse(response);
-        return handle_json_response(response, response_body);
-    });
+    Poco::Net::HTTPResponse response;
+    std::istream& response_body = session.receiveResponse(response);
+    return handle_json_response(response, response_body);
 }
 
 std::vector<Poco::JSON::Object::Ptr> LogCollectorClient::pull_logs(int offset) {

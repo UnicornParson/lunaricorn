@@ -90,9 +90,11 @@ void Endpoint::Session::read_request() {
         });
 }
 
-void Endpoint::Session::handle_request() {
+void Endpoint::Session::handle_request()
+{
+    const auto start_time = std::chrono::steady_clock::now();
     http::response<http::string_body> res;
-
+    
     try {
         if (req_.method() == http::verb::post && req_.target() == "/v1/imalive") {
             res = handle_imalive();
@@ -132,7 +134,9 @@ void Endpoint::Session::handle_request() {
         res = make_response(http::status::internal_server_error,
             json::object{{"message", std::string("Internal server error: ") + e.what()}});
     }
-
+    const auto end_time = std::chrono::steady_clock::now();
+    const double elapsed = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count();
+    std::cout << "Request: " << req_.target() << " completed in " << elapsed << " s" << std::endl;
     send_response(std::move(res));
 }
 

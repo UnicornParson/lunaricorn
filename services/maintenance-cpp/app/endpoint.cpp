@@ -45,7 +45,7 @@ std::optional<LogMessage> parse_log_message(const json::value& v) {
         msg.token = json::value_to<std::string>(j.at("t"));
         msg.message = json::value_to<std::string>(j.at("m"));
         msg.type = json::value_to<std::string>(j.at("type"));
-
+        msg.counter = json::value_to<uint64_t>(j.at("c"));
         // Trim whitespace (basic)
         auto trim = [](std::string& s) {
             s.erase(0, s.find_first_not_of(" \t\n\r"));
@@ -109,7 +109,9 @@ void Session::process_request() {
     // Determine target and method
     auto target = request_.target();
     auto method = request_.method();
-    DPRINT("[" << current_time_str() << "] call " << target );
+    std::stringstream access_msg;
+    access_msg << "call " << target;
+    const auto start_time = std::chrono::steady_clock::now();
     POINT;
     try {
         if (method == http::verb::get && target == "/") {
@@ -154,7 +156,10 @@ void Session::process_request() {
                            {{"error", "Internal server error"}});
         POINT;
     }
-    POINT;
+    const auto end_time = std::chrono::steady_clock::now();
+    const double elapsed = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count();
+    access_msg << " duration: " << elapsed << "s";
+    LOG_ACCESS(access_msg.str());
 }
 
 void Session::send_response(http::status status, const std::string& content_type,
@@ -274,9 +279,7 @@ void Session::handle_log_post() {
 
     // Background task: push to storage
     background_post([msg = *msg_opt](std::shared_ptr<PGStorage> st) {
-        st->push(msg.owner, msg.token, msg.message);
-        // Note: type is not used in push? Python's publish_message_safe only uses owner, token, message.
-        // We'll ignore type for now, as storage doesn't have it.
+        st->push(msg.owner, msg.token, msg.message, msg.counter);
     });
 
     // Log reception
@@ -429,7 +432,7 @@ void Session::handle_log_batch_post() {
         auto msg_opt = parse_log_message(item);
         if (msg_opt) {
             background_post([msg = *msg_opt](std::shared_ptr<PGStorage> st) {
-                st->push(msg.owner, msg.token, msg.message);
+                st->push(msg.owner, msg.token, msg.message, msg.counter);
             });
             ++success_count;
         }

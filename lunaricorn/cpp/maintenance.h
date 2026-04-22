@@ -76,6 +76,7 @@ private:
 
     // Thread safety for operations that require serialisation (not used if sessions are per-request)
     std::mutex mutex_;
+    static inline std::atomic<uint64_t> counter {0};
 };
 
 // Template implementation
@@ -135,8 +136,8 @@ private:
 }; // namespace lunaricorn
 
 // std::format("Unexpected value: {}", value)
-#define MLOG(...)   MLog::log(std::format(__VA_ARGS__), std::source_location::current())
-#define MLOG_D(...) MLog::d(std::format(__VA_ARGS__), std::source_location::current())
-#define MLOG_W(...) MLog::w(std::format(__VA_ARGS__), std::source_location::current())
-#define MLOG_E(...) MLog::e(std::format(__VA_ARGS__), std::source_location::current())
+#define MLOG(...)   lunaricorn::MLog::log(std::format(__VA_ARGS__), std::source_location::current())
+#define MLOG_D(...) lunaricorn::MLog::d  (std::format(__VA_ARGS__), std::source_location::current())
+#define MLOG_W(...) lunaricorn::MLog::w  (std::format(__VA_ARGS__), std::source_location::current())
+#define MLOG_E(...) lunaricorn::MLog::e  (std::format(__VA_ARGS__), std::source_location::current())
 

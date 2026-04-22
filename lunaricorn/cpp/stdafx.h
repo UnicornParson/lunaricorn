@@ -11,3 +11,4 @@
 #include <stdexcept>
 #include <memory>
 #include <utility>
+#include <atomic>

@@ -7,7 +7,11 @@ VOLUME ["/opt/lunaricorn/orb/app"]
 # Copy application code to the specified directory
 COPY . /opt/lunaricorn/orb/app/
 ADD tmp/lunaricorn.tgz /opt/lunaricorn/orb/app
-RUN pip install --no-cache-dir -r /opt/lunaricorn/orb/app/lunaricorn/requirements.txt
+RUN pip install --no-cache-dir --default-timeout=100 \
+    --index-url https://mirrors.aliyun.com/pypi/simple/ \
+    --trusted-host mirrors.aliyun.com \
+    -r /opt/lunaricorn/orb/app/lunaricorn/requirements.txt
+
 
 # Set working directory to the application directory
 WORKDIR /opt/lunaricorn/orb/app/internal
