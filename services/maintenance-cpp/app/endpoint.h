@@ -6,10 +6,11 @@
 #include <optional>
 #include <atomic>
 #include <thread>
+#include <format>
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/json.hpp>
-#include "storage.h"
+#include "pusher.h"
 
 
 namespace lunaricorn
@@ -33,8 +34,19 @@ struct LogMessage {
     uint64_t counter;
 
     // Validate that required fields are not empty
-    bool valid() const {
+    inline bool valid() const {
         return !owner.empty() && !token.empty() && !message.empty() && !type.empty();
+    }
+
+    inline MaintenanceLogRecord toRecord() const 
+    {
+        return {
+            .offset = 0,
+            .owner = owner, 
+            .token = token,
+            .timestamputc = Poco::DateTime(),
+            .msg = std::format("({}){}", counter, message)
+        };
     }
 };
 
@@ -52,7 +64,8 @@ class LogCollectorServer;
 // Session handles one HTTP connection
 class Session : public std::enable_shared_from_this<Session> {
 public:
-    Session(tcp::socket socket, std::shared_ptr<PGStorage> storage, LogCollectorServer& server);
+    Session(tcp::socket socket, std::shared_ptr<Pusher> pusher, std::shared_ptr<PGStorage> storage, LogCollectorServer& server);
+    ~Session();
     void start();
 
 private:
@@ -75,20 +88,22 @@ private:
     void handle_log_batch_post();
 
     // Helper to run storage operation asynchronously (background task)
-    template<typename F>
-    void background_post(F&& f);
+    //template<typename F>
+    //void background_post(F&& f);
 
     tcp::socket socket_;
     boost::beast::flat_buffer buffer_;
     boost::beast::http::request<boost::beast::http::string_body> request_;
+    std::shared_ptr<Pusher> pusher_;
     std::shared_ptr<PGStorage> storage_;
     LogCollectorServer& server_;
+    std::atomic<int64_t> obj_counter_;
 };
 
 // Main server class
 class LogCollectorServer {
 public:
-    LogCollectorServer(std::shared_ptr<PGStorage> storage, const ServerConfig& config);
+    LogCollectorServer(std::shared_ptr<Pusher> pusher, std::shared_ptr<PGStorage> storage, const ServerConfig& config);
     ~LogCollectorServer();
 
     // Start accepting connections (blocking call, runs I/O context)
@@ -111,6 +126,7 @@ private:
     boost::asio::io_context ioc_;
     tcp::acceptor acceptor_;
     std::shared_ptr<PGStorage> storage_;
+    std::shared_ptr<Pusher> pusher_;
     ServerConfig config_;
     std::vector<std::thread> threads_;
     std::atomic<int> active_requests_{0};

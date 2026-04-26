@@ -24,9 +24,13 @@ int main() {
     }
 
     std::shared_ptr<PGStorage> storage = std::make_shared<PGStorage>(cfg);
+    std::shared_ptr<Pusher> pusher = std::make_shared<Pusher>(storage);
+
+
     ServerConfig serverCfg;
     serverCfg.num_threads = get_workers(4);
-    LogCollectorServer endpoint(storage, serverCfg);
+    LogCollectorServer endpoint(pusher, storage, serverCfg);
+    pusher->start();
     endpoint.run();
     std::cout << "[" << current_time_str() << "] exit maintenance service" << std::endl;
     return 0;

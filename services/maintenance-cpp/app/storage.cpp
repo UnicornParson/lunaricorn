@@ -1,6 +1,7 @@
 #include "storage.h"
 #include <format>
 #include <lunaricorn.h>
+#include <Poco/Data/Transaction.h>
 using namespace Poco::Data::Keywords;
 using namespace lunaricorn;
 
@@ -77,7 +78,52 @@ bool PGStorage::install()
     }
 }
 
-// Insert a new record. Returns the generated offset, or std::nullopt on failure.
+std::optional<Poco::Int64> PGStorage::push_all(std::queue<MaintenanceLogRecord>& events)
+{
+    std::lock_guard<std::mutex> lock(pool_mutex); 
+    if (events.empty())
+    {
+        
+        return {last_offset_};
+    }
+    Poco::Data::Session session(pool_->get());
+
+    Poco::Data::Transaction tr(session);
+    try 
+    {   uint64_t row_count = 0;
+        static uint64_t row_count_total = 0;
+        Poco::Int64 maxOffset = 0;
+        while (!events.empty())
+        {
+            
+            auto e = events.front();
+            events.pop();
+            Poco::DateTime now;
+            Poco::Int64 newOffset = 0;
+            session << "INSERT INTO maintenance_log (owner, token, timestamputc, msg) VALUES ($1, $2, $3, $4) RETURNING o",
+            use(e.owner), use(e.token), use(now), use(e.msg),
+            into(newOffset), Poco::Data::Keywords::now;
+            maxOffset = std::max(maxOffset, newOffset);
+            ++row_count;
+        }
+        tr.commit();
+        row_count_total+=row_count;
+        std::cout << "@@ commit ok " << row_count << " rows. total:" << row_count_total << std::endl;
+    }
+    catch (const Poco::Exception& e) {
+        tr.rollback();
+        std::cerr << "Failed to insert record(1): " << e.displayText() << std::endl;
+        return std::nullopt;
+    }
+    catch (const std::exception& e) {
+        tr.rollback();
+        std::cerr << "Failed to insert record(2): " << e.what() << std::endl;
+        return std::nullopt;
+    }
+    return {0};
+}
+
+
 std::optional<Poco::Int64> PGStorage::push(const std::string& owner, const std::string& token, const std::string& msg, uint64_t counter)
 {
     LOG_ACCESS(owner << " [" << token << "] - " << msg);
@@ -105,6 +151,7 @@ std::optional<Poco::Int64> PGStorage::push(const std::string& owner, const std::
             counter = 0;
             lastTime = nowTime;
         }
+        last_offset_ = newOffset;
         return newOffset;
     } catch (const Poco::Exception& e) {
         std::cerr << "Failed to insert record: " << e.displayText() << std::endl;

@@ -6,6 +6,8 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <queue>
+#include <utility>
 #include <Poco/Data/Session.h>
 #include <Poco/Data/SessionPool.h>
 #include <Poco/Data/PostgreSQL/Connector.h>
@@ -25,8 +27,41 @@ struct MaintenanceLogRecord {
     std::string token;
     Poco::DateTime timestamputc;
     std::string msg;
+
+    inline void truncate()
+    {
+        owner = owner.substr(0, 256);
+        token = token.substr(0, 256);
+    }
+};
+
+template <typename T>
+class EventQueue {
+public:
+    void push(T& value) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        queue_.push(value);
+    }
+    void push(T&& value) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        queue_.push(std::move(value));
+    }
+    std::queue<T> get_all() {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        std::queue<T> queue_copy = std::move(queue_);
+        queue_ = std::queue<T>{};
+
+        return std::move(queue_copy);
+    }
+
+private:
+    std::queue<T> queue_;
+    std::mutex mutex_;
 };
 } // namespace lunaricorn
+
+
 
 namespace Poco 
 {
@@ -76,6 +111,7 @@ public:
     explicit PGStorage(const DbConfig& config);
     void testConnection();
     bool install();
+    std::optional<Poco::Int64> push_all(std::queue<MaintenanceLogRecord>& events);
     std::optional<Poco::Int64> push(const std::string& owner, const std::string& token, const std::string& msg, uint64_t counter);
     std::vector<MaintenanceLogRecord> pull(Poco::Int64 offset = 0, std::optional<int> limit = std::nullopt);
     std::vector<MaintenanceLogRecord> getAll();
@@ -86,6 +122,7 @@ public:
 private:
     std::unique_ptr<Poco::Data::SessionPool> pool_;
     std::mutex pool_mutex;
+    Poco::Int64 last_offset_ = 0;
 
     // Helper to check if the table already exists (by attempting to query it)
     bool tableExists();

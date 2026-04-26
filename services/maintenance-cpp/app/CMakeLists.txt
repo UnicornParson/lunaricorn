@@ -70,6 +70,7 @@ add_executable(maintenance
     main.cpp
     storage.cpp
     endpoint.cpp
+    pusher.cpp
     )
 
 # Include directories

@@ -15,6 +15,8 @@ constexpr int ACTIVE_REQUESTS_WARN_LIMIT { 10 };
 using namespace boost;
 using namespace boost::beast;
 
+#define PRINT_SESSION_COUNTER(prefix, sc) std::cout << "on session " << prefix << " count: " << (sc) << std::endl
+
 namespace lunaricorn {
 
 // Convert MaintenanceLogRecord to JSON
@@ -74,8 +76,18 @@ std::optional<LogMessage> parse_log_message(const json::value& v) {
 
 
 // Session implementation
-Session::Session(tcp::socket socket, std::shared_ptr<PGStorage> storage, LogCollectorServer& server)
-    : socket_(std::move(socket)), storage_(storage), server_(server) {}
+Session::Session(tcp::socket socket, std::shared_ptr<Pusher> pusher, std::shared_ptr<PGStorage> storage, LogCollectorServer& server)
+    : socket_(std::move(socket)), pusher_(pusher), storage_(storage), server_(server) 
+{
+    ++obj_counter_;
+    PRINT_SESSION_COUNTER("inc", obj_counter_);
+}
+
+Session::~Session()
+{
+    --obj_counter_;
+    PRINT_SESSION_COUNTER("dec", obj_counter_);
+}
 
 void Session::start() {
     server_.increment_active();
@@ -213,36 +225,34 @@ void Session::send_plain_response(http::status status, const std::string& text,
         });
     POINT;
 }
-
+/*
 template<typename F>
 void Session::background_post(F&& f) {
     // Post the task to the I/O context, but detach it from the session.
     // The storage_ shared_ptr ensures the storage lives until task completes.
     boost::asio::post(server_.io_context(),
-        [storage = storage_, task = std::forward<F>(f)]() mutable {
+        [pusher = pusher, task = std::forward<F>(f)]() mutable {
             try {
-                task(storage);
+                task(pusher);
             } catch (const std::exception& e) {
                 std::cerr << "Background task error: " << e.what() << std::endl;
             }
         });
 }
-
+*/
 void Session::handle_root() 
 {
     POINT;
     json::object j;
     j["status"] = "online";
     j["service"] = "Log Collector API";
-    // Simulate RabbitMQ status: assume connected if storage is valid
-    j["rabbitmq"] = storage_ ? "connected" : "disconnected";
     send_json_response(http::status::ok, j);
 }
 
 void Session::handle_health() 
 {
     POINT;
-    if (storage_) {
+    if (pusher_) {
         json::object j;
         j["status"] = "online";
         POINT;
@@ -276,11 +286,8 @@ void Session::handle_log_post() {
         send_json_response(http::status::bad_request, err);
         return;
     }
-
-    // Background task: push to storage
-    background_post([msg = *msg_opt](std::shared_ptr<PGStorage> st) {
-        st->push(msg.owner, msg.token, msg.message, msg.counter);
-    });
+    auto record = msg_opt.value().toRecord();
+    pusher_->push(record);
 
     // Log reception
     DPRINT("Received log from " << msg_opt->owner << "::" << msg_opt->token << ", type: " << msg_opt->type);
@@ -428,12 +435,13 @@ void Session::handle_log_batch_post() {
     }
 
     int success_count = 0;
-    for (const auto& item : j.as_array()) {
+    for (const auto& item : j.as_array())
+    {
         auto msg_opt = parse_log_message(item);
-        if (msg_opt) {
-            background_post([msg = *msg_opt](std::shared_ptr<PGStorage> st) {
-                st->push(msg.owner, msg.token, msg.message, msg.counter);
-            });
+        if (msg_opt)
+        {
+            auto record = msg_opt.value().toRecord();
+            pusher_->push(record);
             ++success_count;
         }
     }
@@ -447,13 +455,13 @@ void Session::handle_log_batch_post() {
     send_json_response(http::status::ok, resp);
 }
 
-// LogCollectorServer implementation
-LogCollectorServer::LogCollectorServer(std::shared_ptr<PGStorage> storage, const ServerConfig& config)
-    : acceptor_(ioc_), storage_(storage), config_(config) {
+
+LogCollectorServer::LogCollectorServer(std::shared_ptr<Pusher> pusher, std::shared_ptr<PGStorage> storage, const ServerConfig& config)
+    : acceptor_(ioc_), pusher_(pusher), storage_(storage), config_(config)
+{
     // Validate storage connection
-    if (!storage_) {
-        throw std::runtime_error("Storage is null");
-    }
+    if (!storage_) { throw std::runtime_error("Storage is null");}
+    if (!pusher_) { throw std::runtime_error("Pusher is null");}
     storage_->testConnection();  // throws if failed
 
     // Setup acceptor
@@ -492,7 +500,7 @@ void LogCollectorServer::do_accept() {
     acceptor_.async_accept(
         [this](beast::error_code ec, tcp::socket socket) {
             if (!ec) {
-                std::make_shared<Session>(std::move(socket), storage_, *this)->start();
+                std::make_shared<Session>(std::move(socket), pusher_, storage_, *this)->start();
             }
             if (!stopped_) {
                 do_accept();
