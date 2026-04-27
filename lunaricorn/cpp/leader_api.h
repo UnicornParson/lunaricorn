@@ -9,7 +9,8 @@
 #include <Poco/URI.h>
 #include "maintenance.h"
 
-
+namespace lunaricorn
+{
 class LeaderConnector {
 public:
     explicit LeaderConnector(const std::string& base_url = "http://localhost:8001", int timeout_seconds = 30);
@@ -78,3 +79,5 @@ public:
     static bool test_connection(const std::string& base_url);
     static bool wait_connection(const std::string& url, double seconds_timeout);
 };
+
+} // namespace lunaricorn

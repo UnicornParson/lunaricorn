@@ -1,23 +1,9 @@
-FROM python:3.14.0-trixie
 
-# Set environment variables
+FROM ubuntu:25.10
+USER root
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV DEBIAN_FRONTEND=noninteractive
-USER root
-# Install system dependencies
-RUN apt-get update && apt-get upgrade -y
-RUN apt-get update && apt-get install -y \
-    gcc \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt -y update && apt -y install libssl-dev libmysqlclient-dev libpq-dev build-essential mc net-tools curl gdb
 
-
-RUN mkdir -p /opt/app/ 
-RUN mkdir -p /opt/app/data
-
-COPY requirements.txt /opt/app/
-
-# Install Python dependencies
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r /opt/app/requirements.txt
+ENTRYPOINT ["/bin/bash"]

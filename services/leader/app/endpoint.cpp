@@ -23,11 +23,11 @@ private:
 
     static http::response<http::string_body> make_response(http::status status, const json::value& body);
     static std::string current_iso_time();
+    std::string active_services_str();
 
     http::response<http::string_body> handle_imalive();
     http::response<http::string_body> handle_list_services();
     http::response<http::string_body> handle_discover();
-    http::response<http::string_body> handle_test();
     http::response<http::string_body> handle_cluster_info();
     http::response<http::string_body> handle_get_environment();
     http::response<http::string_body> handle_get_mid();
@@ -102,8 +102,6 @@ void Endpoint::Session::handle_request()
             res = handle_list_services();
         } else if (req_.method() == http::verb::post && req_.target() == "/v1/discover") {
             res = handle_discover();
-        } else if (req_.method() == http::verb::get && req_.target() == "/v1/test") {
-            res = handle_test();
         } else if (req_.method() == http::verb::get && req_.target() == "/v1/clusterinfo") {
             res = handle_cluster_info();
         } else if (req_.method() == http::verb::get && req_.target() == "/v1/getenv") {
@@ -166,8 +164,9 @@ std::string Endpoint::Session::current_iso_time() {
     return oss.str();
 }
 
-http::response<http::string_body> Endpoint::Session::handle_imalive() {
-    MLOG_D("Received im_alive notification");
+http::response<http::string_body> Endpoint::Session::handle_imalive()
+{
+    static auto last_stat_print = std::chrono::steady_clock::now();
     if (!leader_) {
         MLOG_E("Leader is not initialized");
         return make_response(http::status::internal_server_error,
@@ -204,6 +203,14 @@ http::response<http::string_body> Endpoint::Session::handle_imalive() {
         int port = get_optional_value<int>(data, "port", 0);
 
         bool rc = leader_->update_node(node_name, node_type, instance_key, host, port);
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_stat_print >= std::chrono::minutes(1))
+        {
+            MLOG_D("ACTICE SERVICES: {}", active_services_str());
+            last_stat_print = now;
+        }
+
+
         if (rc) {
             return make_response(http::status::ok, json::object{{"status", "received"}});
         } else {
@@ -215,6 +222,27 @@ http::response<http::string_body> Endpoint::Session::handle_imalive() {
         return make_response(http::status::bad_request,
             json::object{{"message", "Invalid JSON"}});
     }
+}
+
+std::string Endpoint::Session::active_services_str()
+{
+
+    const boost::json::array& nodes = leader_->get_list();
+    std::stringstream ss;
+    bool first = true;
+    for (const auto& item : nodes) {
+        if (!item.is_object()) continue;
+        const auto& obj = item.as_object();
+        auto it = obj.find("name");
+        if (it == obj.end() || !it->value().is_string()) continue;
+        std::string name = boost::json::value_to<std::string>(it->value());
+        if (!first) {
+            ss << ", ";
+        }
+        ss << name;
+        first = false;
+    }
+    return ss.str();
 }
 
 http::response<http::string_body> Endpoint::Session::handle_list_services() {
@@ -246,10 +274,6 @@ http::response<http::string_body> Endpoint::Session::handle_discover() {
         {"timestamp", current_iso_time()}
     };
     return make_response(http::status::ok, response);
-}
-
-http::response<http::string_body> Endpoint::Session::handle_test() {
-    return make_response(http::status::ok, json::object{{"message", "Hello, World!"}});
 }
 
 http::response<http::string_body> Endpoint::Session::handle_cluster_info() {

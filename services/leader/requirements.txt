@@ -1,8 +1,0 @@
-fastapi
-uvicorn[standard]
-pydantic
-python-multipart
-pyyaml
-flask
-psycopg2-binary
-tqdm

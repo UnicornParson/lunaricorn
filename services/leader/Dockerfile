@@ -1,29 +1,30 @@
-FROM lunaricorn_leader_base
 
-USER root
+FROM lunaricorn_leader_cpp_builder AS builder
 
-RUN pip install --no-cache-dir -r /opt/lunaricorn/leader/app/requirements.txt
-VOLUME ["/opt/lunaricorn/leader/app"]
-# Copy application code to the specified directory
-COPY . /opt/lunaricorn/leader/app/
-ADD tmp/lunaricorn.tgz /opt/lunaricorn/leader/app
-RUN pip install --no-cache-dir --default-timeout=100 \
-    --index-url https://mirrors.aliyun.com/pypi/simple/ \
-    --trusted-host mirrors.aliyun.com \
-    -r /opt/lunaricorn/leader/app/lunaricorn/requirements.txt
+COPY app/ /opt/app/
+WORKDIR /opt/app/
+RUN chmod +x /opt/app/build.sh 
+#ENV BUILD_TYPE=Debug
+ENV BUILD_TYPE=Release
+RUN mkdir -p /opt/tmp && mkdir -p /opt/app/apilib
+ADD tmp/lunaricorn.tgz /opt/tmp
+RUN cp -rvf /opt/tmp/lunaricorn/cpp/*  /opt/app/apilib
+RUN /opt/app/build.sh
 
-# Set working directory to the application directory
-WORKDIR /opt/lunaricorn/leader/app
+# ------------------------------------------------------------------------
 
-# Expose port
-EXPOSE 8000
+FROM lunaricorn_leader_cpp_base
 
-# Set volume for persistent data
-VOLUME ["/opt/lunaricorn/leader_data"]
+COPY --from=builder /opt/app/__build/leader /opt/app/bin/leader
+COPY --from=builder /opt/3rd/boost/bin/lib /opt/3rd/boost/bin/lib
+COPY --from=builder /opt/3rd/poco/bin/lib /opt/3rd/poco/bin/lib
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+RUN ln -s /bin/bash /usr/bin/bh
 
-# Run the application
-CMD ["python", "leader_app.py"]
+# Добавляем пути к библиотекам в конфигурацию динамического компоновщика
+RUN echo "/opt/3rd/boost/bin/lib" >> /etc/ld.so.conf.d/boost.conf && \
+    echo "/opt/3rd/poco/bin/lib" >> /etc/ld.so.conf.d/poco.conf && \
+    ldconfig
+
+#ENTRYPOINT ["gdb", "--args", "/opt/app/bin/leader"]
+ENTRYPOINT ["/opt/app/bin/leader"]

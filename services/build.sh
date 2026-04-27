@@ -16,12 +16,12 @@ fi
 #popd > /dev/null
 
 echo "Building maintenance service..."
-pushd maintenance-cpp > /dev/null
+pushd maintenance > /dev/null
 ./make_app.sh
 popd > /dev/null
 
 echo "Building leader service..."
-pushd leader_cpp > /dev/null
+pushd leader > /dev/null
 ./make_app.sh
 popd > /dev/null
 

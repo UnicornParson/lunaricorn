@@ -1,27 +1,9 @@
-FROM python:3.14.0-trixie
 
-# Set environment variables
+FROM ubuntu:25.10
+USER root
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV DEBIAN_FRONTEND=noninteractive
-USER root
-# Install system dependencies
-RUN apt-get update && apt-get upgrade -y
-RUN apt-get update && apt-get install -y \
-    gcc \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt -y update && apt -y install libssl-dev libmysqlclient-dev libpq-dev build-essential mc net-tools curl gdb
 
-# Create necessary directories
-RUN mkdir -p /opt/lunaricorn/leader_data/logs \
-    && mkdir -p /opt/lunaricorn/leader/app/initial_data
-
-# Copy requirements file
-COPY requirements.txt /opt/lunaricorn/leader/app/
-
-# Install Python dependencies
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir --default-timeout=100 \
-    --index-url https://mirrors.aliyun.com/pypi/simple/ \
-    --trusted-host mirrors.aliyun.com \
-    -r /opt/lunaricorn/leader/app/requirements.txt
+ENTRYPOINT ["/bin/bash"]

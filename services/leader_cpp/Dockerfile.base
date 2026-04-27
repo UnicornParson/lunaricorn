@@ -1,9 +1,0 @@
-
-FROM ubuntu:25.10
-USER root
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt -y update && apt -y install libssl-dev libmysqlclient-dev libpq-dev build-essential mc net-tools curl gdb
-
-ENTRYPOINT ["/bin/bash"]

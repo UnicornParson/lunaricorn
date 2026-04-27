@@ -12,6 +12,8 @@
 #include <sstream>
 #include <iostream>
 #include "maintenance.h"
+namespace lunaricorn
+{
 
 LeaderConnector::~LeaderConnector() {
     close();
@@ -399,3 +401,4 @@ bool ConnectorUtils::wait_connection(const std::string& url, double seconds_time
         std::this_thread::sleep_for(500ms);
     }
 }
+} // namespace lunaricorn

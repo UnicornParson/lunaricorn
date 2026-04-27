@@ -1,13 +1,6 @@
 #!/bin/bash
 
 set -e
-echo ===============================================
-echo @@ /opt/app/
-ls -lh /opt/app/
-echo ===============================================
-echo @@ /opt/app/apilib
-ls -lh /opt/app/apilib
-echo ===============================================
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 
 if [[ "$BUILD_TYPE" != "Debug" && "$BUILD_TYPE" != "Release" ]]; then
@@ -15,7 +8,7 @@ if [[ "$BUILD_TYPE" != "Debug" && "$BUILD_TYPE" != "Release" ]]; then
     exit 1
 fi
 
-echo "@@ Тип сборки: $BUILD_TYPE"
+echo "Тип сборки: $BUILD_TYPE"
 
 mkdir -p __build
 rm -rvf __build/*

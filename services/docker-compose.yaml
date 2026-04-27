@@ -1,7 +1,7 @@
 services:
   leader:
     build:
-      context: ./leader_cpp
+      context: ./leader
       dockerfile: Dockerfile
     container_name: lunaricorn-leader
     ports:
@@ -12,13 +12,6 @@ services:
       - MAINTENANCE_HOST=192.168.0.18
       - MAINTENANCE_PORT=${MAINTENANCE_API_PORT}
       - PYTHONUNBUFFERED=1
-      - db_type=postgresql
-      - db_host=lunaricorn-pg
-      - db_port=5432
-      - db_user=lunaricorn
-      - db_password=${LUNARICORN_PASSWORD}
-      - db_name=lunaricorn
-      - db_schema=lunaricorn
     networks:
       - lunaricorn-network
     restart: unless-stopped
@@ -65,7 +58,7 @@ services:
 
   maintenance:
     build:
-      context: ./maintenance-cpp
+      context: ./maintenance
       dockerfile: Dockerfile
     container_name: lunaricorn-maintenance
     ports:
