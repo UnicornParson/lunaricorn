@@ -15,8 +15,6 @@ constexpr int ACTIVE_REQUESTS_WARN_LIMIT { 10 };
 using namespace boost;
 using namespace boost::beast;
 
-#define PRINT_SESSION_COUNTER(prefix, sc) std::cout << "on session " << prefix << " count: " << (sc) << std::endl
-
 namespace lunaricorn {
 
 // Convert MaintenanceLogRecord to JSON
@@ -72,8 +70,6 @@ std::optional<LogMessage> parse_log_message(const json::value& v) {
         return std::nullopt;
     }
 }
-
-
 
 // Session implementation
 Session::Session(tcp::socket socket, std::shared_ptr<Pusher> pusher, std::shared_ptr<PGStorage> storage, LogCollectorServer& server)
@@ -225,21 +221,7 @@ void Session::send_plain_response(http::status status, const std::string& text,
         });
     POINT;
 }
-/*
-template<typename F>
-void Session::background_post(F&& f) {
-    // Post the task to the I/O context, but detach it from the session.
-    // The storage_ shared_ptr ensures the storage lives until task completes.
-    boost::asio::post(server_.io_context(),
-        [pusher = pusher, task = std::forward<F>(f)]() mutable {
-            try {
-                task(pusher);
-            } catch (const std::exception& e) {
-                std::cerr << "Background task error: " << e.what() << std::endl;
-            }
-        });
-}
-*/
+
 void Session::handle_root() 
 {
     POINT;

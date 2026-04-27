@@ -53,8 +53,6 @@ struct LogMessage {
 // Convert MaintenanceLogRecord to JSON object
 boost::json::object to_json(const MaintenanceLogRecord& record);
 
-
-
 // Parse LogMessage from JSON, filling missing datetime
 std::optional<LogMessage> parse_log_message(const boost::json::value& j);
 
@@ -87,10 +85,6 @@ private:
     void handle_log_download_plain();
     void handle_log_batch_post();
 
-    // Helper to run storage operation asynchronously (background task)
-    //template<typename F>
-    //void background_post(F&& f);
-
     tcp::socket socket_;
     boost::beast::flat_buffer buffer_;
     boost::beast::http::request<boost::beast::http::string_body> request_;
@@ -106,13 +100,8 @@ public:
     LogCollectorServer(std::shared_ptr<Pusher> pusher, std::shared_ptr<PGStorage> storage, const ServerConfig& config);
     ~LogCollectorServer();
 
-    // Start accepting connections (blocking call, runs I/O context)
     void run();
-
-    // Stop the server
     void stop();
-
-    // Access to I/O context for posting background tasks
     boost::asio::io_context& io_context() { return ioc_; }
 
     // Track active requests (optional, like semaphore in Python)

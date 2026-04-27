@@ -124,7 +124,6 @@ private:
     std::mutex pool_mutex;
     Poco::Int64 last_offset_ = 0;
 
-    // Helper to check if the table already exists (by attempting to query it)
     bool tableExists();
 }; // class PGStorage
 

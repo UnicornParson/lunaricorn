@@ -10,13 +10,11 @@ namespace lunaricorn {
 
 class Leader;
 
-
 namespace net = boost::asio;
 namespace beast = boost::beast;
 namespace http = beast::http;
 namespace json = boost::json;
 using tcp = net::ip::tcp;
-
 
 class Endpoint : public std::enable_shared_from_this<Endpoint> {
 public:
