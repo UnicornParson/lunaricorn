@@ -35,30 +35,7 @@ struct MaintenanceLogRecord {
     }
 };
 
-template <typename T>
-class EventQueue {
-public:
-    void push(T& value) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        queue_.push(value);
-    }
-    void push(T&& value) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        queue_.push(std::move(value));
-    }
-    std::queue<T> get_all() {
-        std::lock_guard<std::mutex> lock(mutex_);
 
-        std::queue<T> queue_copy = std::move(queue_);
-        queue_ = std::queue<T>{};
-
-        return std::move(queue_copy);
-    }
-
-private:
-    std::queue<T> queue_;
-    std::mutex mutex_;
-};
 } // namespace lunaricorn
 
 

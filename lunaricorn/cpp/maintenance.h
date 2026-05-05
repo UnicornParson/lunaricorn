@@ -140,4 +140,4 @@ private:
 #define MLOG_D(...) lunaricorn::MLog::d  (std::format(__VA_ARGS__), std::source_location::current())
 #define MLOG_W(...) lunaricorn::MLog::w  (std::format(__VA_ARGS__), std::source_location::current())
 #define MLOG_E(...) lunaricorn::MLog::e  (std::format(__VA_ARGS__), std::source_location::current())
-
+#define MBUG " [BUG] "
