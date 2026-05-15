@@ -9,6 +9,7 @@
 
 namespace lunaricorn
 {
+
 LogCollectorClient& LogCollectorClient::instance() {
     static std::once_flag init_flag;
     static std::unique_ptr<LogCollectorClient> instance_ptr;

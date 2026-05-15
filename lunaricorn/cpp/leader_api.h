@@ -1,4 +1,3 @@
-// leader_connector.h
 #pragma once
 #include "stdafx.h"
 #include <Poco/Net/HTTPClientSession.h>

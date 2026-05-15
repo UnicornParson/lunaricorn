@@ -8,7 +8,7 @@
 #include <cstring>
 #include <format>
 #include <proto/signaling.h>
-
+#include <lunaricorn.h>
 using namespace lunaricorn::internal;
 
 // Фикстура для тестов
@@ -17,6 +17,9 @@ struct SignalingProtoFixture {
     MessageHeader dummyHeader;
 
     SignalingProtoFixture() {
+        // make log stub mode
+        lunaricorn::MLog::is_stub = true;
+
         dummyHeader.magic = HeaderMagic;
         dummyHeader.version = PROTOCOL_VERSION;
         dummyHeader.type = MT_PubReq;

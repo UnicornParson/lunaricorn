@@ -12,7 +12,7 @@
 #include <Poco/JSON/Array.h>
 #include <Poco/Dynamic/Var.h>
 #include <source_location>
-#include <format>
+
 
 namespace lunaricorn
 {
@@ -116,6 +116,7 @@ class MLog
 public:
     static std::string owner;
     static std::string token;
+    static inline bool is_stub = false;
 
     // Generic log entry
     static void log(std::string_view msg,

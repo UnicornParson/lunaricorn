@@ -6,9 +6,32 @@
 #include <format>
 #include <boost/json.hpp>
 #include <boost/crc.hpp>
-
+#include "../lunaricorn.h"
 namespace lunaricorn {
 namespace internal {
+
+bool SignalingProto::send_raw(std::shared_ptr<Poco::Net::StreamSocket> sock, const std::vector<uint8_t>& data)
+{
+    if (data.empty()){return true;}
+    if (data.size() >= MAX_DATA_LEN) { MLOG_E("Data too large, sz: {}b", data.size()); return false; }
+    if (!ready())
+    {
+        MLOG_E("SignalingConnector not ready");
+        return false;
+    }
+    if (!sock)
+    {
+        MLOG(MBUG " no sock object!");
+        return false;
+    }
+    int sent = sock->sendBytes(data.data(), data.size());
+    if (sent != static_cast<int>(data.size()))
+    {
+        MLOG_E("Failed to send data, sent: {}, expected: {}", sent, data.size());
+        return false;
+    }
+    return true;
+}
 
 size_t SignalingProto::serializeJson(MessageHeader& msg, std::vector<uint8_t>& buf, const boost::json::object& data)
 {
@@ -118,9 +141,176 @@ bool SignalingProto::deserializeJson(const std::vector<uint8_t>& buf, IncomingMe
     return true;
 } // deserializeJson
 
+bool SignalingEvent::fromDict(const boost::json::object& data)
+{
+    try
+    {
+        auto getString = [&](const char* key, std::string& out) -> bool
+        {
+            auto it = data.find(key);
 
+            if (it == data.end())
+            {
+                MLOG_E("SignalingEvent::fromDict missing required key '{}'", key);
+                return false;
+            }
 
+            if (!it->value().is_string())
+            {
+                MLOG_E("SignalingEvent::fromDict key '{}' expected string but got type '{}' value '{}'",
+                    key,
+                    boost::json::to_string(it->value().kind()),
+                    boost::json::serialize(it->value()));
+                return false;
+            }
 
+            out = it->value().as_string().c_str();
+            return true;
+        };
+
+        if (!getString("event_type", type))
+            return false;
+
+        if (!getString("client_id", source))
+            return false;
+
+        auto msgIt = data.find("message");
+
+        if (msgIt == data.end())
+        {
+            MLOG_E("SignalingEvent::fromDict missing required key 'message'");
+            return false;
+        }
+
+        if (!msgIt->value().is_object())
+        {
+            MLOG_E("SignalingEvent::fromDict key 'message' expected object but got type '{}' value '{}'",
+                boost::json::to_string(msgIt->value().kind()),
+                boost::json::serialize(msgIt->value()));
+            return false;
+        }
+
+        payload = msgIt->value().as_object();
+
+        auto tsIt = data.find("timestamp");
+
+        if (tsIt == data.end())
+        {
+            MLOG_E("SignalingEvent::fromDict missing required key 'timestamp'");
+            return false;
+        }
+
+        double ts = 0.0;
+
+        if (tsIt->value().is_double())
+        {
+            ts = tsIt->value().as_double();
+        }
+        else if (tsIt->value().is_int64())
+        {
+            ts = static_cast<double>(tsIt->value().as_int64());
+        }
+        else if (tsIt->value().is_uint64())
+        {
+            ts = static_cast<double>(tsIt->value().as_uint64());
+        }
+        else
+        {
+            MLOG_E("SignalingEvent::fromDict key 'timestamp' expected numeric type but got type '{}' value '{}'",
+                boost::json::to_string(tsIt->value().kind()),
+                boost::json::serialize(tsIt->value()));
+            return false;
+        }
+
+        timestamp = Poco::Timestamp(static_cast<Poco::Timestamp::TimeVal>(ts * 1000000.0));
+
+        tags.clear();
+
+        auto tagsIt = data.find("tags");
+
+        if (tagsIt != data.end())
+        {
+            if (!tagsIt->value().is_array())
+            {
+                MLOG_W("SignalingEvent::fromDict optional key 'tags' expected array but got type '{}' value '{}'",
+                    boost::json::to_string(tagsIt->value().kind()),
+                    boost::json::serialize(tagsIt->value()));
+            }
+            else
+            {
+                const auto& arr = tagsIt->value().as_array();
+
+                for (size_t i = 0; i < arr.size(); ++i)
+                {
+                    const auto& v = arr[i];
+
+                    if (!v.is_string())
+                    {
+                        MLOG_W("SignalingEvent::fromDict tags[{}] expected string but got type '{}' value '{}'",
+                            i,
+                            boost::json::to_string(v.kind()),
+                            boost::json::serialize(v));
+                        continue;
+                    }
+
+                    tags.emplace_back(v.as_string().c_str());
+                }
+            }
+        }
+
+        MLOG_D("SignalingEvent::fromDict parsed type='{}' source='{}' tags={} payload_keys={} timestamp={}",
+            type,
+            source,
+            tags.size(),
+            payload.size(),
+            ts);
+
+        return true;
+    }
+    catch (const std::exception& e)
+    {
+        MLOG_E("SignalingEvent::fromDict exception '{}'", e.what());
+        return false;
+    }
+} // SignalingEvent::fromDict
+
+boost::json::object SignalingEvent::toDict() const
+{
+    try
+    {
+        boost::json::object data;
+
+        data["type"] = "push";
+        data["client_id"] = source;
+        data["event_type"] = type;
+        data["message"] = payload;
+
+        boost::json::array tagsArray;
+
+        for (const auto& tag : tags)
+            tagsArray.emplace_back(tag);
+
+        data["tags"] = std::move(tagsArray);
+
+        const double ts = static_cast<double>(timestamp.timestamp().epochMicroseconds()) / 1000000.0;
+
+        data["timestamp"] = ts;
+
+        MLOG_D("SignalingEvent::toDict serialized type='{}' source='{}' tags={} payload_keys={} timestamp={}",
+            type,
+            source,
+            tags.size(),
+            payload.size(),
+            ts);
+
+        return data;
+    }
+    catch (const std::exception& e)
+    {
+        MLOG_E("SignalingEvent::toDict exception '{}'", e.what());
+        return {};
+    }
+} // SignalingEvent::toDict()
 
 } // namespace internal
 } // namespace lunaricorn

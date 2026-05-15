@@ -103,7 +103,8 @@ add_subdirectory(apilib)
 add_executable(signaling_test
     main.cpp
     test.cpp
-    api_utest.cpp
+    api_test.cpp
+    signaling_event_test.cpp
 )
 
 # Include directories

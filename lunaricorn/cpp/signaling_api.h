@@ -1,0 +1,169 @@
+#pragma once
+#include "stdafx.h"
+#include <Poco/Timer.h>
+#include <Poco/Thread.h>
+#include <Poco/Stopwatch.h>
+#include <Poco/Net/SocketStream.h>
+#include <Poco/URI.h>
+#include <thread>
+#include <future>
+#include <span>
+#include "maintenance.h"
+#include "proto/signaling.h"
+#include "lunaricorn.h"
+
+namespace lunaricorn
+{
+/*
+struct __raw_ticket
+{
+    lunaricorn::internal::MessageHeader req_header;
+    lunaricorn::internal::MessageHeader resp_header;
+    boost::json::object& data;
+};
+*/
+
+using seq_t = uint64_t;
+
+enum MessageType : uint8_t
+{
+    MT_Unknown,
+    MT_Push,
+    MT_Response,
+    MT_Sub
+};
+
+
+class SignalingMessage
+{
+public:
+    explicit SignalingMessage(seq_t seq) : _seq(seq){}
+    seq_t _seq = 0;
+
+
+};
+
+class SignalingResponse: public SignalingMessage
+{
+public:
+    SignalingResponse(seq_t seq) : SignalingMessage(seq){}
+    bool ok = false;
+    std::string error;
+    boost::json::object data;
+    std::optional<SignalingMessage> origin;
+};
+
+class SignalingSubEvent: public SignalingMessage
+{
+public:
+SignalingSubEvent(seq_t seq) : SignalingMessage(seq){type = MT_Response;}
+// TODO: fill
+};
+
+class SignalingConnector
+{
+public:
+    using ResponseCallback = std::function<void(const SignalingResponse&)>;
+    using SubscriptionCallback = std::function<void(const SignalingSubEvent&)>;
+    using DisconnectCallback = std::function<void(const std::string& reason)>;
+    using ResponseCallbackOpt = std::optional<ResponseCallback>;
+    using SubscriptionCallbackOpt = std::optional<SubscriptionCallback>;
+    using DisconnectCallbackOpt = std::optional<DisconnectCallback>;
+
+
+    SignalingConnector();
+    ~SignalingConnector();
+    bool start(const std::string& host, Poco::UInt16 raw_port);
+    bool stop();
+    bool ready();
+    void onHBTimer(Poco::Timer&);
+
+    inline void set_response_callback(const ResponseCallbackOpt& callback) { _respCbk = callback; }
+    inline void set_subscription_callback(const SubscriptionCallbackOpt& callback)  { _subCbk = callback; }
+    inline void set_disconnect_callback(const DisconnectCallbackOpt& callback) { _disconnectCbk = callback; }
+
+private:
+struct IncomingPacketState
+{
+    using PacketHeader = lunaricorn::internal::MessageHeader;
+    static constexpr size_t kHeaderSize = sizeof(PacketHeader);
+
+    PacketHeader header {};
+    std::vector<uint8_t> buffer;
+    size_t receivedHeaderBytes = 0;
+    size_t receivedPayloadBytes = 0;
+    bool headerComplete = false;
+
+    inline void reset()
+    {
+        header = {};
+        buffer.clear();
+        receivedHeaderBytes = 0;
+        receivedPayloadBytes = 0;
+        headerComplete = false;
+    }
+}; // struct IncomingPacketState
+
+    void runner(std::stop_token stopToken); // thread function
+    
+    bool send_message(lunaricorn::internal::MessageHeader& msg,const boost::json::object& data);
+    void on_disconnect(const std::string& reason);
+    void on_data(std::span<const uint8_t> data);
+    void on_message(const lunaricorn::internal::IncomingMessage& msg);
+    void on_server_request(const lunaricorn::internal::IncomingMessage& msg, const boost::json::object& data);
+
+    Poco::Timer _hb_timer;
+    std::mutex _connection_mutex;
+    IncomingPacketState _pstate;
+    std::atomic<bool> _connected {false};
+    std::atomic<bool> _stopping {false};
+    std::optional<std::jthread>  _runner_thread;
+    std::string _host;
+    Poco::UInt16 _raw_port;
+    std::shared_ptr<Poco::Net::StreamSocket> _sock;
+    std::shared_ptr<Poco::Net::SocketStream > _stream;
+    std::shared_ptr<lunaricorn::internal::SignalingProto> _proto;
+
+    std::map<seq_t, SignalingResponse> _pending_Responses;
+
+    ResponseCallbackOpt _respCbk;
+    SubscriptionCallbackOpt _subCbk;
+    DisconnectCallbackOpt _disconnectCbk;
+
+}; // class SignalingConnector
+} // namespace lunaricorn
+
+
+
+
+/*
+    def push_event(self, event_type: str, payload: Dict[str, Any], 
+        source: Optional[str] = None, tags: Optional[List] = None) -> Dict[str, Any]:
+"""
+Send a push event to the server.
+
+:param event_type: Type of the event
+:param payload: Event payload data
+:param source: Source of the event (optional)
+:param tags: Event tags (optional)
+:return: Server response dictionary
+"""
+if not self.connected:
+  raise ConnectionError("Client is not connected to server")
+  
+message = {
+  "type": "push",
+  "client_id": self.client_id,
+  "event_type": event_type,
+  "message": payload,
+  "timestamp": time.time()
+}
+
+if source:
+  message["source"] = source
+  
+if tags:
+  message["tags"] = tags
+  
+return self._send_request(message)
+*/
