@@ -1,12 +1,31 @@
 #include "signaling_api.h"
+#include <chrono>
+#include <random>
 
+using namespace lunaricorn::internal;
+using namespace std::chrono_literals; 
 
 static constexpr int kHeartbeatIntervalMs = 1000;
 static constexpr int kBufReservationB = 1024;
 
 static constexpr int kRecvBufSize = sizeof(lunaricorn::internal::MessageHeader) + 2;
+static constexpr auto silence_duration = 5s; 
 
-using namespace lunaricorn::internal;
+static uint64_t random_u64()
+{
+    static std::mt19937_64 engine = [] 
+    {
+        std::random_device rd;
+        auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+        uint64_t time_seed = static_cast<uint64_t>(now);
+        unsigned int low  = static_cast<unsigned int>(time_seed);
+        unsigned int high = static_cast<unsigned int>(time_seed >> 32);
+        std::seed_seq seed{rd(), rd(), rd(), low, high};
+        return std::mt19937_64{seed};
+    }();
+    static std::uniform_int_distribution<uint64_t> dist;
+    return dist(engine);
+}
 
 namespace lunaricorn
 {
@@ -14,11 +33,11 @@ SignalingConnector::SignalingConnector() :
 _hb_timer(kHeartbeatIntervalMs, kHeartbeatIntervalMs),
 _raw_port (0)
 {
-
+    _last_send = std::chrono::steady_clock::now();
 }
 SignalingConnector::~SignalingConnector()
 {
-
+    stop();
 }
 bool SignalingConnector::start(const std::string& host, Poco::UInt16 raw_port)
 {
@@ -48,6 +67,7 @@ bool SignalingConnector::start(const std::string& host, Poco::UInt16 raw_port)
     _sock = std::make_shared<Poco::Net::StreamSocket>(addr);
 
     _runner_thread = std::jthread([this](std::stop_token st){runner(st);});
+    _last_send = std::chrono::steady_clock::now();
     _hb_timer.start(Poco::TimerCallback<SignalingConnector>(*this, &SignalingConnector::onHBTimer));
 
     _connected = true;
@@ -83,16 +103,46 @@ bool SignalingConnector::ready()
     return _connected && _sock && _sock->impl()->initialized();
 }
 
+seq_t SignalingConnector::make_seq()
+{
+    seq_t s = _seq;
+    ++_seq;
+    return s;
+}
+
 void SignalingConnector::onHBTimer(Poco::Timer&)
 {
     if (!ready()) {return;}
+    const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - _last_send;
+    if (elapsed >= silence_duration)
+    {
+        send_client_hb();
+    }
 }
+void SignalingConnector::send_client_hb()
+{
+    lunaricorn::internal::MessageHeader hb_msg = {
+        .magic = lunaricorn::internal::HeaderMagic,
+        .version = lunaricorn::internal::PROTOCOL_VERSION,
+        .type = lunaricorn::internal::MessageType::MT_HB,
+        .data_type = lunaricorn::internal::ContentType::CT_Json,
+        .flags = 0,
+        .seq = 0, // no responce
+        .data_len = 0,
+        .crc = 0
+    };
+    bool sendRc = send_message(hb_msg, boost::json::object());
+    if (!sendRc)
+    {
+        MLOG_E("Failed to send HB message");
+    }
 
-void SignalingConnector::on_disconnect(const std::string& reason)
+}
+void SignalingConnector::on_disconnect(const std::string& reason, uint64_t magic)
 {
     if (_disconnectCbk)
     {
-        _disconnectCbk.value()(reason);
+        _disconnectCbk.value()(reason, magic);
     }
     stop();
 }
@@ -208,29 +258,76 @@ void SignalingConnector::on_data(std::span<const uint8_t> data)
 void SignalingConnector::on_message(const lunaricorn::internal::IncomingMessage& msg)
 {
     const lunaricorn::internal::MessageHeader& header = msg.header;
-    const boost::json::object& data = msg.data;
     const auto seq = header.seq;
     if (!msg.isValid)
     {
         MLOG_E("invalid header: seq={} reason={}", header.seq, msg.errorReason);
         return;
     }
-    auto it = _pending_responces.find(seq);
-    if (it == _pending_responces.end())
+    auto it = _pending_responses.find(seq);
+    if (it == _pending_responses.end())
     {
-        on_server_request(msg, data);
+        on_server_request(msg);
         return;
     }
-
-
-
-
-
+    if (_respCbk)
+    {
+        SignalingResponse resp = it->second;
+        resp.ok = msg.isValid;
+        resp.data = msg.data;
+        resp.error = msg.errorReason;
+        try
+        {
+            _respCbk.value()(resp);
+        }
+        catch (const std::exception& e)
+        {
+            MLOG_E("response processing: exception occurred: {}", e.what());
+            return;
+        }
+    }
 }
 
-void SignalingConnector::on_server_request(const lunaricorn::internal::IncomingMessage& msg, const boost::json::object& data)
+void SignalingConnector::on_server_request(const lunaricorn::internal::IncomingMessage& msg)
 {
-
+    // noone is interested in this request.
+    if (!_subCbk) {return;}
+    const auto type = msg.header.type;
+    switch (type)
+    {
+    case MT_Sub:
+    {
+        // handle subscription request.
+        SignalingSubEvent sub(0);
+        bool buildRc = sub.build(msg.data);
+        if (buildRc) 
+        {
+            MLOG_E("cannor build SignalingSubEvent message");
+            return;
+        }
+        try
+        {
+            _subCbk.value()(sub);
+        }
+        catch(const std::exception& e)
+        {
+            MLOG_E("subscribe processing: exception occurred: {}", e.what());
+            return;
+        }
+        break;
+    }
+    case MT_HB:
+    {
+        MLOG_D("on server hb");
+        send_client_hb();
+        break;
+    }
+    default:
+    {
+        MLOG_E("unknown message type: {}", static_cast<int>(type));
+        break;
+    }
+    } // switch (type)
 }
 
 void SignalingConnector::runner(std::stop_token stopToken)
@@ -240,9 +337,10 @@ void SignalingConnector::runner(std::stop_token stopToken)
 
     while (!stopToken.stop_requested())
     {
+        const uint64_t magic = random_u64();
         if (!_sock)
         {
-            MLOG(MBUG "no sock object in runner");
+            MLOG(MBUG "no sock object in runner @{}", magic);
             return;
         }
 
@@ -259,30 +357,30 @@ void SignalingConnector::runner(std::stop_token stopToken)
                 on_data(std::span<const uint8_t>(buffer.data(), static_cast<size_t>(n)));
                 continue;
             } else if (n == 0) {
-                on_disconnect();
+                on_disconnect("read error _0", magic);
                 break;
             }
 
-            MLOG_E("receiveBytes returned invalid size {}", n);
-            on_disconnect();
+            MLOG_E("receiveBytes returned invalid size {} @{}", n, magic);
+            on_disconnect("read error _1", magic);
             break;
         }
         catch (const Poco::Exception& e)
         {
-            MLOG_E("socket exception: {}", e.displayText());
-            on_disconnect();
+            MLOG_E("socket exception: {} @{}", e.displayText(), magic);
+            on_disconnect("socket exception _2", magic);
             break;
         }
         catch (const std::exception& e)
         {
-            MLOG_E("exception: {}", e.what());
-            on_disconnect();
+            MLOG_E("exception: {} @{}", e.what(), magic);
+            on_disconnect("socket exception _3", magic);
             break;
         }
         catch (...)
         {
-            MLOG_E("unknown exception");
-            on_disconnect();
+            MLOG_E("unknown exception @{}", magic);
+            on_disconnect("unknown exception", magic);
             break;
         }
     }
@@ -307,7 +405,67 @@ bool SignalingConnector::send_message(lunaricorn::internal::MessageHeader& msg,c
     if(sz == 0){MLOG_E(MBUG "Failed to serialize message"); return false;}
     MLOG_D("try to send {}b", sz);
     std::lock_guard<std::mutex> lock(_connection_mutex);
+    _last_send = std::chrono::steady_clock::now();
     return _proto->send_raw(_sock, buf);
 }
+
+//---------- events
+
+
+bool SignalingSubEvent::build(const boost::json::object& data)
+{
+    auto it = data.find("events");
+    if (it == data.end())
+    {
+        std::stringstream ss;
+        for (auto const& field : data) {
+            ss << field.key() << ", ";
+        }
+        MLOG_E("No 'events' field in message. found keys: {}", ss.str());
+        return false;
+        
+    }
+
+    const auto& eventsVal = it->value();
+    events.clear();
+
+    if (eventsVal.is_object()) {
+        SignalingEvent evt;
+        if (!evt.fromDict(eventsVal.as_object()))
+        {
+            MLOG_E("cannot load SignalingEvent object from elem");
+            return false;
+        }
+        events.push_back(std::move(evt));
+        return true;
+    }
+
+    if (eventsVal.is_array())
+    {
+        const auto& arr = eventsVal.as_array();
+        int i = 0;
+        auto count = arr.size();
+        for (const auto& elem : arr)
+        {
+            if (!elem.is_object())
+            {
+                MLOG_E("element {}/{} in events array is not object", i, count);
+                return false;
+            }
+            SignalingEvent evt;
+            if (!evt.fromDict(elem.as_object()))
+            {
+                MLOG_E("cannot load SignalingEvent object from {}/{} elem", i, count);
+                return false;
+            }
+            events.push_back(std::move(evt));
+            ++i;
+        }
+        return true;
+    }
+    MLOG_E(MBUG "'events' shoud be an event object or events array");
+    return false;
+}
+
 
 } // namespace lunaricorn

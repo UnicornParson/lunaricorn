@@ -5,6 +5,9 @@
 #include <list>
 #include <boost/json.hpp>
 #include <Poco/DateTime.h>
+#include <Poco/Net/StreamSocket.h>
+#include <Poco/Net/SocketAddress.h>
+#include <Poco/Net/SocketStream.h>
 namespace lunaricorn {
 namespace internal {
 
@@ -21,7 +24,8 @@ enum MessageType : uint8_t
     MT_HB        = 1,
     MT_Response  = 2,
     MT_PubReq    = 3,
-    MT_QueryReq  = 4
+    MT_QueryReq  = 4,
+    MT_Sub       = 5
 };
 
 enum ContentType : uint8_t 
@@ -68,14 +72,13 @@ struct SignalingEvent
 struct MessageHeader 
 {
     uint32_t magic = HeaderMagic;
-    uint64_t seq = 0;
     // 32b pack ---
     uint8_t version = PROTOCOL_VERSION;
     MessageType type = MT_Invalid;
     ContentType data_type = CT_Raw;
     uint8_t  flags; 
     // ---
-
+    uint64_t seq = 0;
     uint32_t data_len;
     uint32_t crc;
 };

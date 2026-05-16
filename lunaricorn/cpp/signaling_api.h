@@ -25,15 +25,6 @@ struct __raw_ticket
 
 using seq_t = uint64_t;
 
-enum MessageType : uint8_t
-{
-    MT_Unknown,
-    MT_Push,
-    MT_Response,
-    MT_Sub
-};
-
-
 class SignalingMessage
 {
 public:
@@ -43,29 +34,44 @@ public:
 
 };
 
-class SignalingResponse: public SignalingMessage
-{
-public:
-    SignalingResponse(seq_t seq) : SignalingMessage(seq){}
-    bool ok = false;
-    std::string error;
-    boost::json::object data;
-    std::optional<SignalingMessage> origin;
-};
+
 
 class SignalingSubEvent: public SignalingMessage
 {
 public:
-SignalingSubEvent(seq_t seq) : SignalingMessage(seq){type = MT_Response;}
-// TODO: fill
+    explicit SignalingSubEvent(seq_t seq) : SignalingMessage(seq){}
+    bool build(const boost::json::object& data);
+    std::vector<lunaricorn::internal::SignalingEvent> events;
 };
+
+class SignalingPushRequest: public SignalingMessage
+{
+public:
+    explicit SignalingPushRequest(seq_t seq) : SignalingMessage(seq){}
+};
+
+class SignalingPullRequest: public SignalingMessage
+{
+public:
+    explicit SignalingPullRequest(seq_t seq) : SignalingMessage(seq){}
+};
+class SignalingResponse: public SignalingMessage
+{
+public:
+    explicit SignalingResponse(seq_t seq) : SignalingMessage(seq){}
+    bool ok = false;
+    std::string error;
+    boost::json::object data;
+    std::variant<std::monostate, SignalingPushRequest, SignalingPullRequest> origin;
+};
+
 
 class SignalingConnector
 {
 public:
     using ResponseCallback = std::function<void(const SignalingResponse&)>;
     using SubscriptionCallback = std::function<void(const SignalingSubEvent&)>;
-    using DisconnectCallback = std::function<void(const std::string& reason)>;
+    using DisconnectCallback = std::function<void(const std::string& reason, uint64_t magic)>; // disconnect reason and random token for grep
     using ResponseCallbackOpt = std::optional<ResponseCallback>;
     using SubscriptionCallbackOpt = std::optional<SubscriptionCallback>;
     using DisconnectCallbackOpt = std::optional<DisconnectCallback>;
@@ -107,12 +113,15 @@ struct IncomingPacketState
     void runner(std::stop_token stopToken); // thread function
     
     bool send_message(lunaricorn::internal::MessageHeader& msg,const boost::json::object& data);
-    void on_disconnect(const std::string& reason);
+    void send_client_hb();
+    void on_disconnect(const std::string& reason, uint64_t magic);
     void on_data(std::span<const uint8_t> data);
     void on_message(const lunaricorn::internal::IncomingMessage& msg);
-    void on_server_request(const lunaricorn::internal::IncomingMessage& msg, const boost::json::object& data);
+    void on_server_request(const lunaricorn::internal::IncomingMessage& msg);
+    seq_t make_seq();
 
     Poco::Timer _hb_timer;
+    std::chrono::steady_clock::time_point _last_send;
     std::mutex _connection_mutex;
     IncomingPacketState _pstate;
     std::atomic<bool> _connected {false};
@@ -123,8 +132,9 @@ struct IncomingPacketState
     std::shared_ptr<Poco::Net::StreamSocket> _sock;
     std::shared_ptr<Poco::Net::SocketStream > _stream;
     std::shared_ptr<lunaricorn::internal::SignalingProto> _proto;
+    std::atomic<seq_t> _seq;
 
-    std::map<seq_t, SignalingResponse> _pending_Responses;
+    std::map<seq_t, SignalingResponse> _pending_responses;
 
     ResponseCallbackOpt _respCbk;
     SubscriptionCallbackOpt _subCbk;

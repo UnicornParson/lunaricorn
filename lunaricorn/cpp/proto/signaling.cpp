@@ -14,11 +14,6 @@ bool SignalingProto::send_raw(std::shared_ptr<Poco::Net::StreamSocket> sock, con
 {
     if (data.empty()){return true;}
     if (data.size() >= MAX_DATA_LEN) { MLOG_E("Data too large, sz: {}b", data.size()); return false; }
-    if (!ready())
-    {
-        MLOG_E("SignalingConnector not ready");
-        return false;
-    }
     if (!sock)
     {
         MLOG(MBUG " no sock object!");
@@ -37,23 +32,31 @@ size_t SignalingProto::serializeJson(MessageHeader& msg, std::vector<uint8_t>& b
 {
     MessageHeader hdr = msg;
     hdr.data_type = CT_Json;
-
-    std::string json_str = boost::json::serialize(data);
-    size_t json_len = json_str.size();
-
-    if (json_len > MAX_DATA_LEN) {
-        throw std::length_error("Serialized JSON size exceeds MAX_DATA_LEN");
-    }
-
-    boost::crc_32_type crc_calculator;
-    crc_calculator.process_bytes(json_str.data(), json_len);
-    hdr.crc = crc_calculator.checksum();
-    hdr.data_len = static_cast<uint32_t>(json_len);
-
     const uint8_t* hdr_ptr = reinterpret_cast<const uint8_t*>(&hdr);
+    size_t json_len = 0;
+    std::string json_str;
+    if (data.empty())
+    {
+        hdr.crc = 0; // No data, no CRC
+        hdr.data_len = 0;
+    } else {
+        json_str = boost::json::serialize(data);
+        json_len = json_str.size();
+        if (json_len > MAX_DATA_LEN) 
+        {
+            throw std::length_error("Serialized JSON size exceeds MAX_DATA_LEN");
+        }
+        boost::crc_32_type crc_calculator;
+        crc_calculator.process_bytes(json_str.data(), json_len);
+        hdr.crc = crc_calculator.checksum();
+        hdr.data_len = static_cast<uint32_t>(json_len);
+    }
+    
     buf.insert(buf.end(), hdr_ptr, hdr_ptr + sizeof(hdr));
-
-    buf.insert(buf.end(), json_str.begin(), json_str.end());
+    if (json_len > 0)
+    {
+        buf.insert(buf.end(), json_str.begin(), json_str.end());
+    }
 
     return sizeof(hdr) + json_len;
 } // serializeJson
@@ -100,7 +103,16 @@ bool SignalingProto::deserializeJson(const std::vector<uint8_t>& buf, IncomingMe
                                         hdr.data_len, buf.size() - sizeof(MessageHeader));
                                         s_.fails++; return false;
     }
+    if (hdr.data_len == 0)
+    {
+        // no data. no src check
+        out.header = hdr;
+        out.data = boost::json::object();
+        out.isValid = true;
+        out.errorReason.clear();
+        return true;
 
+    }
     const char* json_data = reinterpret_cast<const char*>(buf.data() + sizeof(MessageHeader));
     size_t json_len = hdr.data_len;
 

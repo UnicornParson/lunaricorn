@@ -79,7 +79,7 @@ BOOST_AUTO_TEST_CASE(SerializeJson_EmptyObject_Works) {
     boost::json::object data = {};
     std::vector<uint8_t> buffer;
     BOOST_CHECK_NO_THROW(proto.serializeJson(dummyHeader, buffer, data));
-    BOOST_CHECK_GT(buffer.size(), sizeof(MessageHeader));
+    BOOST_CHECK_EQUAL(buffer.size(), sizeof(MessageHeader));
 }
 
 BOOST_AUTO_TEST_CASE(SerializeJson_DataTooLarge_ThrowsLengthError) {
