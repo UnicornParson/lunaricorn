@@ -14,7 +14,7 @@ namespace internal {
 static constexpr uint8_t PH = 0xAB;
 static constexpr uint32_t HeaderMagic = 0x12345678;
 static constexpr uint8_t  PROTOCOL_VERSION = 1;
-static constexpr uint32_t MAX_DATA_LEN = 128 * 1024 * 1024; // 128kb
+static constexpr uint32_t MAX_DATA_LEN = 128 * 1024 * 1024; // 128mb
 
 using StringList = std::list<std::string>;
 
@@ -76,11 +76,11 @@ struct MessageHeader
     uint8_t version = PROTOCOL_VERSION;
     MessageType type = MT_Invalid;
     ContentType data_type = CT_Raw;
-    uint8_t  flags; 
+    uint8_t  flags = 0; 
     // ---
-    uint64_t seq = 0;
-    uint32_t data_len;
-    uint32_t crc;
+    uint64_t seq = 0; 
+    uint32_t data_len = 0;
+    uint32_t crc = 0; // ignore it if no payload
 };
 #pragma pack(pop)
 

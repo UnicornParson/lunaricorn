@@ -14,14 +14,6 @@
 
 namespace lunaricorn
 {
-/*
-struct __raw_ticket
-{
-    lunaricorn::internal::MessageHeader req_header;
-    lunaricorn::internal::MessageHeader resp_header;
-    boost::json::object& data;
-};
-*/
 
 using seq_t = uint64_t;
 
@@ -29,11 +21,13 @@ class SignalingMessage
 {
 public:
     explicit SignalingMessage(seq_t seq) : _seq(seq){}
+    SignalingMessage(const SignalingMessage&) = default;
+    SignalingMessage(SignalingMessage&&) = default;
+    SignalingMessage& operator=(const SignalingMessage&) = default;
+    SignalingMessage& operator=(SignalingMessage&&) = default;
+    auto operator<=>(const SignalingMessage& other) const {return _seq <=> other._seq;}
     seq_t _seq = 0;
-
-
 };
-
 
 
 class SignalingSubEvent: public SignalingMessage
@@ -48,6 +42,14 @@ class SignalingPushRequest: public SignalingMessage
 {
 public:
     explicit SignalingPushRequest(seq_t seq) : SignalingMessage(seq){}
+    SignalingPushRequest() : SignalingMessage(0){}
+    SignalingPushRequest(const SignalingPushRequest&) = default;
+    SignalingPushRequest(SignalingPushRequest&&) = default;
+    SignalingPushRequest& operator=(const SignalingPushRequest&) = default;
+
+
+    void make_header(lunaricorn::internal::MessageHeader& header) const;
+    boost::json::object data;
 };
 
 class SignalingPullRequest: public SignalingMessage
@@ -58,7 +60,11 @@ public:
 class SignalingResponse: public SignalingMessage
 {
 public:
+    SignalingResponse() : SignalingMessage(0){}
     explicit SignalingResponse(seq_t seq) : SignalingMessage(seq){}
+    SignalingResponse(const SignalingResponse&) = default;
+    SignalingResponse(SignalingResponse&&) = default;
+    SignalingResponse& operator=(const SignalingResponse&) = default;
     bool ok = false;
     std::string error;
     boost::json::object data;
@@ -88,6 +94,8 @@ public:
     inline void set_subscription_callback(const SubscriptionCallbackOpt& callback)  { _subCbk = callback; }
     inline void set_disconnect_callback(const DisconnectCallbackOpt& callback) { _disconnectCbk = callback; }
 
+
+    bool push(const lunaricorn::internal::SignalingEvent& event);
 private:
 struct IncomingPacketState
 {
@@ -122,6 +130,7 @@ struct IncomingPacketState
 
     Poco::Timer _hb_timer;
     std::chrono::steady_clock::time_point _last_send;
+    std::mutex _last_send_mutex;
     std::mutex _connection_mutex;
     IncomingPacketState _pstate;
     std::atomic<bool> _connected {false};
@@ -130,11 +139,11 @@ struct IncomingPacketState
     std::string _host;
     Poco::UInt16 _raw_port;
     std::shared_ptr<Poco::Net::StreamSocket> _sock;
-    std::shared_ptr<Poco::Net::SocketStream > _stream;
     std::shared_ptr<lunaricorn::internal::SignalingProto> _proto;
     std::atomic<seq_t> _seq;
 
     std::map<seq_t, SignalingResponse> _pending_responses;
+    std::mutex _pending_responses_mutex;
 
     ResponseCallbackOpt _respCbk;
     SubscriptionCallbackOpt _subCbk;
