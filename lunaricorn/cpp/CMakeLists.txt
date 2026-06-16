@@ -39,12 +39,13 @@ foreach(LIB ${POCO_LIBS})
 endforeach()
 
 add_library(lunaricorn_api STATIC
+    internal/thread_control.cpp
+    proto/signaling.cpp
     maintenance.cpp
     config.cpp
     lunaricorn.cpp
     mlog.cpp
     leader_api.cpp
-    proto/signaling.cpp
     signaling_api.cpp
     signaling_api_events.cpp
 )

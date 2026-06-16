@@ -67,8 +67,8 @@ bool SignalingConnector::start(const std::string& host, Poco::UInt16 raw_port)
     
     const Poco::Net::SocketAddress addr(_host, _raw_port);
     _sock = std::make_shared<Poco::Net::StreamSocket>(addr);
-
-    _runner_thread = std::jthread([this](std::stop_token st){runner(st);});
+    auto state = std::make_shared<ThreadState>();
+    _runner_thread = std::jthread([this, state](std::stop_token st){runner(st, state);});
     {
         std::lock_guard<std::mutex> lock(_last_send_mutex);
         _last_send = std::chrono::steady_clock::now();
@@ -83,22 +83,13 @@ bool SignalingConnector::stop()
     if (_stopping)
     {
         // [BUG] recursive stop
-        MLOG_E(MBUG "SignalingConnector::stop() called recursively");
+        MBUG("SignalingConnector::stop() called recursively");
         return false;
     }
     _stopping = true;
     _connected = false;
     _hb_timer.stop();
-    if (_runner_thread.has_value())
-    {
-        _runner_thread->request_stop();
-        if (!_runner_thread->try_join_for(std::chrono::seconds(5)))
-        {
-            MLOG_E("Thread did not stop gracefully within 5s, force terminating");
-            _runner_thread->detach();
-            _runner_thread.reset();
-        }
-    }
+    stop_runner();
     std::lock_guard<std::mutex> lock(_connection_mutex);
     if (_sock)
     {
@@ -108,6 +99,33 @@ bool SignalingConnector::stop()
     _stopping = false;
     return true;
 }
+
+void SignalingConnector::stop_runner()
+{
+    if (!_runner_thread.has_value())
+        return;
+
+    MBUG_IF(!_thread_state, "_runner_thread exists but _thread_state is null");
+    auto& thread = *_runner_thread;
+    thread.request_stop();
+
+    if (_thread_state && _thread_state->finished.load(std::memory_order_acquire))
+    {
+        _runner_thread.reset();
+        _thread_state.reset();
+        return;
+    }
+
+    lunaricorn::internal::OrphanThreadManager::instance().add(
+        std::move(thread),
+        std::move(_thread_state),
+        std::chrono::seconds(10),
+        "SignalingConnector::runner"
+    );
+
+    _runner_thread.reset();
+}
+
 bool SignalingConnector::ready()
 {
     return _connected && _sock && _sock->impl()->initialized();
@@ -151,8 +169,8 @@ void SignalingConnector::send_client_hb()
     {
         MLOG_E("Failed to send HB message");
     }
-
 }
+
 void SignalingConnector::on_disconnect(const std::string& reason, uint64_t magic)
 {
     if (_disconnectCbk)
@@ -161,9 +179,9 @@ void SignalingConnector::on_disconnect(const std::string& reason, uint64_t magic
         {
             _disconnectCbk.value()(reason, magic);
         }
-        catch(const std::exception& e)
+        catch (const std::exception& e)
         {
-            MLOG_E("on_disconnect callback exception {}", e.what())
+            MLOG_E("on_disconnect callback exception {}", e.what());
         }
     }
 
@@ -192,7 +210,9 @@ void SignalingConnector::on_data(std::span<const uint8_t> data)
             offset += take;
 
             if (_pstate.receivedHeaderBytes < sizeof(lunaricorn::internal::MessageHeader))
+            {
                 continue;
+            }
 
             _pstate.headerComplete = true;
 
@@ -363,8 +383,18 @@ void SignalingConnector::on_server_request(const lunaricorn::internal::IncomingM
     } // switch (type)
 }
 
-void SignalingConnector::runner(std::stop_token stopToken)
+void SignalingConnector::runner(std::stop_token stopToken, std::shared_ptr<lunaricorn::internal::ThreadState> state)
 {
+    if (!state) {MBUG("no state"); return;}
+    struct FinishGuard
+    {
+        std::shared_ptr<lunaricorn::internal::ThreadState> state;
+
+        ~FinishGuard()
+        {
+            state->finished.store(true, std::memory_order_release);
+        }
+    } finishGuard{ state };
     static const Poco::Timespan pollTimeout(1000000); // 1s
     std::vector<uint8_t> buffer(kRecvBufSize);
     bool normal_break = true;
@@ -380,12 +410,12 @@ void SignalingConnector::runner(std::stop_token stopToken)
                 std::lock_guard<std::mutex> lock(_connection_mutex);
                 if (!_sock)
                 {
-                    MLOG(MBUG "no sock object in runner @{}", magic);
+                    MBUG("no sock object in runner @{}", magic);
                     return;
                 }
                 if (!_connected)
                 {
-                    MLOG(MBUG "not connected @{}", magic);
+                    MBUG("not connected @{}", magic);
                     return;
                 }
                 if (!_sock->poll(pollTimeout, Poco::Net::Socket::SELECT_READ))
@@ -432,6 +462,7 @@ void SignalingConnector::runner(std::stop_token stopToken)
         MLOG_D("signalong clinet thread normal exit");
     else
         MLOG_E("thread emergency exit @{}", magic);
+
 }
 
 bool SignalingConnector::send_message(lunaricorn::internal::MessageHeader& msg,const boost::json::object& data)
@@ -445,11 +476,11 @@ bool SignalingConnector::send_message(lunaricorn::internal::MessageHeader& msg,c
     }
     if (!_proto)
     {
-        MLOG(MBUG " no proto object!");
+        MBUG(" no proto object!");
         return false;
     }
     size_t sz = _proto->serializeJson(msg, buf, data);
-    if(sz == 0){MLOG_E(MBUG "Failed to serialize message"); return false;}
+    if(sz == 0){MBUG("Failed to serialize message"); return false;}
     MLOG_D("try to send {}b", sz);
     {
         std::lock_guard<std::mutex> lock(_last_send_mutex);
@@ -465,7 +496,7 @@ bool SignalingConnector::push(const SignalingEvent& event)
     const seq_t seq = make_seq();
     SignalingPushRequest msg(seq);
     msg.data = event.toDict();
-    if (msg.data.empty()) {MLOG_E(MBUG "dict is empty"); return false;}
+    if (msg.data.empty()) {MBUG("dict is empty"); return false;}
     lunaricorn::internal::MessageHeader header;
     msg.make_header(header);
     SignalingResponse resp(seq);
@@ -474,7 +505,7 @@ bool SignalingConnector::push(const SignalingEvent& event)
         std::lock_guard<std::mutex> lock(_pending_responses_mutex);
         if (_pending_responses.contains(seq))
         {
-            MLOG_E(MBUG "seq {} already in pending queue. seq is not unic!", seq);
+            MBUG("seq {} already in pending queue. seq is not unic!", seq);
             return false;
         }
         _pending_responses[seq] = resp;

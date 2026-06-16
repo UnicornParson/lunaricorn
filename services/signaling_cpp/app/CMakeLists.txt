@@ -89,16 +89,13 @@ endforeach()
 add_subdirectory(apilib)
 
 
-
-# ------------------------------------------------------------------
-# Application
-# ------------------------------------------------------------------
-# Add executable from main.cpp
 add_executable(signaling
     main.cpp
     event_data.cpp
     http_endpoint.cpp
     raw_endpoint.cpp
+    raw_endpoint_client.cpp
+    signaling_engine.cpp
 )
 
 # Include directories

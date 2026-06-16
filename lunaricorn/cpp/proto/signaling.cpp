@@ -16,7 +16,7 @@ bool SignalingProto::send_raw(std::shared_ptr<Poco::Net::StreamSocket> sock, con
     if (data.size() >= MAX_DATA_LEN) { MLOG_E("Data too large, sz: {}b", data.size()); return false; }
     if (!sock)
     {
-        MLOG(MBUG " no sock object!");
+        MBUG(" no sock object!");
         return false;
     }
     int sent = sock->sendBytes(data.data(), data.size());

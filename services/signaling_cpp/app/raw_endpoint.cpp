@@ -52,7 +52,7 @@ bool RawEndpoint::stop()
     {
         try 
         {
-            if (!client){MLOG_E(MBUG "[stop] no client for {}", id); continue;}
+            if (!client){MBUG("[stop] no client for {}", id); continue;}
             client->sock.close(); 
         } catch (...) 
         {
@@ -73,8 +73,7 @@ void RawEndpoint::acceptLoop()
             
             Poco::Net::StreamSocket clientSocket = _serverSocket.acceptConnection();
             if (_stopping) break;
-            PClient client = std::make_shared<Client_>();
-            client->sock = std::move(clientSocket);
+            RE_Client_ptr client = std::make_shared<RE_Client>(std::move(clientSocket));
             client->sock.setBlocking(false);
             client->sock.setSendTimeout(Poco::Timespan(1, 0));
             client->update_connect_time();
@@ -104,7 +103,7 @@ void RawEndpoint::send_hb()
     std::lock_guard<std::mutex> lock(_clientsMutex);
     for (auto& [id, client] : _clients)
     {
-        if (!client){MLOG_E(MBUG "no client for {}", id); continue;}
+        if (!client){MBUG("no client for {}", id); continue;}
         const auto hb_duration = client->server_hb_delay();
         if (hb_duration >= SERVER_HB_PERIOD)
         {
@@ -134,7 +133,7 @@ void RawEndpoint::handleClients()
             if (_stopping) break;
 
             Poco::Net::StreamSocket sock;
-            PClient client;
+            RE_Client_ptr client;
             {
                 std::lock_guard<std::mutex> lock(_clientsMutex);
                 auto it = _clients.find(id);
@@ -144,7 +143,7 @@ void RawEndpoint::handleClients()
             }
             if (!client)
             {
-                MLOG_E(MBUG "id {} not found", id);
+                MBUG("id {} not found", id);
                 continue;
             }
             try
@@ -195,21 +194,33 @@ void RawEndpoint::on_connectionClosed(uint64_t clientId)
     {
         auto client = it->second;
         _clients.erase(it);
-        if(!client){MLOG_E(MBUG "null client data for {}", clientId); return;}
+        if(!client){MBUG("null client data for {}", clientId); return;}
         try { client->sock.close();} catch (...) {}
         const auto s =  std::chrono::duration_cast<std::chrono::seconds>(client->connect_time_delay()).count();
         MLOG_D("client {} closed. active {} seconds", clientId, s);
     } else {
-        MLOG_E(MBUG "unknown client id: {}", clientId);
+        MBUG("unknown client id: {}", clientId);
     }
 }
 
 // Заглушка для обработки данных
 void RawEndpoint::processData(uint64_t clientId, const std::vector<char>& data)
 {
-    // Пример: вывод идентификатора клиента и размера данных
+    RE_Client_ptr client;
+    {
+        std::lock_guard<std::mutex> lock(_clientsMutex);
+        auto it = _clients.find(id);
+        if (it == _clients.end())
+            continue;
+        client = it->second;
+    }
+    if (!client)
+    {
+        MBUG("id {} not found", id);
+        continue;
+    }
     std::cout << "[Client " << clientId << "] received " << data.size() << " bytes\n";
-    // Здесь должна быть реальная логика обработки
+    client->processData(clientId, data)
 }
 
 void RawEndpoint::handleEvent(const EventData& event)

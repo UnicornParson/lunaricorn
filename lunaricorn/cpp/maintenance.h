@@ -141,4 +141,6 @@ private:
 #define MLOG_D(...) lunaricorn::MLog::d  (std::format(__VA_ARGS__), std::source_location::current())
 #define MLOG_W(...) lunaricorn::MLog::w  (std::format(__VA_ARGS__), std::source_location::current())
 #define MLOG_E(...) lunaricorn::MLog::e  (std::format(__VA_ARGS__), std::source_location::current())
-#define MBUG " [BUG] "
+#define MBUG(...) MLOG_E(" [BUG] " __VA_ARGS__)
+#define MBUG_IF(condition, ...) do { if (condition) MBUG(__VA_ARGS__); } while(false)
+

@@ -59,7 +59,7 @@ bool SignalingSubEvent::build(const boost::json::object& data)
         }
         return true;
     }
-    MLOG_E(MBUG "'events' shoud be an event object or events array");
+    MBUG("'events' shoud be an event object or events array");
     return false;
 } // SignalingSubEvent::build
 

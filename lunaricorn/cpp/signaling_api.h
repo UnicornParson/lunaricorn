@@ -11,7 +11,7 @@
 #include "maintenance.h"
 #include "proto/signaling.h"
 #include "lunaricorn.h"
-
+#include "internal/thread_control.h"
 namespace lunaricorn
 {
 
@@ -118,8 +118,8 @@ struct IncomingPacketState
     }
 }; // struct IncomingPacketState
 
-    void runner(std::stop_token stopToken); // thread function
-    
+    void runner(std::stop_token stopToken, std::shared_ptr<lunaricorn::internal::ThreadState> state); // thread function
+    void stop_runner();
     bool send_message(lunaricorn::internal::MessageHeader& msg,const boost::json::object& data);
     void send_client_hb();
     void on_disconnect(const std::string& reason, uint64_t magic);
@@ -136,6 +136,8 @@ struct IncomingPacketState
     std::atomic<bool> _connected {false};
     std::atomic<bool> _stopping {false};
     std::optional<std::jthread>  _runner_thread;
+    std::shared_ptr<lunaricorn::internal::ThreadState> _thread_state;
+
     std::string _host;
     Poco::UInt16 _raw_port;
     std::shared_ptr<Poco::Net::StreamSocket> _sock;
