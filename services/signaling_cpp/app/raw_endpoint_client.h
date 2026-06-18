@@ -13,7 +13,6 @@
 #include <Poco/Net/SocketAddress.h>
 
 #include "endpoint.h"
-#include "raw_endpoint_client.h"
 namespace lunaricorn
 {
 
@@ -21,11 +20,11 @@ class RE_Client
 {
 public:
     using Clock = std::chrono::steady_clock;
-    explicit RE_Client(Poco::Net::StreamSocket&& socket)
+    explicit RE_Client(Poco::Net::StreamSocket&& socket);
     ~RE_Client();
     static inline int64_t clients_count() {return _count.load(std::memory_order_relaxed); }
 
-    inline auto connect_time_delay() const { return Clock::now() - connectTime; }
+    inline auto connect_time_delay() const { return Clock::now() - _connectTime; }
     inline auto client_hb_delay() const { return Clock::now() - _client_hb; }
     inline auto server_hb_delay() const { return Clock::now() - _server_hb; }
     inline void update_connect_time() { _connectTime = Clock::now(); }
