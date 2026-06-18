@@ -2,6 +2,7 @@
 #include <iostream>
 #include <Poco/Net/NetException.h>
 #include <Poco/Timespan.h>
+#include <Poco/Exception.h>
 
 #include "stdafx.h"
 
@@ -9,13 +10,14 @@ namespace lunaricorn
 {
 
 static constexpr auto SERVER_HB_PERIOD = std::chrono::seconds(10);
-static constexpr auto CLINENT_HB_PERIOD = std::chrono::seconds(10);
+static constexpr auto CLIENT_HB_PERIOD = std::chrono::seconds(10);
 
 RawEndpoint::RawEndpoint(const std::string& ip, Poco::UInt16 port)
     : _serverSocket(Poco::Net::SocketAddress(Poco::Net::IPAddress(ip), port))
 {
     _serverSocket.setReuseAddress(true);
     _serverSocket.setReusePort(true);
+    _proto = std::make_shared<lunaricorn::internal::SignalingProto>();
 }
 
 RawEndpoint::~RawEndpoint()
@@ -107,8 +109,9 @@ void RawEndpoint::send_hb()
         const auto hb_duration = client->server_hb_delay();
         if (hb_duration >= SERVER_HB_PERIOD)
         {
-            // TODO: send hb id needed
+            // Send heartbeat to client
             MLOG_D("send hb to {}", id);
+            sendHeartbeat(id);
             client->update_server_hb();
         }
     }
@@ -147,7 +150,7 @@ void RawEndpoint::handleClients()
                 continue;
             }
             try
-             {
+            {
                 if (client->sock.poll(Poco::Timespan(0), Poco::Net::Socket::SELECT_READ))
                 {
                     while (!_stopping) {
@@ -203,30 +206,221 @@ void RawEndpoint::on_connectionClosed(uint64_t clientId)
     }
 }
 
-// Заглушка для обработки данных
 void RawEndpoint::processData(uint64_t clientId, const std::vector<char>& data)
 {
-    RE_Client_ptr client;
-    {
-        std::lock_guard<std::mutex> lock(_clientsMutex);
-        auto it = _clients.find(id);
-        if (it == _clients.end())
-            continue;
-        client = it->second;
+    // Lock the buffer for this client
+    std::lock_guard<std::mutex> lock(_bufferMutex);
+    
+    // Get or create buffer for this client
+    auto& buffer = _messageBuffers[clientId];
+    
+    // Append new data to buffer
+    buffer.buffer.insert(buffer.buffer.end(), data.begin(), data.end());
+    buffer.receivedBytes += data.size();
+    
+    // Process complete messages from buffer
+    size_t offset = 0;
+    while (offset < buffer.receivedBytes) {
+        if (!buffer.headerComplete) {
+            // Need to read header first
+            const size_t need = sizeof(lunaricorn::internal::MessageHeader) - buffer.receivedBytes;
+            const size_t avail = buffer.buffer.size() - offset;
+            const size_t take = std::min(need, avail);
+            
+            if (take > 0) {
+                std::memcpy(reinterpret_cast<uint8_t*>(&buffer.header) + buffer.receivedBytes, 
+                           buffer.buffer.data() + offset, take);
+                buffer.receivedBytes += take;
+                offset += take;
+            }
+            
+            if (buffer.receivedBytes < sizeof(lunaricorn::internal::MessageHeader)) {
+                // Need more data for header
+                break;
+            }
+            
+            buffer.headerComplete = true;
+            buffer.expectedSize = sizeof(lunaricorn::internal::MessageHeader) + buffer.header.data_len;
+            buffer.buffer.resize(buffer.expectedSize);
+        }
+        
+        if (buffer.headerComplete) {
+            // Check if we have the complete message
+            const size_t need = buffer.expectedSize - buffer.receivedBytes;
+            const size_t avail = buffer.buffer.size() - offset;
+            const size_t take = std::min(need, avail);
+            
+            if (take > 0) {
+                std::memcpy(buffer.buffer.data() + buffer.receivedBytes, 
+                           buffer.buffer.data() + offset, take);
+                buffer.receivedBytes += take;
+                offset += take;
+            }
+            
+            if (buffer.receivedBytes < buffer.expectedSize) {
+                // Need more data for complete message
+                break;
+            }
+            
+            // Process complete message
+            lunaricorn::internal::IncomingMessage msg;
+            if (_proto->deserializeJson(buffer.buffer, msg)) {
+                if (!msg.isValid) {
+                    MLOG_E("invalid parsed message: seq={} reason={}", buffer.header.seq, msg.errorReason);
+                    buffer = MessageBuffer{};  // Reset buffer on error
+                    continue;
+                }
+                
+                // Process based on message type
+                switch (buffer.header.type) {
+                    case lunaricorn::internal::MessageType::MT_HB:
+                        processHeartbeat(clientId, msg);
+                        break;
+                    case lunaricorn::internal::MessageType::MT_Sub:
+                        processSubscription(clientId, msg);
+                        break;
+                    case lunaricorn::internal::MessageType::MT_PubReq:
+                        processPushRequest(clientId, msg);
+                        break;
+                    case lunaricorn::internal::MessageType::MT_Response:
+                        processResponse(clientId, msg);
+                        break;
+                    case lunaricorn::internal::MessageType::MT_QueryReq:
+                        processQueryRequest(clientId, msg);
+                        break;
+                    default:
+                        processUnknownMessageType(clientId, buffer.header);
+                        break;
+                }
+            } else {
+                MLOG_E("deserializeJson failed for client {} message", clientId);
+            }
+            
+            // Reset buffer for next message
+            buffer = MessageBuffer{};
+        }
     }
-    if (!client)
-    {
-        MBUG("id {} not found", id);
-        continue;
+}
+
+void RawEndpoint::processHeartbeat(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
+{
+    MLOG_D("Received heartbeat from client {}", clientId);
+    // Update client heartbeat timestamp
+    std::lock_guard<std::mutex> lock(_clientsMutex);
+    auto it = _clients.find(clientId);
+    if (it != _clients.end()) {
+        it->second->update_client_hb();
     }
-    std::cout << "[Client " << clientId << "] received " << data.size() << " bytes\n";
-    client->processData(clientId, data)
+}
+
+void RawEndpoint::processSubscription(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
+{
+    MLOG_D("Received subscription from client {}", clientId);
+    // Handle subscription request
+    // In a real implementation, this would register the client for specific event types
+    sendResponse(clientId, msg.header.seq, true);  // Acknowledge subscription
+}
+
+void RawEndpoint::processPushRequest(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
+{
+    MLOG_D("Received push request from client {}", clientId);
+    // Handle push request - forward to event system
+    // In a real implementation, this would process the event and broadcast it
+    
+    // Send acknowledgment response
+    sendResponse(clientId, msg.header.seq, true);  // Acknowledge receipt
+}
+
+void RawEndpoint::processResponse(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
+{
+    MLOG_D("Received response from client {}", clientId);
+    // Handle server response (if needed)
+    // In a real implementation, this might be used for handling responses to queries or pushes
+}
+
+void RawEndpoint::processQueryRequest(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
+{
+    MLOG_D("Received query request from client {}", clientId);
+    // Handle query request - forward to event system
+    sendResponse(clientId, msg.header.seq, true);  // Acknowledge query
+}
+
+void RawEndpoint::processUnknownMessageType(uint64_t clientId, const lunaricorn::internal::MessageHeader& header)
+{
+    MLOG_E("Received unknown message type {} from client {}", static_cast<int>(header.type), clientId);
+}
+
+void RawEndpoint::sendHeartbeat(uint64_t clientId)
+{
+    // Create heartbeat message
+    lunaricorn::internal::MessageHeader hb_msg = {
+        .magic = lunaricorn::internal::HeaderMagic,
+        .version = lunaricorn::internal::PROTOCOL_VERSION,
+        .type = lunaricorn::internal::MessageType::MT_HB,
+        .data_type = lunaricorn::internal::ContentType::CT_Json,
+        .flags = 0,
+        .seq = 0, // no response
+        .data_len = 0,
+        .crc = 0
+    };
+    
+    std::vector<uint8_t> buf;
+    size_t sz = _proto->serializeJson(hb_msg, buf, boost::json::object());
+    if (sz == 0) {
+        MLOG_E("Failed to serialize heartbeat message");
+        return;
+    }
+    
+    // Send to client
+    std::lock_guard<std::mutex> lock(_clientsMutex);
+    auto it = _clients.find(clientId);
+    if (it != _clients.end()) {
+        try {
+            _proto->send_raw(std::make_shared<Poco::Net::StreamSocket>(it->second->sock), buf);
+        } catch (const std::exception& e) {
+            MLOG_E("Failed to send heartbeat to client {}: {}", clientId, e.what());
+        }
+    }
+}
+
+void RawEndpoint::sendResponse(uint64_t clientId, uint64_t seq, bool success, const boost::json::object& data)
+{
+    // Create response message
+    lunaricorn::internal::MessageHeader resp_msg = {
+        .magic = lunaricorn::internal::HeaderMagic,
+        .version = lunaricorn::internal::PROTOCOL_VERSION,
+        .type = lunaricorn::internal::MessageType::MT_Response,
+        .data_type = lunaricorn::internal::ContentType::CT_Json,
+        .flags = 0,
+        .seq = seq,
+        .data_len = 0,
+        .crc = 0
+    };
+    
+    std::vector<uint8_t> buf;
+    size_t sz = _proto->serializeJson(resp_msg, buf, data);
+    if (sz == 0) {
+        MLOG_E("Failed to serialize response message");
+        return;
+    }
+    
+    // Send to client
+    std::lock_guard<std::mutex> lock(_clientsMutex);
+    auto it = _clients.find(clientId);
+    if (it != _clients.end()) {
+        try {
+            _proto->send_raw(std::make_shared<Poco::Net::StreamSocket>(it->second->sock), buf);
+        } catch (const std::exception& e) {
+            MLOG_E("Failed to send response to client {}: {}", clientId, e.what());
+        }
+    }
 }
 
 void RawEndpoint::handleEvent(const EventData& event)
 {
-    // send to subscribed endpoints
-
+    // Forward events to subscribed clients
+    // This is a stub implementation - in a real system this would be more complex
+    MLOG_D("Handling event: {}", event.type);
 }
 
 } // namespace lunaricorn
