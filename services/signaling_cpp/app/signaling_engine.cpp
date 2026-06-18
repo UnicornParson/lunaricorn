@@ -1,4 +1,5 @@
 #include "signaling_engine.h"
+
 #include <Poco/Data/Session.h>
 #include <Poco/Data/SessionPool.h>
 #include <Poco/Data/PostgreSQL/Connector.h>
@@ -336,31 +337,33 @@ std::vector<EventDataExtended> SignalingEngine::findEvents(double timestamp,
 }
 
 std::vector<EventDataExtended> SignalingEngine::findEventsByType(const std::string& event_type)
-{
-    try {
-        std::lock_guard<std::mutex> lock(pool_mutex_);
-        Poco::Data::Session session(pool_->get());
-        
-        // Build the query
-        std::string sql = R"(
-            SELECT eid, type, payload, affected, ctime, owner, tags
-            FROM public.signaling_events 
-            WHERE type = $1
-            ORDER BY ctime DESC
-        )";
-        
-        Poco::Data::Statement stmt(session);
-        std::vector<std::vector<Poco::Dynamic::Var>> result_rows;
-        stmt << sql, use(event_type), into(result_rows);
-        stmt.execute();
-        
-        // Convert results to EventDataExtended objects
-        return resultToEventDataExtendedList(result_rows);
-    } catch (const Poco::Exception& e) {
-        logger_.error(Poco::format("Failed to find events by type '%s': %s", event_type, e.displayText()));
-        throw StorageError("Failed to find events by type: " + e.displayText());
+    {
+        try {
+            std::lock_guard<std::mutex> lock(pool_mutex_);
+            Poco::Data::Session session(pool_->get());
+            
+            // Build the query
+            std::string sql = R"(
+                SELECT eid, type, payload, affected, ctime, owner, tags
+                FROM public.signaling_events 
+                WHERE type = $1
+                ORDER BY ctime DESC
+            )";
+            
+            Poco::Data::Statement stmt(session);
+            std::vector<std::vector<Poco::Dynamic::Var>> result_rows;
+            // Create a non-const copy to avoid Poco const reference issue
+            std::string event_type_copy = event_type;
+            stmt << sql, use(event_type_copy), into(result_rows);
+            stmt.execute();
+            
+            // Convert results to EventDataExtended objects
+            return resultToEventDataExtendedList(result_rows);
+        } catch (const Poco::Exception& e) {
+            logger_.error(Poco::format("Failed to find events by type '%s': %s", event_type, e.displayText()));
+            throw StorageError("Failed to find events by type: " + e.displayText());
+        }
     }
-}
 
 std::vector<EventDataExtended> SignalingEngine::resultToEventDataExtendedList(
     const std::vector<std::vector<Poco::Dynamic::Var>>& data_list)

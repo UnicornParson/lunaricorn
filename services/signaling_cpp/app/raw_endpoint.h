@@ -12,6 +12,7 @@
 #include <Poco/Net/SocketAddress.h>
 
 #include "endpoint.h"
+#include "raw_endpoint_client.h"
 #include "proto/signaling.h"
 #include <chrono>
 #include <queue>

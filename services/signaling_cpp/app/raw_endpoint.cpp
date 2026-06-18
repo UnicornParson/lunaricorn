@@ -264,7 +264,9 @@ void RawEndpoint::processData(uint64_t clientId, const std::vector<char>& data)
             
             // Process complete message
             lunaricorn::internal::IncomingMessage msg;
-            if (_proto->deserializeJson(buffer.buffer, msg)) {
+            if (_proto->deserializeJson(
+                std::vector<uint8_t>(buffer.buffer.begin(), buffer.buffer.end()), 
+                msg)) {
                 if (!msg.isValid) {
                     MLOG_E("invalid parsed message: seq={} reason={}", buffer.header.seq, msg.errorReason);
                     buffer = MessageBuffer{};  // Reset buffer on error
@@ -420,7 +422,7 @@ void RawEndpoint::handleEvent(const EventData& event)
 {
     // Forward events to subscribed clients
     // This is a stub implementation - in a real system this would be more complex
-    MLOG_D("Handling event: {}", event.type);
+    MLOG_D("Handling event: {}", event.event_type);
 }
 
 } // namespace lunaricorn
