@@ -1,9 +1,12 @@
 #include <iostream>
 #include <lunaricorn.h>
+#include <config.h>
 #include "stdafx.h"
 
+// #include "signaling_engine.h"
+//#include "signaling_engine_test.h"
 
-constexpr std::string app_name { "leader" };
+constexpr std::string app_name { "signaling" };
 constexpr std::string app_ver { "0.2" };
 using namespace lunaricorn;
 
@@ -25,8 +28,17 @@ int main() {
     const std::string app_token = get_instance_identifier();
     MLog::owner = app_name;
     MLog::token = app_token;
+    MLog::is_stub = true;
+    bool selftest_ok = false;
     MLOG_D("run {} {}", app_name, app_token);
-    /*
+
+        /*
+    DbConfig dbcfg = loadConfigFromEnvironment();
+    auto endpoint = std::make_shared<SignalingEngine>(dbcfg);
+    auto endpoint_test = std::make_shared<SignalingEngineTest>(endpoint);
+    MLOG_D("creat objects - ok");
+    bool selftest_ok = endpoint_test->run();
+
     try
     {
         std::shared_ptr<Leader> leader = std::make_shared<Leader>();
@@ -39,5 +51,5 @@ int main() {
         return 1;
     }
         */
-    MLOG_D("NORMAL EXIT {} {}", app_name, app_token);
+    MLOG_D("NORMAL EXIT {} {}, selftest_ok:{}", app_name, app_token, selftest_ok);
 }

@@ -53,6 +53,8 @@ FetchContent_Declare(cppzmq
 FetchContent_MakeAvailable(cppzmq)
 
 
+find_package(SOCI REQUIRED)
+
 # ------------------------------------------------------------------
 # POCO setup (static)
 # ------------------------------------------------------------------
@@ -95,8 +97,12 @@ add_executable(signaling
     http_endpoint.cpp
     raw_endpoint.cpp
     raw_endpoint_client.cpp
-    signaling_engine.cpp
+
 )
+
+    #signaling_engine.cpp
+    #event_data_extended_type_handler.cpp
+    #signaling_engine_test.cpp
 
 # Include directories
 target_include_directories(signaling PRIVATE
@@ -115,6 +121,8 @@ target_link_libraries(signaling
     yaml-cpp::yaml-cpp
     cppzmq
     libzmq-static
+    soci_core
+    soci_postgresql
 )
 
 # On Linux, static linking may require pthread and dl

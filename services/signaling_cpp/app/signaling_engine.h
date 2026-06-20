@@ -22,7 +22,7 @@ private:
 };
 
 struct EventDataExtended {
-    int eid;
+    int64_t eid;
     std::string event_type;
     boost::json::object payload;
     Poco::DateTime timestamp;
@@ -53,14 +53,14 @@ public:
                                              const std::vector<std::string>& affected = {},
                                              const std::vector<std::string>& tags = {},
                                              int limit = 0);
-    std::vector<EventDataExtended> findEventsByType(const std::string& event_type);
-
+std::vector<EventDataExtended> findEventsByType(const std::string& event_type);
+    std::vector<EventDataExtended> resultToEventDataExtendedList(
+        const std::vector<std::vector<Poco::Dynamic::Var>>& results);
+  
 private:
     void initializeDatabase();
     void testConnection();
     void installDb();
-    std::vector<EventDataExtended> resultToEventDataExtendedList(
-        const std::vector<std::vector<Poco::Dynamic::Var>>& data_list);
     
     DbConfig db_cfg_;
     bool ready_;

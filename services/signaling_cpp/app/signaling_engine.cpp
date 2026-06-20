@@ -1,4 +1,5 @@
 #include "signaling_engine.h"
+#include "event_data_extended_type_handler.h"
 
 #include <Poco/Data/Session.h>
 #include <Poco/Data/SessionPool.h>
@@ -148,20 +149,41 @@ int SignalingEngine::createEvent(const EventData& event_data)
             affected_json_str = boost::json::serialize(affected_array);
         }
         
-        // Prepare parameters for the query
-        std::string event_type = event_data.event_type;
-        std::string tags_str = ""; // Tags are stored as text array in PostgreSQL
-        
-        int eid = 0;
-        
-        session << R"(
-            INSERT INTO public.signaling_events 
-            (type, payload, affected, ctime, owner, tags)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING eid
-        )",
-            use(event_type), use(payload_json_str), use(affected_json_str), use(ctime), use(owner), use(tags_str),
-            into(eid), now;
+         // Prepare parameters for the query
+         std::string event_type = event_data.event_type;
+         std::string tags_str = ""; // Tags are stored as text array in PostgreSQL
+         
+         // Convert tags to PostgreSQL array format if not empty
+         if (!event_data.tags.empty()) {
+             tags_str = "{";
+             for (size_t i = 0; i < event_data.tags.size(); ++i) {
+                 if (i > 0) tags_str += ",";
+                 // Escape any special characters in the tag string
+                 std::string escaped_tag = event_data.tags[i];
+                 // Simple escaping - replace " with \" for PostgreSQL compatibility
+                 size_t pos = 0;
+                 while ((pos = escaped_tag.find('"', pos)) != std::string::npos) {
+                     escaped_tag.replace(pos, 1, "\\\"");
+                     pos += 2;
+                 }
+                 tags_str += "\"" + escaped_tag + "\"";
+             }
+             tags_str += "}";
+         } else {
+             // For empty tags, use empty PostgreSQL array literal
+             tags_str = "{}";
+         }
+         
+         int eid = 0;
+         
+         session << R"(
+             INSERT INTO public.signaling_events 
+             (type, payload, affected, ctime, owner, tags)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING eid
+         )",
+             use(event_type), use(payload_json_str), use(affected_json_str), use(ctime), use(owner), use(tags_str),
+             into(eid), now;
         
         tr.commit();
         return eid;
@@ -297,9 +319,17 @@ std::vector<EventDataExtended> SignalingEngine::findEvents(double timestamp,
             sql += " LIMIT " + std::to_string(limit);
         }
         
-        // Prepare the parameters
+// Prepare the parameters
         std::vector<Poco::Dynamic::Var> params;
-        params.push_back(Poco::DateTime(static_cast<std::time_t>(timestamp)));
+        // Convert timestamp to Poco::DateTime properly, handling potential issues
+        try {
+            Poco::DateTime dt(static_cast<std::time_t>(timestamp));
+            params.push_back(dt);
+        } catch (const Poco::Exception& e) {
+            logger_.error(Poco::format("Failed to create DateTime from timestamp %f: %s", timestamp, e.displayText()));
+            // Fallback to current time
+            params.push_back(Poco::DateTime());
+        }
         
         // Add type parameters
         for (const auto& type : types) {
@@ -324,12 +354,11 @@ std::vector<EventDataExtended> SignalingEngine::findEvents(double timestamp,
         
         // Execute query
         Poco::Data::Statement stmt(session);
-        std::vector<std::vector<Poco::Dynamic::Var>> result_rows;
-        stmt << sql, use(params), into(result_rows);
+        std::vector<EventDataExtended> events;
+        stmt << sql, use(params), into(events);
         stmt.execute();
         
-        // Convert results to EventDataExtended objects
-        return resultToEventDataExtendedList(result_rows);
+        return events;
     } catch (const Poco::Exception& e) {
         logger_.error(Poco::format("Failed to find events: %s", e.displayText()));
         throw StorageError("Failed to find events: " + e.displayText());
@@ -337,33 +366,32 @@ std::vector<EventDataExtended> SignalingEngine::findEvents(double timestamp,
 }
 
 std::vector<EventDataExtended> SignalingEngine::findEventsByType(const std::string& event_type)
-    {
-        try {
-            std::lock_guard<std::mutex> lock(pool_mutex_);
-            Poco::Data::Session session(pool_->get());
-            
-            // Build the query
-            std::string sql = R"(
-                SELECT eid, type, payload, affected, ctime, owner, tags
-                FROM public.signaling_events 
-                WHERE type = $1
-                ORDER BY ctime DESC
-            )";
-            
-            Poco::Data::Statement stmt(session);
-            std::vector<std::vector<Poco::Dynamic::Var>> result_rows;
-            // Create a non-const copy to avoid Poco const reference issue
-            std::string event_type_copy = event_type;
-            stmt << sql, use(event_type_copy), into(result_rows);
-            stmt.execute();
-            
-            // Convert results to EventDataExtended objects
-            return resultToEventDataExtendedList(result_rows);
-        } catch (const Poco::Exception& e) {
-            logger_.error(Poco::format("Failed to find events by type '%s': %s", event_type, e.displayText()));
-            throw StorageError("Failed to find events by type: " + e.displayText());
-        }
+{
+    try {
+        std::lock_guard<std::mutex> lock(pool_mutex_);
+        Poco::Data::Session session(pool_->get());
+
+        // Build the query
+        std::string sql = R"(
+            SELECT eid, type, payload, affected, ctime, owner, tags
+            FROM public.signaling_events 
+            WHERE type = $1
+            ORDER BY ctime DESC
+        )";
+
+        Poco::Data::Statement stmt(session);
+        std::vector<EventDataExtended> events;
+
+        std::string et = event_type;
+        stmt << sql, use(et), into(events);
+        stmt.execute();
+
+        return events;
+    } catch (const Poco::Exception& e) {
+        logger_.error(Poco::format("Failed to find events by type '%s': %s", event_type, e.displayText()));
+        throw StorageError("Failed to find events by type: " + e.displayText());
     }
+}
 
 std::vector<EventDataExtended> SignalingEngine::resultToEventDataExtendedList(
     const std::vector<std::vector<Poco::Dynamic::Var>>& data_list)
@@ -411,9 +439,15 @@ std::vector<EventDataExtended> SignalingEngine::resultToEventDataExtendedList(
                 }
             }
             
-            // Handle timestamp
-            Poco::DateTime ctime = row[4].convert<Poco::DateTime>();
-            event_data.timestamp = static_cast<double>(ctime.timestamp().epochMicroseconds()) / 1000000.0;
+// Handle timestamp
+            try {
+                Poco::DateTime ctime = row[4].convert<Poco::DateTime>();
+                event_data.timestamp = static_cast<double>(ctime.timestamp().epochMicroseconds()) / 1000000.0;
+            } catch (const Poco::Exception& e) {
+                // If timestamp conversion fails, use current time as fallback
+                logger_.warning(Poco::format("Failed to convert timestamp for event %d: %s", event_data.eid, e.displayText()));
+                event_data.timestamp = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+            }
             
             // Handle owner
             std::string owner = row[5].convert<std::string>();
