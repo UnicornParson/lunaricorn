@@ -25,5 +25,19 @@ RUN git clone -b main https://github.com/pocoproject/poco.git src && cd src && g
 WORKDIR /opt/3rd/poco/src
 RUN mkdir -p cmake-build && rm -rvf cmake-build/* && cd cmake-build && cmake .. -DCMAKE_INSTALL_PREFIX=/opt/3rd/poco/bin && cmake --build . -j$('nproc') --config Release && cmake --build . --target install
 
+# SOCI
+RUN git clone --recurse-submodules https://github.com/SOCI/soci.git /tmp/soci 
+RUN cd /tmp/soci && git checkout -f v4.1.4 && git submodule init && git submodule update
+RUN cmake -S /tmp/soci -B /tmp/soci/build \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DSOCI_TESTS=OFF \
+    -DSOCI_POSTGRESQL=ON \
+    -DSOCI_MYSQL=OFF \
+    -DSOCI_SQLITE3=OFF \
+    -DSOCI_ODBC=OFF \
+    -DSOCI_ORACLE=OFF \
+    -DSOCI_FIREBIRD=OFF
+RUN cmake --build  /tmp/soci/build -j$(nproc)
+RUN cmake --install /tmp/soci/build
 
 ENTRYPOINT ["/bin/bash"]

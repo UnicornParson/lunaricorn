@@ -1,20 +1,8 @@
 
 FROM lunaricorn_signaling_cpp_builder AS builder
-#RUN apt install -y sqlite3 libsqlite3-dev libsoci-dev libsoci-postgresql4.0
 
-RUN git clone --recurse-submodules https://github.com/SOCI/soci.git /tmp/soci 
-RUN cd /tmp/soci && git checkout -f v4.1.4 && git submodule init && git submodule update
-RUN cmake -S /tmp/soci -B /tmp/soci/build \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DSOCI_TESTS=OFF \
-    -DSOCI_POSTGRESQL=ON \
-    -DSOCI_MYSQL=OFF \
-    -DSOCI_SQLITE3=OFF \
-    -DSOCI_ODBC=OFF \
-    -DSOCI_ORACLE=OFF \
-    -DSOCI_FIREBIRD=OFF
-RUN cmake --build  /tmp/soci/build -j$(nproc)
-RUN cmake --install /tmp/soci/build
+
+
 
 COPY app/ /opt/app/
 WORKDIR /opt/app/

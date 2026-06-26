@@ -97,7 +97,7 @@ add_executable(signaling
     http_endpoint.cpp
     raw_endpoint.cpp
     raw_endpoint_client.cpp
-
+    message_storage.cpp
 )
 
     #signaling_engine.cpp

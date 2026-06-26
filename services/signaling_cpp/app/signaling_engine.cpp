@@ -19,7 +19,6 @@
 #include <chrono>
 
 using namespace Poco::Data::Keywords;
-using namespace lunaricorn;
 
 namespace lunaricorn {
 
