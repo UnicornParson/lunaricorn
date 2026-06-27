@@ -48,6 +48,7 @@ add_library(lunaricorn_api STATIC
     leader_api.cpp
     signaling_api.cpp
     signaling_api_events.cpp
+    event_data.cpp
 )
 
 target_include_directories(lunaricorn_api

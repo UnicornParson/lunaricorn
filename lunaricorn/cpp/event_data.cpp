@@ -1,27 +1,23 @@
 #include "event_data.h"
-#include <boost/json/src.hpp>
-#include "stdafx.h"
+
 namespace lunaricorn
 {
+
 bool EventData::fromJson(const boost::json::object& obj)
 {
-    // обязательные поля
     if (!obj.contains("type") || !obj.contains("payload") || !obj.contains("ctime"))
         return false;
 
-    // event_type
     const auto& type_val = obj.at("type");
     if (!type_val.is_string())
         return false;
     event_type = type_val.as_string().c_str();
 
-    // payload (должен быть объектом)
     const auto& payload_val = obj.at("payload");
     if (!payload_val.is_object())
         return false;
     payload = payload_val.as_object();
 
-    // timestamp (число секунд от эпохи или строка)
     const auto& ctime_val = obj.at("ctime");
     if (ctime_val.is_number())
     {
@@ -92,7 +88,6 @@ bool EventData::fromJson(const boost::json::object& obj)
     return true;
 }
 
-
 boost::json::object EventData::toJson() const
 {
     boost::json::object obj;
@@ -120,6 +115,5 @@ boost::json::object EventData::toJson() const
 
     return obj;
 }
-
 
 } // namespace lunaricorn

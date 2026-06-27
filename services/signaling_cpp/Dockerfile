@@ -1,9 +1,6 @@
 
 FROM lunaricorn_signaling_cpp_builder AS builder
-
-
-
-
+ENV CMAKE_PREFIX_PATH=/opt/3rd/soci/bin:$CMAKE_PREFIX_PATH
 COPY app/ /opt/app/
 WORKDIR /opt/app/
 RUN chmod +x /opt/app/build.sh 
@@ -17,11 +14,10 @@ RUN /opt/app/build.sh
 # ------------------------------------------------------------------------
 
 FROM lunaricorn_signaling_cpp_base
-
+ENV CMAKE_PREFIX_PATH=/opt/3rd/soci/bin:$CMAKE_PREFIX_PATH
 COPY --from=builder /opt/app/__build/signaling /opt/app/bin/signaling
 COPY --from=builder /opt/3rd/boost/bin/lib /opt/3rd/boost/bin/lib
 COPY --from=builder /opt/3rd/poco/bin/lib /opt/3rd/poco/bin/lib
-
 RUN ln -s /bin/bash /usr/bin/bh
 
 # Добавляем пути к библиотекам в конфигурацию динамического компоновщика

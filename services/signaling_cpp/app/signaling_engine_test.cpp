@@ -1,10 +1,9 @@
 #include "signaling_engine_test.h"
-#include <Poco/DateTime.h>
 #include <Poco/Logger.h>
 #include <boost/json.hpp>
+#include <chrono>
 #include <iostream>
 
-using namespace Poco;
 using namespace lunaricorn;
 
 namespace lunaricorn {
@@ -49,9 +48,7 @@ bool SignalingEngineTest::testDatabaseInitialization()
     }
 
     // The engine should already be initialized at this point
-    // Just verify it's ready
     try {
-        // This would just test the connection, which was done during initialization
         MLOG("Database initialization test passed");
         return true;
     } catch (const std::exception& e) {
@@ -70,23 +67,34 @@ bool SignalingEngineTest::testCreateEvent()
     }
 
     try {
-        // Create a simple event
-        EventData event_data;
+        // Build a StoredEventData (message_storage.h types)
+        StoredEventData event_data;
         event_data.event_type = "test_event";
-        event_data.timestamp = DateTime();
         
-        // Add some payload data
-        boost::json::object payload;
-        payload["key1"] = "value1";
-        payload["key2"] = 42;
-        event_data.payload = payload;
+        // timestamp: seconds since epoch
+        event_data.timestamp = std::chrono::duration<double>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
         
+        // payload as json::value
+        boost::json::object obj;
+        obj["key1"] = "value1";
+        obj["key2"] = 42;
+        event_data.payload = obj;
+        
+        // source as optional string
         event_data.source = "test_source";
-        event_data.affected = {"item1", "item2"};
+        
+        // affected as json::value array
+        boost::json::array aff;
+        aff.emplace_back("item1");
+        aff.emplace_back("item2");
+        event_data.affected = aff;
+        
+        // tags as vector<string>
         event_data.tags = {"tag1", "tag2"};
 
         // Create the event
-        int eid = engine_->createEvent(event_data);
+        long long eid = engine_->createEvent(event_data);
         
         if (eid <= 0) {
             MLOG_E("createEvent returned invalid ID");
@@ -134,13 +142,14 @@ bool SignalingEngineTest::testFindEvents()
     }
 
     try {
-        // Test finding events with a timestamp
-        double timestamp = DateTime().timestamp().epochMicroseconds() / 1000000.0 - 3600; // 1 hour ago
+        // timestamp: 1 hour ago in seconds since epoch
+        double timestamp = std::chrono::duration<double>(
+            std::chrono::system_clock::now().time_since_epoch()).count() - 3600;
         
         // Find all events (no filters)
         auto events = engine_->findEvents(timestamp);
         
-        MLOG("findEvents test passed");
+        MLOG("findEvents test passed, found {} events", events.size());
         return true;
     } catch (const std::exception& e) {
         MLOG_E("findEvents test failed: {}", e.what());
@@ -161,7 +170,7 @@ bool SignalingEngineTest::testFindEventsByType()
         // Test finding events by type
         auto events = engine_->findEventsByType("test_event");
         
-        MLOG("findEventsByType test passed");
+        MLOG("findEventsByType test passed, found {} events", events.size());
         return true;
     } catch (const std::exception& e) {
         MLOG_E("findEventsByType test failed: {}", e.what());

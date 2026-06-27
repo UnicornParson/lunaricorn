@@ -3,8 +3,8 @@
 #include <config.h>
 #include "stdafx.h"
 
-// #include "signaling_engine.h"
-//#include "signaling_engine_test.h"
+#include "signaling_engine.h"
+#include "signaling_engine_test.h"
 
 constexpr std::string app_name { "signaling" };
 constexpr std::string app_ver { "0.2" };
@@ -32,13 +32,12 @@ int main() {
     bool selftest_ok = false;
     MLOG_D("run {} {}", app_name, app_token);
 
-        /*
     DbConfig dbcfg = loadConfigFromEnvironment();
     auto endpoint = std::make_shared<SignalingEngine>(dbcfg);
     auto endpoint_test = std::make_shared<SignalingEngineTest>(endpoint);
     MLOG_D("creat objects - ok");
-    bool selftest_ok = endpoint_test->run();
-
+    selftest_ok = endpoint_test->run();
+/*
     try
     {
         std::shared_ptr<Leader> leader = std::make_shared<Leader>();

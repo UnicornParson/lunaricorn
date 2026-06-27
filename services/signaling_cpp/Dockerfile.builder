@@ -30,6 +30,8 @@ RUN git clone --recurse-submodules https://github.com/SOCI/soci.git /tmp/soci
 RUN cd /tmp/soci && git checkout -f v4.1.4 && git submodule init && git submodule update
 RUN cmake -S /tmp/soci -B /tmp/soci/build \
     -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/opt/3rd/soci/bin \
+    -DSOCI_SHARED=OFF \
     -DSOCI_TESTS=OFF \
     -DSOCI_POSTGRESQL=ON \
     -DSOCI_MYSQL=OFF \
@@ -37,7 +39,11 @@ RUN cmake -S /tmp/soci -B /tmp/soci/build \
     -DSOCI_ODBC=OFF \
     -DSOCI_ORACLE=OFF \
     -DSOCI_FIREBIRD=OFF
-RUN cmake --build  /tmp/soci/build -j$(nproc)
-RUN cmake --install /tmp/soci/build
+
+RUN cmake --build /tmp/soci/build -j$(nproc)  && cmake --install /tmp/soci/build
+
+
+
+
 
 ENTRYPOINT ["/bin/bash"]

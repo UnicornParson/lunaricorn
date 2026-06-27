@@ -1,12 +1,13 @@
 #pragma once
 
 #include "stdafx.h"
-#include <lunaricorn.h>
-
+#include <Poco/DateTime.h>
+#include <Poco/DateTimeParser.h>
+#include <Poco/DateTimeFormat.h>
+#include <boost/json.hpp>
 
 namespace lunaricorn
 {
-
 
 struct EventData
 {
@@ -19,7 +20,11 @@ struct EventData
 
     bool fromJson(const boost::json::object& object);
     boost::json::object toJson() const;
+};
 
+struct EventDataExtended : EventData
+{
+    long long eid = 0;
 };
 
 } // namespace lunaricorn
