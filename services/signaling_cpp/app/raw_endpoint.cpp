@@ -12,9 +12,14 @@ namespace lunaricorn
 static constexpr auto SERVER_HB_PERIOD = std::chrono::seconds(10);
 static constexpr auto CLIENT_HB_PERIOD = std::chrono::seconds(10);
 
-RawEndpoint::RawEndpoint(const std::string& ip, Poco::UInt16 port)
-    : _serverSocket(Poco::Net::SocketAddress(Poco::Net::IPAddress(ip), port))
+RawEndpoint::RawEndpoint(const std::string& ip, Poco::UInt16 port, SignalingEnginePtr engine)
+    : _serverSocket(Poco::Net::SocketAddress(Poco::Net::IPAddress(ip), port)),
+    _engine(engine)
 {
+    if (!_engine)
+    {
+        throw std::runtime_error("no engine");
+    }
     _serverSocket.setReuseAddress(true);
     _serverSocket.setReusePort(true);
     _proto = std::make_shared<lunaricorn::internal::SignalingProto>();
@@ -79,19 +84,15 @@ void RawEndpoint::acceptLoop()
             RE_Client_ptr client = std::make_shared<RE_Client>(std::move(clientSocket));
             client->socket().setBlocking(false);
             client->socket().setSendTimeout(Poco::Timespan(1, 0));
-            client->update_connect_time();
             client->update_client_hb();
             client->update_server_hb();
 
             uint64_t id = _nextId.fetch_add(1);
             client->set_id(id);
 
-            // Set up callbacks for server-side processing
+            // Set up callback for server-side message processing
             client->set_message_callback([this](uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg) {
                 on_client_message(clientId, msg);
-            });
-            client->set_disconnect_callback([this](uint64_t clientId, const std::string& reason) {
-                on_client_closed(clientId);
             });
 
             {
@@ -236,8 +237,8 @@ void RawEndpoint::on_client_closed(uint64_t clientId)
         _clients.erase(it);
         if(!client){MBUG("null client data for {}", clientId); return;}
         try { client->socket().close();} catch (...) {}
-        const auto s =  std::chrono::duration_cast<std::chrono::seconds>(client->connect_time_delay()).count();
-        MLOG_D("client {} closed. active {} seconds", clientId, s);
+        const auto s = std::chrono::duration_cast<std::chrono::seconds>(client->client_hb_delay()).count();
+        MLOG_D("client {} closed. last hb {} seconds ago", clientId, s);
     } else {
         MBUG("unknown client id: {}", clientId);
     }

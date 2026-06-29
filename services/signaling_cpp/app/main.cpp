@@ -33,10 +33,10 @@ int main() {
     MLOG_D("run {} {}", app_name, app_token);
 
     DbConfig dbcfg = loadConfigFromEnvironment();
-    auto endpoint = std::make_shared<SignalingEngine>(dbcfg);
-    auto endpoint_test = std::make_shared<SignalingEngineTest>(endpoint);
+    auto engine = make_engine(dbcfg);
+    auto engine_test = std::make_shared<SignalingEngineTest>(engine);
     MLOG_D("creat objects - ok");
-    selftest_ok = endpoint_test->run();
+    selftest_ok = engine_test->run();
 /*
     try
     {

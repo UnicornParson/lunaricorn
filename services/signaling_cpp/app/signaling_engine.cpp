@@ -1,5 +1,6 @@
 #include "signaling_engine.h"
 #include <stdexcept>
+#include <boost/json/serialize.hpp>
 
 namespace lunaricorn {
 
@@ -157,10 +158,10 @@ void SignalingEngine::on_event(const StoredEventData& event_data)
             // Check affected filter
             if (match && !sub.filter_affected.empty()) {
                 match = false;
-                // Compare affected json value with filter strings
-                std::string affected_str = boost::json::value_to<std::string>(event_data.affected);
+                // Serialize affected json value to string and compare with filter strings
+                std::string affected_str = boost::json::serialize(event_data.affected);
                 for (const auto& a : sub.filter_affected) {
-                    if (affected_str == a) {
+                    if (affected_str.find(a) != std::string::npos) {
                         match = true;
                         break;
                     }

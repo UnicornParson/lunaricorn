@@ -14,6 +14,7 @@
 #include "endpoint.h"
 #include "raw_endpoint_client.h"
 #include "proto/signaling.h"
+#include "signaling_engine.h"
 #include <chrono>
 
 namespace lunaricorn
@@ -22,7 +23,7 @@ namespace lunaricorn
 class RawEndpoint : public Endpoint
 {
 public:
-    RawEndpoint(const std::string& ip, Poco::UInt16 port);
+    RawEndpoint(const std::string& ip, Poco::UInt16 port, SignalingEnginePtr engine);
     ~RawEndpoint();
 
     virtual bool start()  override;
@@ -57,6 +58,7 @@ private:
     std::mutex _clientsMutex;
     std::thread _acceptThread;
     std::thread _handlerThread;
+    SignalingEnginePtr _engine;
 
     // Protocol handling
     std::shared_ptr<lunaricorn::internal::SignalingProto> _proto;

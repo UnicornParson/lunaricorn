@@ -1,5 +1,26 @@
 # Журнал изменений проекта Lunaricorn
 
+## 2026-06-29
+
+### Изменено
+
+#### RE_Client (raw_endpoint_client)
+- Убраны клиентские специфичные вещи из RE_Client
+- Удалено:
+  - `_pending_responses` — очередь ожидаемых ответов (клиентская логика)
+  - `_seq` — счётчик последовательности для клиентских запросов
+  - `send_client_hb()` — отправка heartbeat клиенту
+  - `connect_time_delay()` / `update_connect_time()` — отслеживание времени подключения
+  - `ClientDisconnectCallback` — клиентский колбэк
+  - `set_disconnect_callback()` — метод установки колбэка
+- Добавлены пустые обработчики для серверных типов сообщений:
+  - `on_heartbeat()` — обработчик MT_HB
+  - `on_pub_request()` — обработчик MT_PubReq
+  - `on_query_request()` — обработчик MT_QueryReq
+  - `on_subscription()` — обработчик MT_Sub
+- `on_message()` теперь dispatch по типу сообщения к соответствующему обработчику
+- RawEndpoint обновлён: убраны вызовы `update_connect_time()` и `set_disconnect_callback()`
+
 ## 2026-06-28
 
 ### Добавлено

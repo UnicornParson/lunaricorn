@@ -1,7 +1,6 @@
 #include "raw_endpoint_client.h"
 
 #include <chrono>
-#include <random>
 #include <cstring>
 #include <format>
 
@@ -11,27 +10,9 @@ using namespace lunaricorn::internal;
 using namespace std::chrono_literals;
 
 static constexpr int kBufReservationB = 1024;
-static constexpr auto silence_duration = 5s;
 
 namespace lunaricorn
 {
-
-// Random uint64 generator
-static uint64_t random_u64()
-{
-    static std::mt19937_64 engine = []
-    {
-        std::random_device rd;
-        auto now = std::chrono::steady_clock::now().time_since_epoch().count();
-        uint64_t time_seed = static_cast<uint64_t>(now);
-        unsigned int low = static_cast<unsigned int>(time_seed);
-        unsigned int high = static_cast<unsigned int>(time_seed >> 32);
-        std::seed_seq seed{rd(), rd(), rd(), low, high};
-        return std::mt19937_64{seed};
-    }();
-    static std::uniform_int_distribution<uint64_t> dist;
-    return dist(engine);
-}
 
 RE_Client::RE_Client(Poco::Net::StreamSocket socket)
     : sock(std::move(socket))
@@ -39,6 +20,8 @@ RE_Client::RE_Client(Poco::Net::StreamSocket socket)
     _count++;
     _proto = std::make_shared<lunaricorn::internal::SignalingProto>();
     _last_send = std::chrono::steady_clock::now();
+    _client_hb = Clock::now();
+    _server_hb = Clock::now();
 }
 
 RE_Client::~RE_Client()
@@ -50,14 +33,10 @@ RE_Client::RE_Client(RE_Client&& other) noexcept
     : sock(std::move(other.sock))
     , _proto(other._proto)
     , _last_send(other._last_send)
-    , _seq(other._seq.load())
-    , _pstate(other._pstate)
-    , _connectTime(other._connectTime)
     , _client_hb(other._client_hb)
     , _server_hb(other._server_hb)
-    , _pending_responses(other._pending_responses)
+    , _pstate(other._pstate)
 {
-    other._seq = 0;
     _count++;
 }
 
@@ -68,36 +47,11 @@ RE_Client& RE_Client::operator=(RE_Client&& other) noexcept
         sock = std::move(other.sock);
         _proto = other._proto;
         _last_send = other._last_send;
-        _seq = other._seq.load();
-        _pstate = other._pstate;
-        _connectTime = other._connectTime;
         _client_hb = other._client_hb;
         _server_hb = other._server_hb;
-        _pending_responses = other._pending_responses;
-
-        other._seq = 0;
+        _pstate = other._pstate;
     }
     return *this;
-}
-
-void RE_Client::send_client_hb()
-{
-    MessageHeader hb_msg = {
-        .magic = HeaderMagic,
-        .version = PROTOCOL_VERSION,
-        .type = MessageType::MT_HB,
-        .data_type = ContentType::CT_Json,
-        .flags = 0,
-        .seq = 0,  // no response
-        .data_len = 0,
-        .crc = 0
-    };
-
-    bool sendRc = send_message(hb_msg, boost::json::object());
-    if (!sendRc)
-    {
-        MLOG_E("Failed to send HB message");
-    }
 }
 
 void RE_Client::processData(const std::vector<char>& data)
@@ -231,26 +185,24 @@ void RE_Client::on_message(const IncomingMessage& msg)
         return;
     }
 
-    // Check if this is a response to a pending request
-    const seq_t seq = header.seq;
-
+    // Dispatch to type-specific handler
+    switch (header.type)
     {
-        std::lock_guard<std::mutex> lock(_pending_responses_mutex);
-        auto it = _pending_responses.find(seq);
-        if (it == _pending_responses.end())
-        {
-            on_server_request(msg);
-            return;
-        }
-        SignalingResponse resp = it->second;
-        _pending_responses.erase(it);
-
-        resp.ok = msg.isValid;
-        resp.data = msg.data;
-        resp.error = msg.errorReason;
-
-        // Note: response callback would need to be added for server-side mode
-        // For now, we just forward to the message callback
+    case MessageType::MT_HB:
+        on_heartbeat(msg);
+        break;
+    case MessageType::MT_PubReq:
+        on_pub_request(msg);
+        break;
+    case MessageType::MT_QueryReq:
+        on_query_request(msg);
+        break;
+    case MessageType::MT_Sub:
+        on_subscription(msg);
+        break;
+    default:
+        MLOG_E("unknown message type: {}", static_cast<int>(header.type));
+        break;
     }
 
     // Forward parsed message to server via callback
@@ -267,26 +219,28 @@ void RE_Client::on_message(const IncomingMessage& msg)
     }
 }
 
-void RE_Client::on_server_request(const IncomingMessage& msg)
+void RE_Client::on_heartbeat(const IncomingMessage& msg)
 {
-    const auto type = msg.header.type;
+    // TODO: implement heartbeat handler
+    (void)msg;
+}
 
-    switch (type)
-    {
-    case MessageType::MT_HB:
-    {
-        MLOG_D("on server hb");
-        // Client heartbeat received, update timestamp
-        update_client_hb();
-        break;
-    }
+void RE_Client::on_pub_request(const IncomingMessage& msg)
+{
+    // TODO: implement push request handler
+    (void)msg;
+}
 
-    default:
-    {
-        MLOG_E("unknown message type: {}", static_cast<int>(type));
-        break;
-    }
-    }
+void RE_Client::on_query_request(const IncomingMessage& msg)
+{
+    // TODO: implement query request handler
+    (void)msg;
+}
+
+void RE_Client::on_subscription(const IncomingMessage& msg)
+{
+    // TODO: implement subscription handler
+    (void)msg;
 }
 
 bool RE_Client::send_message(MessageHeader& msg, const boost::json::object& data)

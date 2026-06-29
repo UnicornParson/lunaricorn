@@ -59,4 +59,10 @@ private:
     std::function<void(uint64_t, const StoredEventData&)> onSubEvent_;
 };
 
+using SignalingEnginePtr = std::shared_ptr<SignalingEngine>;
+inline SignalingEnginePtr make_engine(const DbConfig& db_cfg)
+{
+    return std::make_shared<SignalingEngine>(db_cfg);
+}
+
 } // namespace lunaricorn

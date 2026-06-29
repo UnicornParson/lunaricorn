@@ -1,30 +1,24 @@
 #pragma once
 #include <cstdint>
-#include <map>
 #include <string>
 #include <atomic>
 #include <mutex>
 #include <vector>
 #include <chrono>
 #include <functional>
-#include <optional>
 #include <memory>
-#include <span>
 
 #include <Poco/Net/StreamSocket.h>
-#include <Poco/Timespan.h>
 
 #include "endpoint.h"
 #include "maintenance.h"
 #include <proto/signaling.h>
-#include <signaling_api.h>
 
 namespace lunaricorn
 {
 
-// Callback types for server-side client processing
+// Callback type for server to receive parsed messages from clients
 using MessageReadyCallback = std::function<void(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)>;
-using ClientDisconnectCallback = std::function<void(uint64_t clientId, const std::string& reason)>;
 
 class RE_Client
 {
@@ -45,24 +39,18 @@ public:
 
     static inline int64_t clients_count() { return _count.load(std::memory_order_relaxed); }
 
-    // Timing helpers (used by server for heartbeat tracking)
-    inline auto connect_time_delay() const { return Clock::now() - _connectTime; }
+    // Timing helpers for heartbeat tracking
     inline auto client_hb_delay() const { return Clock::now() - _client_hb; }
     inline auto server_hb_delay() const { return Clock::now() - _server_hb; }
-    inline void update_connect_time() { _connectTime = Clock::now(); }
     inline void update_client_hb() { _client_hb = Clock::now(); }
     inline void update_server_hb() { _server_hb = Clock::now(); }
 
-    // Set callbacks for server to receive parsed messages
+    // Set callback for server to receive parsed messages
     inline void set_message_callback(MessageReadyCallback cb) { _msgCbk = std::move(cb); }
-    inline void set_disconnect_callback(ClientDisconnectCallback cb) { _disconnectCbk = std::move(cb); }
 
     // Process incoming raw data from server (called by RawEndpoint::handleClients)
     // This accumulates data and parses complete messages
     void processData(const std::vector<char>& data);
-
-    // Send heartbeat to client (called by server)
-    void send_client_hb();
 
     // Send a message to client
     bool send_message(lunaricorn::internal::MessageHeader& msg, const boost::json::object& data);
@@ -85,14 +73,14 @@ public:
     inline uint64_t get_id() const { return _id; }
 
 private:
-    // Process a complete parsed message
+    // Process a complete parsed message - dispatches to type-specific handlers
     void on_message(const lunaricorn::internal::IncomingMessage& msg);
 
-    // Process server-initiated request (from client perspective)
-    void on_server_request(const lunaricorn::internal::IncomingMessage& msg);
-
-    // Handle disconnect
-    void on_disconnect(const std::string& reason);
+    // Type-specific message handlers (empty implementations, to be filled later)
+    void on_heartbeat(const lunaricorn::internal::IncomingMessage& msg);
+    void on_pub_request(const lunaricorn::internal::IncomingMessage& msg);
+    void on_query_request(const lunaricorn::internal::IncomingMessage& msg);
+    void on_subscription(const lunaricorn::internal::IncomingMessage& msg);
 
     // Incoming packet state for incremental parsing
     struct IncomingPacketState
@@ -116,23 +104,17 @@ private:
         }
     }; // struct IncomingPacketState
 
-    // Connection tracking
-    std::chrono::time_point<Clock> _connectTime;
+    // Last client heartbeat timestamp
     std::chrono::time_point<Clock> _client_hb;
+
+    // Last server heartbeat timestamp
     std::chrono::time_point<Clock> _server_hb;
 
     // Last send timestamp
     std::chrono::steady_clock::time_point _last_send;
     std::mutex _last_send_mutex;
 
-    // Sequence counter
-    std::atomic<seq_t> _seq{0};
-
-    // Pending responses queue
-    std::map<seq_t, SignalingResponse> _pending_responses;
-    std::mutex _pending_responses_mutex;
-
-    // Socket (owned by server, but accessible)
+    // Socket
     Poco::Net::StreamSocket sock;
 
     // Protocol handler
@@ -141,9 +123,8 @@ private:
     // Incoming packet state
     IncomingPacketState _pstate;
 
-    // Callbacks
+    // Callback
     MessageReadyCallback _msgCbk;
-    ClientDisconnectCallback _disconnectCbk;
 
     // Client ID (assigned by server)
     uint64_t _id = 0;
