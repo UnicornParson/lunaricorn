@@ -15,7 +15,6 @@
 #include "raw_endpoint_client.h"
 #include "proto/signaling.h"
 #include <chrono>
-#include <queue>
 
 namespace lunaricorn
 {
@@ -34,18 +33,9 @@ private:
 
     void acceptLoop();
     void handleClients();
-    void processData(uint64_t clientId, const std::vector<char>& data);
-    void on_connectionClosed(uint64_t clientId);
+    void on_client_message(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg);
+    void on_client_closed(uint64_t clientId);
     void send_hb();
-
-    // Buffer for accumulating protocol messages
-    struct MessageBuffer {
-        std::vector<char> buffer;
-        size_t receivedBytes = 0;
-        bool headerComplete = false;
-        lunaricorn::internal::MessageHeader header {};
-        size_t expectedSize = 0;
-    };
 
     // Message processing functions for different message types
     void processHeartbeat(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg);
@@ -70,9 +60,5 @@ private:
 
     // Protocol handling
     std::shared_ptr<lunaricorn::internal::SignalingProto> _proto;
-
-    // Message buffer for each client
-    std::map<uint64_t, MessageBuffer> _messageBuffers;
-    std::mutex _bufferMutex;
 }; // class RawEndpoint
 } // namespace lunaricorn

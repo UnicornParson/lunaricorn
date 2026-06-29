@@ -55,7 +55,7 @@ bool RawEndpoint::stop()
         try 
         {
             if (!client){MBUG("[stop] no client for {}", id); continue;}
-            client->sock.close(); 
+            client->socket().close(); 
         } catch (...) 
         {
             MLOG_E("cannot close {} client socket", id);
@@ -72,16 +72,28 @@ void RawEndpoint::acceptLoop()
     {
         try
         {
-            
             Poco::Net::StreamSocket clientSocket = _serverSocket.acceptConnection();
             if (_stopping) break;
+
+            // Create client and transfer socket ownership
             RE_Client_ptr client = std::make_shared<RE_Client>(std::move(clientSocket));
-            client->sock.setBlocking(false);
-            client->sock.setSendTimeout(Poco::Timespan(1, 0));
+            client->socket().setBlocking(false);
+            client->socket().setSendTimeout(Poco::Timespan(1, 0));
             client->update_connect_time();
             client->update_client_hb();
             client->update_server_hb();
+
             uint64_t id = _nextId.fetch_add(1);
+            client->set_id(id);
+
+            // Set up callbacks for server-side processing
+            client->set_message_callback([this](uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg) {
+                on_client_message(clientId, msg);
+            });
+            client->set_disconnect_callback([this](uint64_t clientId, const std::string& reason) {
+                on_client_closed(clientId);
+            });
+
             {
                 std::lock_guard<std::mutex> lock(_clientsMutex);
                 _clients.emplace(id, client);
@@ -135,7 +147,6 @@ void RawEndpoint::handleClients()
         for (uint64_t id : clientIds) {
             if (_stopping) break;
 
-            Poco::Net::StreamSocket sock;
             RE_Client_ptr client;
             {
                 std::lock_guard<std::mutex> lock(_clientsMutex);
@@ -151,18 +162,19 @@ void RawEndpoint::handleClients()
             }
             try
             {
-                if (client->sock.poll(Poco::Timespan(0), Poco::Net::Socket::SELECT_READ))
+                if (client->socket().poll(Poco::Timespan(0), Poco::Net::Socket::SELECT_READ))
                 {
                     while (!_stopping) {
                         try 
                         {
-                            int bytesRead = client->sock.receiveBytes(buffer.data(), static_cast<int>(buffer.size()));
+                            int bytesRead = client->socket().receiveBytes(buffer.data(), static_cast<int>(buffer.size()));
                             if (bytesRead == 0) 
                             {
-                                on_connectionClosed(id);
+                                on_client_closed(id);
                                 break;
                             }
-                            processData(id, std::vector<char>(buffer.begin(), buffer.begin() + bytesRead));
+                            // Pass data to client for accumulation and parsing
+                            client->processData(std::vector<char>(buffer.begin(), buffer.begin() + bytesRead));
                         }
                         catch (const Poco::TimeoutException&)
                         {
@@ -172,7 +184,7 @@ void RawEndpoint::handleClients()
                         catch (const std::exception& e) 
                         {
                             MLOG_E("Error_1 processing client# {} data: {}", id, e.what());
-                            on_connectionClosed(id);
+                            on_client_closed(id);
                             break;
                         }
                     }
@@ -181,7 +193,7 @@ void RawEndpoint::handleClients()
             catch (const std::exception& e)
             {
                 MLOG_E("Error_2 processing client# {} data: {}", id, e.what());
-                on_connectionClosed(id);
+                on_client_closed(id);
             }
         }
 
@@ -189,7 +201,32 @@ void RawEndpoint::handleClients()
     }
 }
 
-void RawEndpoint::on_connectionClosed(uint64_t clientId)
+void RawEndpoint::on_client_message(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
+{
+    // Process based on message type
+    switch (msg.header.type) {
+        case lunaricorn::internal::MessageType::MT_HB:
+            processHeartbeat(clientId, msg);
+            break;
+        case lunaricorn::internal::MessageType::MT_Sub:
+            processSubscription(clientId, msg);
+            break;
+        case lunaricorn::internal::MessageType::MT_PubReq:
+            processPushRequest(clientId, msg);
+            break;
+        case lunaricorn::internal::MessageType::MT_Response:
+            processResponse(clientId, msg);
+            break;
+        case lunaricorn::internal::MessageType::MT_QueryReq:
+            processQueryRequest(clientId, msg);
+            break;
+        default:
+            processUnknownMessageType(clientId, msg.header);
+            break;
+    }
+}
+
+void RawEndpoint::on_client_closed(uint64_t clientId)
 {
     std::lock_guard<std::mutex> lock(_clientsMutex);
     auto it = _clients.find(clientId);
@@ -198,109 +235,11 @@ void RawEndpoint::on_connectionClosed(uint64_t clientId)
         auto client = it->second;
         _clients.erase(it);
         if(!client){MBUG("null client data for {}", clientId); return;}
-        try { client->sock.close();} catch (...) {}
+        try { client->socket().close();} catch (...) {}
         const auto s =  std::chrono::duration_cast<std::chrono::seconds>(client->connect_time_delay()).count();
         MLOG_D("client {} closed. active {} seconds", clientId, s);
     } else {
         MBUG("unknown client id: {}", clientId);
-    }
-}
-
-void RawEndpoint::processData(uint64_t clientId, const std::vector<char>& data)
-{
-    // Lock the buffer for this client
-    std::lock_guard<std::mutex> lock(_bufferMutex);
-    
-    // Get or create buffer for this client
-    auto& buffer = _messageBuffers[clientId];
-    
-    // Append new data to buffer
-    buffer.buffer.insert(buffer.buffer.end(), data.begin(), data.end());
-    buffer.receivedBytes += data.size();
-    
-    // Process complete messages from buffer
-    size_t offset = 0;
-    while (offset < buffer.receivedBytes) {
-        if (!buffer.headerComplete) {
-            // Need to read header first
-            const size_t need = sizeof(lunaricorn::internal::MessageHeader) - buffer.receivedBytes;
-            const size_t avail = buffer.buffer.size() - offset;
-            const size_t take = std::min(need, avail);
-            
-            if (take > 0) {
-                std::memcpy(reinterpret_cast<uint8_t*>(&buffer.header) + buffer.receivedBytes, 
-                           buffer.buffer.data() + offset, take);
-                buffer.receivedBytes += take;
-                offset += take;
-            }
-            
-            if (buffer.receivedBytes < sizeof(lunaricorn::internal::MessageHeader)) {
-                // Need more data for header
-                break;
-            }
-            
-            buffer.headerComplete = true;
-            buffer.expectedSize = sizeof(lunaricorn::internal::MessageHeader) + buffer.header.data_len;
-            buffer.buffer.resize(buffer.expectedSize);
-        }
-        
-        if (buffer.headerComplete) {
-            // Check if we have the complete message
-            const size_t need = buffer.expectedSize - buffer.receivedBytes;
-            const size_t avail = buffer.buffer.size() - offset;
-            const size_t take = std::min(need, avail);
-            
-            if (take > 0) {
-                std::memcpy(buffer.buffer.data() + buffer.receivedBytes, 
-                           buffer.buffer.data() + offset, take);
-                buffer.receivedBytes += take;
-                offset += take;
-            }
-            
-            if (buffer.receivedBytes < buffer.expectedSize) {
-                // Need more data for complete message
-                break;
-            }
-            
-            // Process complete message
-            lunaricorn::internal::IncomingMessage msg;
-            if (_proto->deserializeJson(
-                std::vector<uint8_t>(buffer.buffer.begin(), buffer.buffer.end()), 
-                msg)) {
-                if (!msg.isValid) {
-                    MLOG_E("invalid parsed message: seq={} reason={}", buffer.header.seq, msg.errorReason);
-                    buffer = MessageBuffer{};  // Reset buffer on error
-                    continue;
-                }
-                
-                // Process based on message type
-                switch (buffer.header.type) {
-                    case lunaricorn::internal::MessageType::MT_HB:
-                        processHeartbeat(clientId, msg);
-                        break;
-                    case lunaricorn::internal::MessageType::MT_Sub:
-                        processSubscription(clientId, msg);
-                        break;
-                    case lunaricorn::internal::MessageType::MT_PubReq:
-                        processPushRequest(clientId, msg);
-                        break;
-                    case lunaricorn::internal::MessageType::MT_Response:
-                        processResponse(clientId, msg);
-                        break;
-                    case lunaricorn::internal::MessageType::MT_QueryReq:
-                        processQueryRequest(clientId, msg);
-                        break;
-                    default:
-                        processUnknownMessageType(clientId, buffer.header);
-                        break;
-                }
-            } else {
-                MLOG_E("deserializeJson failed for client {} message", clientId);
-            }
-            
-            // Reset buffer for next message
-            buffer = MessageBuffer{};
-        }
     }
 }
 
@@ -378,7 +317,7 @@ void RawEndpoint::sendHeartbeat(uint64_t clientId)
     auto it = _clients.find(clientId);
     if (it != _clients.end()) {
         try {
-            _proto->send_raw(std::make_shared<Poco::Net::StreamSocket>(it->second->sock), buf);
+            it->second->send_message(hb_msg, boost::json::object());
         } catch (const std::exception& e) {
             MLOG_E("Failed to send heartbeat to client {}: {}", clientId, e.what());
         }
@@ -411,7 +350,7 @@ void RawEndpoint::sendResponse(uint64_t clientId, uint64_t seq, bool success, co
     auto it = _clients.find(clientId);
     if (it != _clients.end()) {
         try {
-            _proto->send_raw(std::make_shared<Poco::Net::StreamSocket>(it->second->sock), buf);
+            it->second->send_message(resp_msg, data);
         } catch (const std::exception& e) {
             MLOG_E("Failed to send response to client {}: {}", clientId, e.what());
         }
