@@ -115,6 +115,11 @@ void SignalingEngine::setOnSubEvent(std::function<void(uint64_t, const StoredEve
     onSubEvent_ = std::move(cb);
 }
 
+void SignalingEngine::dispatchEvent(const StoredEventData& event_data)
+{
+    on_event(event_data);
+}
+
 void SignalingEngine::on_event(const StoredEventData& event_data)
 {
     std::lock_guard<std::mutex> lock(mutex_);

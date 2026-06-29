@@ -209,7 +209,7 @@ IncomingPacketState
 
 **Файл:** `app/signaling_engine.h`
 
-**Назначение:** Основной движер сервиса. Обёртка над MessageStorage с потокобезопасностью.
+**Назначение:** Основной движер сервиса. Обёртка над MessageStorage с потокобезопасностью и системой подписок.
 
 **Статус:** ✅ Используется (основной класс приложения)
 
@@ -217,14 +217,30 @@ IncomingPacketState
 ```
 SignalingEngine
   ├── MessageStorage (storage_)  ← хранение данных
-  └── mutex_                     ← синхронизация
+  ├── mutex_                     ← синхронизация
+  ├── subscribers_               ← карта подписчиков
+  └── onSubEvent_                ← колбэк для подписок
 ```
 
 **Диаграмма классов:**
 ```
 SignalingEngine
   ├── storage_: unique_ptr<MessageStorage>  ← хранилище
-  └── mutex_: mutex                         ← защита concurrent доступа
+  ├── mutex_: mutex                         ← защита concurrent доступа
+  ├── subscribers_: map<uint64_t, Subscriber>  ← подписчики
+  └── onSubEvent_: function<void(uint64_t, StoredEventData&)>  ← колбэк
+```
+
+**Структура Subscriber:**
+```
+Subscriber
+  ├── reg_point: time_point     ← время регистрации
+  ├── filter_types: vector<string>   ← фильтр по типу события
+  ├── filter_sources: vector<string> ← фильтр по источнику
+  ├── filter_affected: vector<string>← фильтр по affected
+  ├── filter_tags: vector<string>    ← фильтр по тегам
+  ├── client_id: uint64_t           ← ID клиента
+  └── count: uint64_t               ← счётчик доставленных событий
 ```
 
 **Методы:**
@@ -235,14 +251,43 @@ public:
     explicit SignalingEngine(const DbConfig& db_cfg);
     ~SignalingEngine();
 
+    // CRUD операции
     long long createEvent(const StoredEventData& event_data);
     vector<string> getUniqueValues(const string& field_name);
     vector<StoredEventDataExtended> findEvents(double timestamp, ...);
     vector<StoredEventDataExtended> findEventsByType(const string& event_type);
 
+    // Система подписок
+    void subscribe(uint64_t client_id, types, sources, affected, tags);
+    void unsubscribe(uint64_t client_id);
+    void setOnSubEvent(function<void(uint64_t, StoredEventData&)> cb);
+
 private:
+    void on_event(const StoredEventData& event_data);  // Уведомляет подписчиков
     mutex_  // Защита всех методов
 };
+```
+
+**Диаграмма потока подписок:**
+```
+subscribe(client_id, filters)
+  └──▶ lock(mutex_)
+       └──▶ subscribers_[client_id] = Subscriber{filters, ...}
+
+unsubscribe(client_id)
+  └──▶ lock(mutex_)
+       └──▶ subscribers_.erase(client_id)
+
+on_event(event_data)
+  └──▶ lock(mutex_)
+       └──▶ for each subscriber:
+            ├─▶ check filter_types (если не пуст)
+            ├─▶ check filter_sources (если не пуст)
+            ├─▶ check filter_affected (если не пуст)
+            ├─▶ check filter_tags (если не пуст)
+            └─▶ if match && onSubEvent_ != null:
+                 └──▶ onSubEvent_(client_id, event_data)
+                 └──▶ subscriber.count++
 ```
 
 **Диаграмма потока данных:**
@@ -545,7 +590,9 @@ SignalingEngineTest
   ├── uses ──▶ testGetUniqueValues()
   ├── uses ──▶ testFindEvents()
   ├── uses ──▶ testFindEventsByType()
-  └── uses ──▶ testDatabaseInitialization()
+  ├── uses ──▶ testSubscribeUnsubscribe()
+  ├── uses ──▶ testOnEventCallback()
+  └── uses ──▶ testOnEventFiltering()
 
 TypeHandler<EventDataExtended>
   ├── uses ──▶ EventDataExtended (template param)

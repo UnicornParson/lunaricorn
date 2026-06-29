@@ -48,6 +48,9 @@ public:
     // Called for each subscriber whose filters match the event
     void setOnSubEvent(std::function<void(uint64_t, const StoredEventData&)> cb);
 
+    // Dispatch an event to all matching subscribers (public API wrapper for on_event)
+    void dispatchEvent(const StoredEventData& event_data);
+
 private:
     void on_event(const StoredEventData& event_data);
     std::unique_ptr<MessageStorage> storage_;

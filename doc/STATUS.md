@@ -43,6 +43,12 @@
 - Система логирования MLog
 - Selftest механизм
 - Поддержка конфигурации из переменных окружения
+- **Система подписок**
+  - `subscribe()` — создание подписки с фильтрами (type, source, affected, tags)
+  - `unsubscribe()` — удаление подписки
+  - `setOnSubEvent()` — установка колбэка уведомлений
+  - `dispatchEvent()` — обработка события и уведомление подписчиков
+  - Subscriber — структура с фильтрами и счётчиком
 
 #### Orb Service
 - FastAPI приложение (каркас)
@@ -110,7 +116,8 @@
 |------------|--------|
 | Unit-тесты | ❌ Не реализованы |
 | Интеграционные тесты | ❌ Не реализованы |
-| Selftest C++ | ✅ Базовый (SignalingEngineTest) |
+| Selftest C++ | ✅ Расширенный (SignalingEngineTest) |
+| Тесты подписок | ✅ testSubscribeUnsubscribe, testOnEventCallback, testOnEventFiltering |
 
 ## Известные ограничения
 
@@ -119,6 +126,7 @@
 3. FastAPI приложение Orb (`app.py`) содержит только импорты
 4. C++ Signaling сервис работает в режиме selftest (без реального сетевого взаимодействия)
 5. Скрипты `MAINTENANCE_HOST` захардкожены на `192.168.0.18`
+6. `on_event()` приватный — для тестирования используется `dispatchEvent()`
 
 ---
 

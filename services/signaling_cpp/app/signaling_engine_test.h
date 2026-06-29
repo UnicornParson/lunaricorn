@@ -24,6 +24,9 @@ private:
     bool testFindEvents();
     bool testFindEventsByType();
     bool testDatabaseInitialization();
+    bool testSubscribeUnsubscribe();
+    bool testOnEventCallback();
+    bool testOnEventFiltering();
 };
 
 } // namespace lunaricorn
