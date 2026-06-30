@@ -287,11 +287,15 @@ Low
 | Приоритет | Количество | IDs |
 |-----------|------------|-----|
 | Critical | 1 | 006 |
-| High | 4 | 003, 004, 005, 007 |
+| High | 5 | 003, 004, 005, 007 |
 | Medium | 5 | 001, 008, 009, 011, 012 |
 | Low | 2 | 002, 010 |
 
-**Всего открытых проблем:** 12
+**Всего открытых проблем:** 13
+
+| Приоритет | Решено | IDs |
+|-----------|--------|-----|
+| High | 5 | 013, 014, 015, 016, 017 |
 
 ---
 
@@ -333,6 +337,90 @@ High
 
 **Priority:**
 High
+
+**Дата обнаружения:** 30.06.2026
+**Дата решения:** 30.06.2026
+
+---
+
+## ID: PROBLEM-016
+
+**Status:** Solved
+
+**Description:**
+В `SignalingConnector::start()` переменная `_thread_state` не сохранялась, оставаясь `nullptr`. При остановке `stop_runner()` проверяла `_thread_state->finished`, что вызывало `[BUG] Attempt to add orphan thread 'SignalingConnector::runner' with null state`.
+
+**Решение:**
+Добавлено `_thread_state = std::make_shared<ThreadState>()` в `start()`.
+
+**Priority:**
+High
+
+**Дата обнаружения:** 30.06.2026
+**Дата решения:** 30.06.2026
+
+---
+
+## ID: PROBLEM-017
+
+**Status:** Solved
+
+**Description:**
+Во всех обработчиках `RE_Client` (`on_heartbeat`, `on_pub_request`, `on_query_request`, `on_subscription`) создавался `MessageHeader hdr;` без инициализации полей `magic` и `version`. 
+`serializeJson()` не перезаписывает `magic` и `version` — только `data_type`, `data_len`, `crc`. При отправке ответов клиенту использовался мусорный magic/version → `cannot create std::vector larger than max_size()`.
+
+**Решение:**
+Все `MessageHeader hdr` инициализированы с designated initializers:
+```cpp
+MessageHeader hdr = {
+    .magic = HeaderMagic,
+    .version = PROTOCOL_VERSION,
+    ...
+};
+```
+
+**Priority:**
+High
+
+**Дата обнаружения:** 30.06.2026
+**Дата решения:** 30.06.2026
+
+---
+
+## ID: PROBLEM-015
+
+**Status:** Solved
+
+**Description:**
+Коренная причина каскадных ошибок между тестером (SignalingConnector) и сервером (RawEndpoint/RE_Client) при сетевом взаимодействии. Было обнаружено 4 взаимосвязанных бага:
+
+1. **БАГ 1 (Главный) — Двойной буфер в `signaling_api.cpp::send_message()`:**
+   При отправке heartbeat (`data.empty() == true`) код делал `buf.resize(sizeof(MessageHeader))`, создавая 24 нулевых байта. Затем `serializeJson()` вызывал `buf.insert()`, добавляя ещё 24 корректных байта. Итог: 48 байт на wire, первые 24 — нулевые magic=0x00000000. Сервер валился с `invalid header magic: expected=0x12345678 actual=0x00000000`.
+
+2. **БАГ 2 — Маленький receive-буфер (26 байт):**
+   `kRecvBufSize = sizeof(MessageHeader) + 2 = 26 байт`. Ответы сервера с JSON (типично 100-200+ байт) обрезались. Клиент читал только первые 26 байт, парсер не мог корректно восстановить пакет.
+
+3. **БАГ 3 — HB Loop (следствие бага 1):**
+   При получении HB от сервера клиент отвечал своим HB через `send_client_hb()`, который шёл через тот же багнутый `send_message()` → сервер видел нулевой magic → сбрасывал состояние → клиент получал ошибку при следующем чтении → `thread emergency exit`.
+
+4. **БАГ 4 — Неинициализированный MessageHeader в `push()`:**
+   `MessageHeader header;` без инициализации — поля `data_len` и `crc` содержали мусор, хотя `serializeJson()` перезаписывает их, это UB на некоторых оптимизациях/компиляторах.
+
+5. **БАГ 5 (Дополнительно) — Несоответствие ключей между toDict() и on_pub_request():**
+   `SignalingEvent::toDict()` генерирует `"message"` и `"client_id"`, а `on_pub_request()` искал `"payload"` и `"source"`. Сервер не мог обработать push-события от клиента, хотя heartbeat cycle (с багом 1) был основной причиной отказа.
+
+**Impact:**
+- Полный отказ сетевого взаимодействия: клиент не мог отправить ни heartbeat, ни push-события
+- Сервер аварийно закрывал соединение при любом heartbeat от клиента
+- Аварийный выход треда `runner` с `thread emergency exit`
+- Невозможность интеграционного тестирования
+
+**Решение:**
+1. `signaling_api.cpp :: send_message()`: убрать `buf.resize(sizeof(MessageHeader))`. Для пустых данных буфер остаётся пустым, `serializeJson()` сам добавляет только корректные 24 байта.
+2. `signaling_api.cpp :: kRecvBufSize`: увеличено с 26 до 65536 байт (64KB).
+3. `signaling_api.cpp :: on_server_request(MsgType::HB)`: убрать вызов `send_client_hb()` — клиент отправляет HB по своему таймеру, эхо-ответ на серверный HB приводит к HB-шторму.
+4. `signaling_api.cpp :: push()`: инициализировать `MessageHeader header{}` (zero-init).
+5. `raw_endpoint_client.cpp :: on_pub_request()`: искать `"message"` вместо `"payload"`, `"client_id"` вместо `"source"`.
 
 **Дата обнаружения:** 30.06.2026
 **Дата решения:** 30.06.2026

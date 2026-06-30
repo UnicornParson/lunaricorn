@@ -48,6 +48,69 @@
   но не проверял, что потоки уже запущены (`joinable()`).
 - **Решение:** добавлена проверка `!_acceptThread.joinable() && !_handlerThread.joinable()`.
 
+#### PROBLEM-015: Двойной буфер в SignalingConnector::send_message() — критический баг протокола
+- **Проблема:** `send_message()` при отправке heartbeat (пустые данные) делал
+  `buf.resize(sizeof(MessageHeader))`, создавая 24 нулевых байта. Затем
+  `serializeJson()` добавлял ещё 24 корректных байта через `buf.insert()`.
+  Итоговый пакет на wire: 48 байт, первые 24 — нули, magic=0x00000000.
+  Сервер обрывал соединение: `invalid header magic: expected=0x12345678 actual=0x00000000`.
+- **Решение:** убран `buf.resize(sizeof(MessageHeader))`. Для пустых данных
+  буфер остаётся пустым, `serializeJson()` сам добавляет только 24 корректных байта.
+- **Файл:** `lunaricorn/cpp/signaling_api.cpp :: send_message()`
+
+#### PROBLEM-015: Receive-буфер 26 байт — фрагментация пакетов
+- **Проблема:** `kRecvBufSize = sizeof(MessageHeader) + 2 = 26` байт. Ответы
+  сервера с JSON-данными (100-200+ байт) обрезались.
+- **Решение:** размер увеличен до 65536 байт (64KB).
+- **Файл:** `lunaricorn/cpp/signaling_api.cpp :: kRecvBufSize`
+
+#### PROBLEM-015: HB-шторм между клиентом и сервером
+- **Проблема:** при получении серверного HB клиент вызывал `send_client_hb()`,
+  отправляя ответный HB через багнутый `send_message()` → сервер видел
+  нулевой magic → сбрасывал соединение → клиент аварийно завершался.
+- **Решение:** `on_server_request(MT_HB)` больше не эхо-отвечает на серверный
+  HB. Клиент отправляет HB по своему таймеру, достаточно.
+- **Файл:** `lunaricorn/cpp/signaling_api.cpp :: on_server_request()`
+
+#### PROBLEM-015: Неинициализированный MessageHeader в push()
+- **Проблема:** `MessageHeader header;` без инициализации — поля содержали
+  мусор (UB на некоторых оптимизациях).
+- **Решение:** `MessageHeader header{}` — zero-инициализация.
+- **Файл:** `lunaricorn/cpp/signaling_api.cpp :: push()`
+
+#### PROBLEM-015: Несоответствие ключей toDict() и on_pub_request()
+- **Проблема:** `SignalingEvent::toDict()` генерирует ключи `"message"` и
+  `"client_id"`, а `RE_Client::on_pub_request()` искал `"payload"` и `"source"`.
+  Сервер не мог обработать push-события от клиента.
+- **Решение:** `on_pub_request()` теперь ищет `"message"` (с fallback на
+  `"payload"`), `"client_id"` (с fallback на `"source"`).
+- **Файл:** `services/signaling_cpp/app/raw_endpoint_client.cpp :: on_pub_request()`
+
+#### PROBLEM-016: _thread_state не сохранялся в SignalingConnector::start()
+- **Проблема:** `_thread_state` оставался `nullptr` после `start()`, так как
+  переменная создавалась только в лямбде для `runner()`. `stop_runner()`
+  проверяла `_thread_state->finished` и падала с `null state`.
+- **Решение:** добавлено `_thread_state = std::make_shared<ThreadState>()` в `start()`.
+- **Файл:** `lunaricorn/cpp/signaling_api.cpp :: start()`
+
+#### PROBLEM-017: Неинициализированные MessageHeader во всех обработчиках RE_Client
+- **Проблема:** `on_heartbeat()`, `on_pub_request()`, `on_query_request()`,
+  `on_subscription()` создавали `MessageHeader hdr;` без инициализации
+  `magic` и `version`. `serializeJson()` не перезаписывает эти поля —
+  только `data_type`, `data_len`, `crc`. Сервер отправлял ответы с
+  мусорным magic/version, клиент не мог разобрать пакет →
+  `cannot create std::vector larger than max_size()`.
+- **Решение:** все `MessageHeader` инициализированы designated initializers
+  с корректными `HeaderMagic` и `PROTOCOL_VERSION`.
+- **Файл:** `services/signaling_cpp/app/raw_endpoint_client.cpp`
+
+#### on_data(): return → continue для recovery после ошибки парсинга
+- **Проблема:** при ошибке magic/version/data_len в `on_data()` вызывался
+  `return` вместо `continue`, прерывая обработку оставшихся байт в буфере.
+- **Решение:** заменены на `continue`, что позволяет продолжить парсинг
+  следующего пакета в том же буфере.
+- **Файл:** `lunaricorn/cpp/signaling_api.cpp :: on_data()`
+
 ### Добавлено
 
 #### Тесты Raw Connection API (`services/signaling_cpp/test_client/raw_connection_test.cpp`)

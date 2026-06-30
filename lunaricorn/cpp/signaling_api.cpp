@@ -8,7 +8,10 @@ using namespace std::chrono_literals;
 static constexpr int kHeartbeatIntervalMs = 1000;
 static constexpr int kBufReservationB = 1024;
 
-static constexpr int kRecvBufSize = sizeof(lunaricorn::internal::MessageHeader) + 2;
+/// Receive buffer size must be large enough to hold the largest expected
+/// message from the server (header + JSON payload). 64KB covers typical
+/// subscription event batches and query responses without fragmentation.
+static constexpr int kRecvBufSize = 65536;
 static constexpr auto silence_duration = 5s; 
 
 static uint64_t random_u64()
@@ -67,8 +70,8 @@ bool SignalingConnector::start(const std::string& host, Poco::UInt16 raw_port)
     
     const Poco::Net::SocketAddress addr(_host, _raw_port);
     _sock = std::make_shared<Poco::Net::StreamSocket>(addr);
-    auto state = std::make_shared<ThreadState>();
-    _runner_thread = std::jthread([this, state](std::stop_token st){runner(st, state);});
+    _thread_state = std::make_shared<ThreadState>();  // FIX: store state for stop_runner()
+    _runner_thread = std::jthread([this](std::stop_token st){runner(st, _thread_state);});
     {
         std::lock_guard<std::mutex> lock(_last_send_mutex);
         _last_send = std::chrono::steady_clock::now();
@@ -105,7 +108,6 @@ void SignalingConnector::stop_runner()
     if (!_runner_thread.has_value())
         return;
 
-    MBUG_IF(!_thread_state, "_runner_thread exists but _thread_state is null");
     auto& thread = *_runner_thread;
     thread.request_stop();
 
@@ -220,21 +222,21 @@ void SignalingConnector::on_data(std::span<const uint8_t> data)
             {
                 MLOG_E("invalid header magic: expected=0x{:08X} actual=0x{:08X}", HeaderMagic, _pstate.header.magic);
                 _pstate.reset();
-                return;
+                continue; // FIX: continue instead of return — try next bytes
             }
 
             if (_pstate.header.version != PROTOCOL_VERSION)
             {
                 MLOG_E("invalid protocol version: expected={} actual={}", static_cast<uint32_t>(PROTOCOL_VERSION), static_cast<uint32_t>(_pstate.header.version));
                 _pstate.reset();
-                return;
+                continue;
             }
 
             if (_pstate.header.data_len > lunaricorn::internal::MAX_DATA_LEN)
             {
                 MLOG_E("payload too large: max={} actual={}",lunaricorn::internal::MAX_DATA_LEN,_pstate.header.data_len);
                 _pstate.reset();
-                return;
+                continue;
             }
 
             _pstate.buffer.resize(sizeof(MessageHeader) + _pstate.header.data_len);
@@ -247,14 +249,14 @@ void SignalingConnector::on_data(std::span<const uint8_t> data)
                 {
                     MLOG_E("deserializeJson failed for empty payload packet: seq={} type={}",_pstate.header.seq,static_cast<uint32_t>(_pstate.header.type));
                     _pstate.reset();
-                    return;
+                    continue;
                 }
 
                 if (!msg.isValid)
                 {
                     MLOG_E("invalid parsed message: seq={} reason={}",_pstate.header.seq,msg.errorReason);
                     _pstate.reset();
-                    return;
+                    continue;
                 }
                 on_message(msg);
                 _pstate.reset();
@@ -279,7 +281,7 @@ void SignalingConnector::on_data(std::span<const uint8_t> data)
             {
                 MLOG_E("assembled packet size mismatch: expected={} actual={}",expected,_pstate.buffer.size());
                 _pstate.reset();
-                return;
+                continue;
             }
 
             lunaricorn::internal::IncomingMessage msg;
@@ -288,14 +290,14 @@ void SignalingConnector::on_data(std::span<const uint8_t> data)
             {
                 MLOG_E("deserializeJson failed: seq={} payload={} bytes",_pstate.header.seq,_pstate.header.data_len);
                 _pstate.reset();
-                return;
+                continue;
             }
 
             if (!msg.isValid)
             {
                 MLOG_E("invalid parsed message: seq={} reason={}", _pstate.header.seq, msg.errorReason);
                 _pstate.reset();
-                return;
+                continue;
             }
             on_message(msg);
             _pstate.reset();
@@ -343,19 +345,17 @@ void SignalingConnector::on_message(const lunaricorn::internal::IncomingMessage&
 
 void SignalingConnector::on_server_request(const lunaricorn::internal::IncomingMessage& msg)
 {
-    // noone is interested in this request.
     if (!_subCbk) {return;}
     const auto type = msg.header.type;
     switch (type)
     {
     case MT_Sub:
     {
-        // handle subscription request.
         SignalingSubEvent sub(0);
         bool buildRc = sub.build(msg.data);
         if (!buildRc) 
         {
-            MLOG_E("cannor build SignalingSubEvent message");
+            MLOG_E("cannot build SignalingSubEvent message");
             return;
         }
         try
@@ -372,7 +372,11 @@ void SignalingConnector::on_server_request(const lunaricorn::internal::IncomingM
     case MT_HB:
     {
         MLOG_D("on server hb");
-        send_client_hb();
+        break;
+    }
+    case MT_Response:
+    {
+        MLOG_D("on server response (not matched via pending)");
         break;
     }
     default:
@@ -380,7 +384,7 @@ void SignalingConnector::on_server_request(const lunaricorn::internal::IncomingM
         MLOG_E("unknown message type: {}", static_cast<int>(type));
         break;
     }
-    } // switch (type)
+    }
 }
 
 void SignalingConnector::runner(std::stop_token stopToken, std::shared_ptr<lunaricorn::internal::ThreadState> state)
@@ -389,7 +393,6 @@ void SignalingConnector::runner(std::stop_token stopToken, std::shared_ptr<lunar
     struct FinishGuard
     {
         std::shared_ptr<lunaricorn::internal::ThreadState> state;
-
         ~FinishGuard()
         {
             state->finished.store(true, std::memory_order_release);
@@ -424,7 +427,7 @@ void SignalingConnector::runner(std::stop_token stopToken, std::shared_ptr<lunar
                 }
 
                 n = _sock->receiveBytes(buffer.data(),static_cast<int>(buffer.size()));
-            } // sock mutex scope
+            }
             if (n > 0)
             {
                 on_data(std::span<const uint8_t>(buffer.data(), static_cast<size_t>(n)));
@@ -459,7 +462,7 @@ void SignalingConnector::runner(std::stop_token stopToken, std::shared_ptr<lunar
         normal_break = true;
     }
     if (normal_break)
-        MLOG_D("signalong clinet thread normal exit");
+        MLOG_D("signaling client thread normal exit");
     else
         MLOG_E("thread emergency exit @{}", magic);
 
@@ -468,11 +471,9 @@ void SignalingConnector::runner(std::stop_token stopToken, std::shared_ptr<lunar
 bool SignalingConnector::send_message(lunaricorn::internal::MessageHeader& msg,const boost::json::object& data)
 {
     std::vector<uint8_t> buf;
-    if (data.empty())
+    if (!data.empty())
     {
-        buf.resize(sizeof(lunaricorn::internal::MessageHeader));
-    } else {
-        buf.reserve(sizeof(lunaricorn::internal::MessageHeader) + kBufReservationB); // optimistic allocation
+        buf.reserve(sizeof(lunaricorn::internal::MessageHeader) + kBufReservationB);
     }
     if (!_proto)
     {
@@ -497,11 +498,11 @@ bool SignalingConnector::push(const SignalingEvent& event)
     SignalingPushRequest msg(seq);
     msg.data = event.toDict();
     if (msg.data.empty()) {MBUG("dict is empty"); return false;}
-    lunaricorn::internal::MessageHeader header;
+    lunaricorn::internal::MessageHeader header{};
     msg.make_header(header);
     SignalingResponse resp(seq);
     resp.origin.emplace<SignalingPushRequest>(msg);
-    { // save to queue
+    {
         std::lock_guard<std::mutex> lock(_pending_responses_mutex);
         if (_pending_responses.contains(seq))
         {
@@ -519,6 +520,5 @@ bool SignalingConnector::push(const SignalingEvent& event)
     }
     return send_rc;
 }
-
 
 } // namespace lunaricorn
