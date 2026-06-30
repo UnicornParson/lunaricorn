@@ -2,6 +2,52 @@
 
 ## 2026-06-30
 
+### Исправлено
+
+#### RawEndpoint::stop() — корректное завершение всех соединений
+- **Проблема:** `stop()` устанавливал `_stopping = true`, закрывал серверный сокет,
+  ждал завершения потоков через `join()`, и **только после этого** закрывал
+  клиентские сокеты и очищал `_clients`. Это приводило к тому, что
+  `handleClients()` мог бесконечно блокироваться на `poll()` или `receiveBytes()`,
+  так как клиентские сокеты оставались открытыми.
+- **Решение:** порядок действий в `stop()` изменён на корректный:
+  1. Установка `_stopping = true`
+  2. Закрытие серверного сокета (прерывает `acceptLoop()`)
+  3. Закрытие **всех клиентских сокетов** (прерывает `poll()`/`receiveBytes()` в `handleClients()`)
+  4. `join()` потоков `_acceptThread` и `_handlerThread`
+  5. Очистка `_clients`
+- Файл: `services/signaling_cpp/app/raw_endpoint.cpp`
+
+#### RawEndpoint::stop() — исправление deadlock с `_clientsMutex`
+- **Проблема:** `stop()` закрывал клиентские сокеты **удерживая `_clientsMutex`**.
+  `handleClients()` после закрытия сокета получал исключение в `receiveBytes()`,
+  вызывал `on_client_closed()`, которая также захватывает `_clientsMutex`.
+  Так как `stop()` держал мьютекс и ждал `join()` потока, возникал deadlock.
+- **Решение:** `stop()` теперь делает снапшот клиентов под мьютексом, закрывает
+  сокеты **без удержания мьютекса**, затем join'ит потоки, и только потом
+  очищает `_clients` под мьютексом.
+- Файл: `services/signaling_cpp/app/raw_endpoint.cpp`
+
+#### RawEndpoint::acceptLoop() — блокирующий acceptConnection() при остановке
+- **Проблема:** `acceptLoop()` использовал блокирующий `acceptConnection()` без таймаута.
+  При остановке поток не мог выйти из `acceptConnection()`, и `_acceptThread.join()`
+  зависал навсегда.
+- **Решение:** добавлен `poll()` с таймаутом 1 секунда перед `acceptConnection()`.
+  Это позволяет `acceptLoop()` регулярно проверять флаг `_stopping`.
+- Файл: `services/signaling_cpp/app/raw_endpoint.cpp`
+
+#### RawEndpoint::send_hb() — deadlock с `_clientsMutex`
+- **Проблема:** `send_hb()` захватывал `_clientsMutex`, затем вызывал `sendHeartbeat()`,
+  которая также захватывает `_clientsMutex` — deadlock на том же потоке.
+- **Решение:** `send_hb()` теперь собирает ID клиентов под мьютексом, а отправляет
+  heartbeat'ы **без удержания мьютекса**.
+- Файл: `services/signaling_cpp/app/raw_endpoint.cpp`
+
+#### RawEndpoint::start() — защита от повторного запуска
+- **Проблема:** `start()` проверял `_stopping == false` для пропуска запуска,
+  но не проверял, что потоки уже запущены (`joinable()`).
+- **Решение:** добавлена проверка `!_acceptThread.joinable() && !_handlerThread.joinable()`.
+
 ### Добавлено
 
 #### Тесты Raw Connection API (`services/signaling_cpp/test_client/raw_connection_test.cpp`)
@@ -63,6 +109,7 @@
 
 - `services/signaling_cpp/test_client/raw_connection_test.cpp` — создано
 - `services/signaling_cpp/test_client/CMakeLists.txt` — обновлено
+- `services/signaling_cpp/app/raw_endpoint.cpp` — исправлен `stop()` и `start()`
 - `doc/CHANGELOG.md` — обновлено
 
 ### Изменено
@@ -228,10 +275,10 @@
 
 | Версия | Дата | Статус |
 |--------|------|--------|
-| 0.3 | 29.06.2026 | Система подписок |
+| 0.3 | 30.06.2026 | Исправление RawEndpoint stop/start |
 | 0.2 | 28.06.2026 | Текущая разработка |
 | 0.1 | 2026-01-01 | Архивная |
 
 ---
 
-*Последнее обновление: 28.06.2026*
+*Последнее обновление: 30.06.2026*

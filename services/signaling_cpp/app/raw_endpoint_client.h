@@ -12,6 +12,7 @@
 
 #include "endpoint.h"
 #include "maintenance.h"
+#include "signaling_engine.h"
 #include <proto/signaling.h>
 
 namespace lunaricorn
@@ -26,7 +27,7 @@ public:
     using Clock = std::chrono::steady_clock;
 
     // Socket is transferred during construction (server-side mode)
-    explicit RE_Client(Poco::Net::StreamSocket socket);
+    explicit RE_Client(Poco::Net::StreamSocket socket, SignalingEnginePtr engine);
     ~RE_Client();
 
     // Disable copy
@@ -122,6 +123,9 @@ private:
 
     // Incoming packet state
     IncomingPacketState _pstate;
+
+    // Engine reference
+    SignalingEnginePtr _engine;
 
     // Callback
     MessageReadyCallback _msgCbk;

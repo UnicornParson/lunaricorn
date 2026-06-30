@@ -32,8 +32,10 @@ RawEndpoint::~RawEndpoint()
 
 bool RawEndpoint::start()
 {
-    if (_stopping.load() == false) {
+    if (_stopping.load()) {
         _stopping = false;
+    }
+    if (!_acceptThread.joinable() && !_handlerThread.joinable()) {
         _acceptThread = std::thread(&RawEndpoint::acceptLoop, this);
         _handlerThread = std::thread(&RawEndpoint::handleClients, this);
     }
@@ -44,29 +46,44 @@ bool RawEndpoint::stop()
 {
     _stopping = true;
 
+    // Step 1: Close server socket to interrupt acceptLoop()
     try {
         _serverSocket.close();
     } catch (...) {}
 
+    // Step 2: Snapshot clients and close sockets without holding the lock.
+    // This avoids a deadlock: handleClients() may be in receiveBytes() which
+    // throws after socket close, then calls on_client_closed() which needs
+    // _clientsMutex. If stop() holds _clientsMutex during join(), deadlock.
+    std::vector<RE_Client_ptr> clients_snapshot;
+    {
+        std::lock_guard<std::mutex> lock(_clientsMutex);
+        clients_snapshot.reserve(_clients.size());
+        for (auto& [id, client] : _clients)
+        {
+            if (client) clients_snapshot.push_back(client);
+        }
+    }
+    for (auto& client : clients_snapshot)
+    {
+        try {
+            client->socket().close();
+        } catch (...) {
+            // Ignore, socket may already be closed
+        }
+    }
+
+    // Step 3: Wait for both threads to finish
     if (_acceptThread.joinable())
         _acceptThread.join();
     if (_handlerThread.joinable())
         _handlerThread.join();
 
-    // Закрываем все клиентские сокеты
-    std::lock_guard<std::mutex> lock(_clientsMutex);
-    for (auto& [id, client] : _clients)
+    // Step 4: Clean up clients
     {
-        try 
-        {
-            if (!client){MBUG("[stop] no client for {}", id); continue;}
-            client->socket().close(); 
-        } catch (...) 
-        {
-            MLOG_E("cannot close {} client socket", id);
-        }
+        std::lock_guard<std::mutex> lock(_clientsMutex);
+        _clients.clear();
     }
-    _clients.clear();
     return true;
 }
 
@@ -77,6 +94,13 @@ void RawEndpoint::acceptLoop()
     {
         try
         {
+            // Use poll with timeout to allow timely exit when _stopping is set
+            if (!_serverSocket.poll(Poco::Timespan(1, 0), Poco::Net::Socket::SELECT_READ))
+            {
+                continue;
+            }
+            if (_stopping) break;
+
             MLOG_D("acceptLoop: waiting for incoming connection...");
             Poco::Net::StreamSocket clientSocket = _serverSocket.acceptConnection();
             if (_stopping) break;
@@ -87,7 +111,7 @@ void RawEndpoint::acceptLoop()
                    addr.host().toString(), addr.host().toString(), addr.port());
 
             // Create client and transfer socket ownership
-            RE_Client_ptr client = std::make_shared<RE_Client>(std::move(clientSocket));
+            RE_Client_ptr client = std::make_shared<RE_Client>(std::move(clientSocket), _engine);
             client->socket().setBlocking(false);
             client->socket().setSendTimeout(Poco::Timespan(1, 0));
             client->update_client_hb();
@@ -125,18 +149,29 @@ void RawEndpoint::acceptLoop()
 
 void RawEndpoint::send_hb()
 {
-    std::lock_guard<std::mutex> lock(_clientsMutex);
-    for (auto& [id, client] : _clients)
+    // Collect client IDs that need heartbeat while holding the lock,
+    // then send heartbeats without holding the lock to avoid
+    // deadlock with sendHeartbeat() which also locks _clientsMutex.
+    std::vector<uint64_t> hb_targets;
     {
-        if (!client){MBUG("no client for {}", id); continue;}
-        const auto hb_duration = client->server_hb_delay();
-        if (hb_duration >= SERVER_HB_PERIOD)
+        std::lock_guard<std::mutex> lock(_clientsMutex);
+        for (auto& [id, client] : _clients)
         {
-            // Send heartbeat to client
-            MLOG_D("send hb to {}", id);
-            sendHeartbeat(id);
-            client->update_server_hb();
+            if (!client) { MBUG("no client for {}", id); continue; }
+            const auto hb_duration = client->server_hb_delay();
+            if (hb_duration >= SERVER_HB_PERIOD)
+            {
+                hb_targets.push_back(id);
+                client->update_server_hb();
+            }
         }
+    }
+
+    // Send heartbeats outside the lock
+    for (uint64_t id : hb_targets)
+    {
+        MLOG_D("send hb to {}", id);
+        sendHeartbeat(id);
     }
 }
 

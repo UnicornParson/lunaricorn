@@ -14,8 +14,9 @@ static constexpr int kBufReservationB = 1024;
 namespace lunaricorn
 {
 
-RE_Client::RE_Client(Poco::Net::StreamSocket socket)
+RE_Client::RE_Client(Poco::Net::StreamSocket socket, SignalingEnginePtr engine)
     : sock(std::move(socket))
+    , _engine(std::move(engine))
 {
     _count++;
     _proto = std::make_shared<lunaricorn::internal::SignalingProto>();
@@ -32,6 +33,7 @@ RE_Client::~RE_Client()
 RE_Client::RE_Client(RE_Client&& other) noexcept
     : sock(std::move(other.sock))
     , _proto(other._proto)
+    , _engine(std::move(other._engine))
     , _last_send(other._last_send)
     , _client_hb(other._client_hb)
     , _server_hb(other._server_hb)
@@ -46,6 +48,7 @@ RE_Client& RE_Client::operator=(RE_Client&& other) noexcept
     {
         sock = std::move(other.sock);
         _proto = other._proto;
+        _engine = std::move(other._engine);
         _last_send = other._last_send;
         _client_hb = other._client_hb;
         _server_hb = other._server_hb;
