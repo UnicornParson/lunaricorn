@@ -99,6 +99,7 @@ add_executable(signaling
     message_storage.cpp
     signaling_engine.cpp
     signaling_engine_test.cpp
+    signal_waiter.cpp
 )
 
 # Include directories

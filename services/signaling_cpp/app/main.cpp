@@ -5,9 +5,15 @@
 
 #include "signaling_engine.h"
 #include "signaling_engine_test.h"
+#include "signal_waiter.h"
+#include "raw_endpoint.h"
 
 constexpr std::string app_name { "signaling" };
 constexpr std::string app_ver { "0.2" };
+constexpr std::string raw_host { "127.0.0.1" };
+constexpr Poco::UInt16 raw_port = 8080;
+
+
 using namespace lunaricorn;
 
 std::string get_instance_identifier()
@@ -31,24 +37,21 @@ int main() {
     MLog::is_stub = true;
     bool selftest_ok = false;
     MLOG_D("run {} {}", app_name, app_token);
-
+    SignalWaiter signals;
     DbConfig dbcfg = loadConfigFromEnvironment();
     auto engine = make_engine(dbcfg);
     auto engine_test = std::make_shared<SignalingEngineTest>(engine);
-    MLOG_D("creat objects - ok");
     selftest_ok = engine_test->run();
-/*
-    try
+    if (!selftest_ok)
     {
-        std::shared_ptr<Leader> leader = std::make_shared<Leader>();
-        net::io_context ioc;
-        auto endpoint = std::make_shared<Endpoint>(ioc, leader);
-        endpoint->run(tcp::endpoint(net::ip::make_address("0.0.0.0"), 8000));
-        ioc.run();
-    } catch (const std::exception& e) {
-        MLOG_E("Fatal error: {}", e.what());
-        return 1;
+        MLOG_E("engine selftest failed");
+        return -1;
     }
-        */
+    auto endpoint = std::make_shared<RawEndpoint>(raw_host, raw_port, engine);
+    MLOG_D("create objects - ok");
+    signals.wait();
+    endpoint->stop();
+
     MLOG_D("NORMAL EXIT {} {}, selftest_ok:{}", app_name, app_token, selftest_ok);
+    return 0;
 }

@@ -105,6 +105,7 @@ add_executable(signaling_test
     test.cpp
     api_test.cpp
     signaling_event_test.cpp
+    raw_connection_test.cpp
 )
 
 # Include directories
@@ -112,6 +113,7 @@ target_include_directories(signaling_test PRIVATE
     ${Boost_INCLUDE_DIRS}
     ${POCO_INCLUDE_DIR}
     /opt/app/apilib/
+    /opt/app/lunaricorn/cpp/
 )
 
 # Link libraries (static)

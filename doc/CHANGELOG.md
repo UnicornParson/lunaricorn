@@ -1,6 +1,69 @@
 # Журнал изменений проекта Lunaricorn
 
-## 2026-06-29
+## 2026-06-30
+
+### Добавлено
+
+#### Тесты Raw Connection API (`services/signaling_cpp/test_client/raw_connection_test.cpp`)
+- **Тесты SignalingProto**:
+  - `Proto_InitialState` — проверка начальной статистики
+  - `Proto_SerializeHeartbeat` — сериализация heartbeat
+  - `Proto_SerializePushRequest` — сериализация push запроса
+  - `Proto_SerializeResponse` — сериализация ответа
+  - `Proto_DeserializeWrongMagic` — ошибка неправильного magic
+  - `Proto_DeserializeWrongVersion` — ошибка неправильной версии
+  - `Proto_DeserializeNonJsonContent` — ошибка не-JSON контента
+  - `Proto_DeserializeEmptyBuffer` — ошибка пустого буфера
+  - `Proto_StatsTracking` — отслеживание статистики
+- **Тесты SignalingEvent**:
+  - `SignalingEvent_ToDictFromDict` — конвертация в/из dict
+  - `SignalingEvent_PushRequestMakeHeader` — создание заголовка
+- **Тесты SignalingPushRequest**:
+  - `SignalingPushRequest_MakeHeaderZeroSeq` — заголовок с seq=0
+- **Тесты SignalingSubEvent**:
+  - `SignalingSubEvent_Build` — успешная сборка
+  - `SignalingSubEvent_BuildInvalid` — ошибка сборки
+- **Тесты SignalingResponse**:
+  - `SignalingResponse_Default` — значения по умолчанию
+  - `SignalingResponse_WithSeq` — с seq
+  - `SignalingResponse_Comparison` — сравнение
+- **Тесты MessageHeader**:
+  - `MessageHeader_Size` — проверка размера
+  - `MessageHeader_DefaultValues` — значения по умолчанию
+- **Тесты констант**:
+  - `ProtocolConstants` — заголовочные константы
+  - `MessageTypeValues` — типы сообщений
+  - `ContentTypeValues` — типы контента
+  - `SignalingEventTypes` — типы событий
+  - `SignalingEventTags` — теги событий
+- **Интеграционные тесты SignalingConnector**:
+  - `INTEGRATION_ConnectToServer` — подключение к серверу
+  - `INTEGRATION_PushEventAndGetResponse` — push и ответ
+  - `INTEGRATION_HeartbeatMechanism` — механизм heartbeat
+  - `INTEGRATION_DisconnectHandling` — обработка отключения
+  - `INTEGRATION_MultiplePushes` — множественные push
+  - `INTEGRATION_InvalidHostFails` — ошибка при неправильном хосте
+  - `INTEGRATION_EmptyHostFails` — ошибка пустого хоста
+  - `INTEGRATION_ZeroPortFails` — ошибка нулевого порта
+  - `INTEGRATION_SubscriptionReceivesEvents` — получение подписок
+  - `INTEGRATION_ConnectorReadyState` — состояние ready
+  - `INTEGRATION_PushWithInvalidEvent` — push с неверным событием
+  - `INTEGRATION_SeqIncrement` — инкремент seq
+- **Тесты утилит lunaricorn**:
+  - `EventQueue_PushGetAll` — push и get_all
+  - `EventQueue_EmptyAfterGetAll` — пустая очередь
+  - `EventQueue_ThreadSafety` — потокобезопасность
+  - `Counted_IncrementDecrement` — подсчёт живых объектов
+
+#### CMakeLists.txt
+- Добавлен `raw_connection_test.cpp` в target `signaling_test`
+- Добавлен include path `/opt/app/lunaricorn/cpp/`
+
+### Изменены файлы
+
+- `services/signaling_cpp/test_client/raw_connection_test.cpp` — создано
+- `services/signaling_cpp/test_client/CMakeLists.txt` — обновлено
+- `doc/CHANGELOG.md` — обновлено
 
 ### Изменено
 
