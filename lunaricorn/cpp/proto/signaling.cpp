@@ -110,6 +110,7 @@ bool SignalingProto::deserializeJson(const std::vector<uint8_t>& buf, IncomingMe
         out.data = boost::json::object();
         out.isValid = true;
         out.errorReason.clear();
+        s_.ok++;
         return true;
 
     }

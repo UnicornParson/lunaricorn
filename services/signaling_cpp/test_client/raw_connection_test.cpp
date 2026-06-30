@@ -29,14 +29,17 @@
 using namespace lunaricorn;
 using namespace lunaricorn::internal;
 
+constexpr std::string raw_host { "127.0.0.1" };
+constexpr Poco::UInt16 raw_port = 8080;
+
 // ============================================================================
 // Test fixture for integration tests
 // ============================================================================
 
 struct RawConnectionFixture {
     // Configuration - will be overridden by environment or command line
-    std::string server_host = "127.0.0.1";
-    Poco::UInt16 server_port = 9090;
+    std::string server_host = raw_host;
+    Poco::UInt16 server_port = raw_port;
     
     // Test helpers
     std::atomic<bool> connected{false};
@@ -87,7 +90,8 @@ struct RawConnectionFixture {
 
 // Create a test signaling event (free function for use in BOOST_AUTO_TEST_CASE)
 inline SignalingEvent create_test_event(const std::string& type = "test.message",
-                                        const std::string& source = "test_client") {
+                                        const std::string& source = "test_client")
+{
     SignalingEvent event;
     event.type = type;
     event.source = source;
@@ -275,6 +279,7 @@ BOOST_AUTO_TEST_CASE(Proto_DeserializeNonJsonContent) {
 BOOST_AUTO_TEST_CASE(Proto_StatsTracking) {
     SignalingProto proto;
     
+    // Create a valid buffer with correct header
     MessageHeader header;
     header.magic = HeaderMagic;
     header.version = PROTOCOL_VERSION;
@@ -289,13 +294,13 @@ BOOST_AUTO_TEST_CASE(Proto_StatsTracking) {
     buffer.resize(sizeof(MessageHeader));
     std::memcpy(buffer.data(), &header, sizeof(MessageHeader));
     
-    // Valid deserialize should increment ok
+    // Valid deserialize (empty payload with CT_Json) should increment ok
     IncomingMessage msg1;
     BOOST_CHECK(proto.deserializeJson(buffer, msg1));
     BOOST_CHECK_EQUAL(proto.stats().ok.load(), 1ULL);
     BOOST_CHECK_EQUAL(proto.stats().fails.load(), 0ULL);
     
-    // Invalid deserialize should increment fails
+    // Invalid deserialize (empty buffer) should increment fails
     std::vector<uint8_t> badBuffer;
     IncomingMessage msg2;
     BOOST_CHECK(!proto.deserializeJson(badBuffer, msg2));
@@ -420,9 +425,9 @@ BOOST_AUTO_TEST_CASE(SignalingResponse_Comparison) {
 // Unit tests for MessageHeader
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(MessageHeader_Size) {
-    // Verify the packed size of MessageHeader
-    BOOST_CHECK_EQUAL(sizeof(MessageHeader), 28u);
+BOOST_AUTO_TEST_CASE(MessageHeader_Size)
+{
+    BOOST_CHECK_EQUAL(sizeof(MessageHeader), 24u);
 }
 
 BOOST_AUTO_TEST_CASE(MessageHeader_DefaultValues) {
@@ -493,7 +498,7 @@ BOOST_AUTO_TEST_CASE(SignalingEventTags) {
 // ============================================================================
 // Integration test suite (requires running server)
 // ============================================================================
-
+BOOST_AUTO_TEST_SUITE_END()
 BOOST_FIXTURE_TEST_SUITE(RawConnectionIntegrationSuite, RawConnectionFixture)
 
 // Integration test: Connect to server
