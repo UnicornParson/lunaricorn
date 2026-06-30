@@ -77,8 +77,14 @@ void RawEndpoint::acceptLoop()
     {
         try
         {
+            MLOG_D("acceptLoop: waiting for incoming connection...");
             Poco::Net::StreamSocket clientSocket = _serverSocket.acceptConnection();
             if (_stopping) break;
+
+            // Get client address for logging
+            const Poco::Net::SocketAddress& addr = clientSocket.address();
+            MLOG_D("acceptLoop: new connection from {}:{}, port {}", 
+                   addr.host().toString(), addr.host().toString(), addr.port());
 
             // Create client and transfer socket ownership
             RE_Client_ptr client = std::make_shared<RE_Client>(std::move(clientSocket));
@@ -90,6 +96,8 @@ void RawEndpoint::acceptLoop()
             uint64_t id = _nextId.fetch_add(1);
             client->set_id(id);
 
+            MLOG_D("acceptLoop: assigned client id={}, total clients={}", id, RE_Client::clients_count());
+
             // Set up callback for server-side message processing
             client->set_message_callback([this](uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg) {
                 on_client_message(clientId, msg);
@@ -98,8 +106,10 @@ void RawEndpoint::acceptLoop()
             {
                 std::lock_guard<std::mutex> lock(_clientsMutex);
                 _clients.emplace(id, client);
+                MLOG_D("acceptLoop: client {} added to _clients map, total connected: {}", 
+                       id, _clients.size());
             }
-            MLOG_D("new client {}", id);
+            MLOG_D("acceptLoop: new client {} accepted and registered", id);
         }
         catch (const Poco::Exception& e)
         {
@@ -204,6 +214,10 @@ void RawEndpoint::handleClients()
 
 void RawEndpoint::on_client_message(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
 {
+    MLOG_D("on_client_message[{}]: received msg type={} data_type={} seq={} data_len={}", 
+           clientId, static_cast<int>(msg.header.type), 
+           static_cast<int>(msg.header.data_type), msg.header.seq, msg.header.data_len);
+
     // Process based on message type
     switch (msg.header.type) {
         case lunaricorn::internal::MessageType::MT_HB:
@@ -229,6 +243,9 @@ void RawEndpoint::on_client_message(uint64_t clientId, const lunaricorn::interna
 
 void RawEndpoint::on_client_closed(uint64_t clientId)
 {
+    MLOG_D("on_client_closed[{}]: client closing, current connected: {}", 
+           clientId, _clients.size());
+
     std::lock_guard<std::mutex> lock(_clientsMutex);
     auto it = _clients.find(clientId);
     if (it != _clients.end())
@@ -238,38 +255,61 @@ void RawEndpoint::on_client_closed(uint64_t clientId)
         if(!client){MBUG("null client data for {}", clientId); return;}
         try { client->socket().close();} catch (...) {}
         const auto s = std::chrono::duration_cast<std::chrono::seconds>(client->client_hb_delay()).count();
-        MLOG_D("client {} closed. last hb {} seconds ago", clientId, s);
+        MLOG_D("on_client_closed[{}]: client disconnected. session_duration={}s, total connected: {}", 
+               clientId, s, _clients.size());
     } else {
-        MBUG("unknown client id: {}", clientId);
+        MLOG_D("on_client_closed[{}]: client not found in map (already removed)", clientId);
     }
 }
 
 void RawEndpoint::processHeartbeat(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
 {
-    MLOG_D("Received heartbeat from client {}", clientId);
+    MLOG_D("processHeartbeat[{}]: received heartbeat, data_len={}", clientId, msg.header.data_len);
     // Update client heartbeat timestamp
     std::lock_guard<std::mutex> lock(_clientsMutex);
     auto it = _clients.find(clientId);
     if (it != _clients.end()) {
         it->second->update_client_hb();
+        MLOG_D("processHeartbeat[{}]: heartbeat updated, total connected: {}", clientId, _clients.size());
+    } else {
+        MBUG("processHeartbeat[{}]: client not found in _clients map", clientId);
     }
 }
 
 void RawEndpoint::processSubscription(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
 {
-    MLOG_D("Received subscription from client {}", clientId);
+    MLOG_D("processSubscription[{}]: received subscription request, seq={}, data_len={}", 
+           clientId, msg.header.seq, msg.header.data_len);
+    
+    // Log subscription data if available
+    if (msg.header.data_len > 0 && !msg.data.empty()) {
+        MLOG_D("processSubscription[{}]: subscription payload size={}", 
+               clientId, msg.data.size());
+    }
+
     // Handle subscription request
     // In a real implementation, this would register the client for specific event types
+    MLOG_D("processSubscription[{}]: sending acknowledgment", clientId);
     sendResponse(clientId, msg.header.seq, true);  // Acknowledge subscription
+    MLOG_D("processSubscription[{}]: subscription acknowledged", clientId);
 }
 
 void RawEndpoint::processPushRequest(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
 {
-    MLOG_D("Received push request from client {}", clientId);
+    MLOG_D("processPushRequest[{}]: received push request, seq={}, data_len={}", 
+           clientId, msg.header.seq, msg.header.data_len);
+    
+    // Log push data if available
+    if (msg.header.data_len > 0 && !msg.data.empty()) {
+        MLOG_D("processPushRequest[{}]: push payload size={}", 
+               clientId, msg.data.size());
+    }
+
     // Handle push request - forward to event system
     // In a real implementation, this would process the event and broadcast it
     
     // Send acknowledgment response
+    MLOG_D("processPushRequest[{}]: sending acknowledgment", clientId);
     sendResponse(clientId, msg.header.seq, true);  // Acknowledge receipt
 }
 
@@ -282,8 +322,17 @@ void RawEndpoint::processResponse(uint64_t clientId, const lunaricorn::internal:
 
 void RawEndpoint::processQueryRequest(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
 {
-    MLOG_D("Received query request from client {}", clientId);
+    MLOG_D("processQueryRequest[{}]: received query request, seq={}, data_len={}", 
+           clientId, msg.header.seq, msg.header.data_len);
+    
+    // Log query data if available
+    if (msg.header.data_len > 0 && !msg.data.empty()) {
+        MLOG_D("processQueryRequest[{}]: query payload size={}", 
+               clientId, msg.data.size());
+    }
+
     // Handle query request - forward to event system
+    MLOG_D("processQueryRequest[{}]: sending acknowledgment", clientId);
     sendResponse(clientId, msg.header.seq, true);  // Acknowledge query
 }
 
@@ -318,15 +367,21 @@ void RawEndpoint::sendHeartbeat(uint64_t clientId)
     auto it = _clients.find(clientId);
     if (it != _clients.end()) {
         try {
+            MLOG_D("sendHeartbeat[{}]: sending heartbeat", clientId);
             it->second->send_message(hb_msg, boost::json::object());
         } catch (const std::exception& e) {
             MLOG_E("Failed to send heartbeat to client {}: {}", clientId, e.what());
         }
+    } else {
+        MBUG("sendHeartbeat[{}]: client not found", clientId);
     }
 }
 
 void RawEndpoint::sendResponse(uint64_t clientId, uint64_t seq, bool success, const boost::json::object& data)
 {
+    MLOG_D("sendResponse[{}]: sending response, seq={}, success={}, data_obj_size={}", 
+           clientId, seq, success, data.size());
+    
     // Create response message
     lunaricorn::internal::MessageHeader resp_msg = {
         .magic = lunaricorn::internal::HeaderMagic,
@@ -342,7 +397,7 @@ void RawEndpoint::sendResponse(uint64_t clientId, uint64_t seq, bool success, co
     std::vector<uint8_t> buf;
     size_t sz = _proto->serializeJson(resp_msg, buf, data);
     if (sz == 0) {
-        MLOG_E("Failed to serialize response message");
+        MLOG_E("sendResponse[{}]: Failed to serialize response message", clientId);
         return;
     }
     
@@ -352,9 +407,13 @@ void RawEndpoint::sendResponse(uint64_t clientId, uint64_t seq, bool success, co
     if (it != _clients.end()) {
         try {
             it->second->send_message(resp_msg, data);
+            MLOG_D("sendResponse[{}]: response sent successfully", clientId);
         } catch (const std::exception& e) {
-            MLOG_E("Failed to send response to client {}: {}", clientId, e.what());
+            MLOG_E("sendResponse[{}]: Failed to send response to client {}: {}", 
+                   clientId, clientId, e.what());
         }
+    } else {
+        MBUG("sendResponse[{}]: client not found in _clients map", clientId);
     }
 }
 

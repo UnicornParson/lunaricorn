@@ -49,6 +49,7 @@ int main() {
     }
     auto endpoint = std::make_shared<RawEndpoint>(raw_host, raw_port, engine);
     MLOG_D("create objects - ok");
+    endpoint->start();
     signals.wait();
     endpoint->stop();
 
