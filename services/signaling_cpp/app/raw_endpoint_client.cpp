@@ -105,6 +105,14 @@ void RE_Client::processData(const std::vector<char>& data)
                 return;
             }
 
+            // Check for size_t overflow: sizeof(MessageHeader) + data_len must not wrap around
+            if (sizeof(MessageHeader) + _pstate.header.data_len < sizeof(MessageHeader))
+            {
+                MLOG_E("data_len overflow detected: data_len={}", _pstate.header.data_len);
+                _pstate.reset();
+                return;
+            }
+
             _pstate.buffer.resize(sizeof(MessageHeader) + _pstate.header.data_len);
 
             std::memcpy(_pstate.buffer.data(), &_pstate.header, sizeof(MessageHeader));

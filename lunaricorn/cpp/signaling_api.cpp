@@ -237,6 +237,14 @@ void SignalingConnector::on_data(std::span<const uint8_t> data)
             {
                 MLOG_E("payload too large: max={} actual={}",lunaricorn::internal::MAX_DATA_LEN,_pstate.header.data_len);
                 _pstate.reset();
+                continue; // FIX: continue instead of return — try next bytes
+            }
+
+            // Check for size_t overflow: sizeof(MessageHeader) + data_len must not wrap around
+            if (sizeof(MessageHeader) + _pstate.header.data_len < sizeof(MessageHeader))
+            {
+                MLOG_E("data_len overflow detected: data_len={}", _pstate.header.data_len);
+                _pstate.reset();
                 continue;
             }
 
