@@ -182,6 +182,7 @@ void RE_Client::processData(const std::vector<char>& data)
 void RE_Client::on_message(const IncomingMessage& msg)
 {
     const MessageHeader& header = msg.header;
+    DUMP_HEADER(header);
     if (!msg.isValid)
     {
         MLOG_E("invalid header: seq={} reason={}", header.seq, msg.errorReason);
@@ -236,7 +237,7 @@ void RE_Client::on_heartbeat(const IncomingMessage& msg)
         .data_len = 0,
         .crc = 0
     };
-
+    
     boost::json::object resp;
     resp["status"] = "ok";
 
@@ -532,6 +533,7 @@ void RE_Client::on_subscription(const IncomingMessage& msg)
 
 bool RE_Client::send_message(MessageHeader& msg, const boost::json::object& data)
 {
+    DUMP_HEADER(msg);
     std::vector<uint8_t> buf;
     if (!data.empty())
     {

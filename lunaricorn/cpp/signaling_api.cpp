@@ -166,6 +166,7 @@ void SignalingConnector::send_client_hb()
         .data_len = 0,
         .crc = 0
     };
+    DUMP_HEADER(hb_msg);
     bool sendRc = send_message(hb_msg, boost::json::object());
     if (!sendRc)
     {
@@ -308,6 +309,7 @@ void SignalingConnector::on_data(std::span<const uint8_t> data)
 void SignalingConnector::on_message(const lunaricorn::internal::IncomingMessage& msg)
 {
     const lunaricorn::internal::MessageHeader& header = msg.header;
+    DUMP_HEADER(header);
     const auto seq = header.seq;
     if (!msg.isValid)
     {
@@ -470,6 +472,7 @@ void SignalingConnector::runner(std::stop_token stopToken, std::shared_ptr<lunar
 
 bool SignalingConnector::send_message(lunaricorn::internal::MessageHeader& msg,const boost::json::object& data)
 {
+    DUMP_HEADER(msg);
     std::vector<uint8_t> buf;
     if (!data.empty())
     {
@@ -511,6 +514,7 @@ bool SignalingConnector::push(const SignalingEvent& event)
         }
         _pending_responses[seq] = resp;
     }
+    DUMP_HEADER(header);
     bool send_rc = send_message(header, msg.data);
     if (send_rc)
     {

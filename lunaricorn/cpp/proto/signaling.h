@@ -3,6 +3,9 @@
 #include <atomic>
 #include <vector>
 #include <list>
+#include <sstream>
+#include <iomanip>
+
 #include <boost/json.hpp>
 #include <Poco/DateTime.h>
 #include <Poco/Net/StreamSocket.h>
@@ -81,8 +84,12 @@ struct MessageHeader
     uint64_t seq = 0; 
     uint32_t data_len = 0;
     uint32_t crc = 0; // ignore it if no payload
+
+    std::string str() const;
 };
 #pragma pack(pop)
+
+#define DUMP_HEADER(hdr) MLOG_D("{}.{}.{} MessageHeader: {}", __FILE__, __FUNCTION__, __LINE__, hdr.str())
 
 struct IncomingMessage
 {

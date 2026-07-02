@@ -10,6 +10,29 @@
 namespace lunaricorn {
 namespace internal {
 
+std::string MessageHeader::str() const
+{
+    std::ostringstream oss;
+    oss << "magic=0x" << std::hex << std::setfill('0') << std::setw(8) << magic
+        << " version=" << std::dec << static_cast<int>(version)
+        << " type=" << static_cast<int>(type)
+        << " data_type=" << static_cast<int>(data_type)
+        << " flags=" << static_cast<int>(flags)
+        << " seq=" << seq
+        << " data_len=" << data_len
+        << " crc=0x" << std::hex << std::setw(8) << crc
+        << " dump=";
+
+    // Шестнадцатеричный дамп всей структуры (байт за байтом)
+    const auto* bytes = reinterpret_cast<const uint8_t*>(this);
+    for (size_t i = 0; i < sizeof(MessageHeader); ++i) {
+        if (i > 0) oss << ' ';
+        oss << std::hex << std::setfill('0') << std::setw(2)
+            << static_cast<int>(bytes[i]);
+    }
+    return oss.str();
+}
+
 bool SignalingProto::send_raw(std::shared_ptr<Poco::Net::StreamSocket> sock, const std::vector<uint8_t>& data)
 {
     if (data.empty()){return true;}
