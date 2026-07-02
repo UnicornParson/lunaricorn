@@ -96,6 +96,13 @@ public:
 
 
     bool push(const lunaricorn::internal::SignalingEvent& event);
+    
+    // Subscribe/unsubscribe to event types
+    bool subscribe(const std::vector<std::string>& types,
+                   const std::vector<std::string>& sources = {},
+                   const std::vector<std::string>& affected = {},
+                   const std::vector<std::string>& tags = {});
+    bool unsubscribe();
 private:
 struct IncomingPacketState
 {

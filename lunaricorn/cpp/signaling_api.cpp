@@ -533,4 +533,94 @@ bool SignalingConnector::push(const SignalingEvent& event)
     return send_rc;
 }
 
+bool SignalingConnector::subscribe(const std::vector<std::string>& types,
+                                    const std::vector<std::string>& sources,
+                                    const std::vector<std::string>& affected,
+                                    const std::vector<std::string>& tags)
+{
+    if (!ready()) {
+        MLOG_E("not connected");
+        return false;
+    }
+
+    const seq_t seq = make_seq();
+
+    boost::json::object sub_data;
+    if (!types.empty()) {
+        boost::json::array types_arr;
+        for (const auto& t : types) {
+            types_arr.push_back(boost::json::value(t));
+        }
+        sub_data["types"] = std::move(types_arr);
+    }
+    if (!sources.empty()) {
+        boost::json::array src_arr;
+        for (const auto& s : sources) {
+            src_arr.push_back(boost::json::value(s));
+        }
+        sub_data["sources"] = std::move(src_arr);
+    }
+    if (!affected.empty()) {
+        boost::json::array aff_arr;
+        for (const auto& a : affected) {
+            aff_arr.push_back(boost::json::value(a));
+        }
+        sub_data["affected"] = std::move(aff_arr);
+    }
+    if (!tags.empty()) {
+        boost::json::array tag_arr;
+        for (const auto& tg : tags) {
+            tag_arr.push_back(boost::json::value(tg));
+        }
+        sub_data["tags"] = std::move(tag_arr);
+    }
+
+    // Create MT_Sub message
+    lunaricorn::internal::MessageHeader header{};
+    header.magic = lunaricorn::internal::HeaderMagic;
+    header.version = lunaricorn::internal::PROTOCOL_VERSION;
+    header.type = lunaricorn::internal::MessageType::MT_Sub;
+    header.data_type = lunaricorn::internal::ContentType::CT_Json;
+    header.flags = 0;
+    header.seq = seq;
+    header.data_len = static_cast<uint32_t>(boost::json::serialize(sub_data).size());
+    header.crc = 0;
+
+    SignalingResponse resp(seq);
+    resp.origin.emplace<SignalingPushRequest>(SignalingPushRequest(seq));
+    {
+        std::lock_guard<std::mutex> lock(_pending_responses_mutex);
+        _pending_responses[seq] = resp;
+    }
+
+    MLOG_D("send subscribe seq={}, types={}", seq, types.size());
+    return send_message(header, sub_data);
+}
+
+bool SignalingConnector::unsubscribe()
+{
+    if (!ready()) {
+        MLOG_E("not connected");
+        return false;
+    }
+
+    const seq_t seq = make_seq();
+
+    boost::json::object sub_data;
+    sub_data["action"] = boost::json::value("unsubscribe");
+
+    lunaricorn::internal::MessageHeader header{};
+    header.magic = lunaricorn::internal::HeaderMagic;
+    header.version = lunaricorn::internal::PROTOCOL_VERSION;
+    header.type = lunaricorn::internal::MessageType::MT_Sub;
+    header.data_type = lunaricorn::internal::ContentType::CT_Json;
+    header.flags = 0;
+    header.seq = seq;
+    header.data_len = static_cast<uint32_t>(boost::json::serialize(sub_data).size());
+    header.crc = 0;
+
+    MLOG_D("send unsubscribe seq={}", seq);
+    return send_message(header, sub_data);
+}
+
 } // namespace lunaricorn
