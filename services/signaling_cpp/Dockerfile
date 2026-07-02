@@ -24,10 +24,24 @@ ADD tmp/lunaricorn.tgz /opt/tmp
 RUN cp -rvf /opt/tmp/lunaricorn/cpp/*  /opt/test_client/apilib
 RUN /opt/test_client/build.sh
 
+FROM lunaricorn_signaling_cpp_builder AS cli_builder
+ENV CMAKE_PREFIX_PATH=/opt/3rd/soci/bin:$CMAKE_PREFIX_PATH
+COPY cli/ /opt/cli/
+WORKDIR /opt/cli/
+RUN chmod +x /opt/cli/build.sh 
+#ENV BUILD_TYPE=Debug
+ENV BUILD_TYPE=Release
+RUN mkdir -p /opt/tmp && mkdir -p /opt/cli/apilib
+ADD tmp/lunaricorn.tgz /opt/tmp
+RUN cp -rvf /opt/tmp/lunaricorn/cpp/*  /opt/cli/apilib
+RUN /opt/cli/build.sh
+
+
 FROM lunaricorn_signaling_cpp_base
 ENV CMAKE_PREFIX_PATH=/opt/3rd/soci/bin:${CMAKE_PREFIX_PATH:-}
 COPY --from=builder /opt/app/__build/signaling /opt/app/bin/signaling
 COPY --from=tester /opt/test_client/__build/signaling_test /opt/app/bin/tester
+COPY --from=cli_builder /opt/cli/__build/signaling_cli /opt/app/bin/cli
 
 COPY --from=builder /opt/3rd/boost/bin/lib /opt/3rd/boost/bin/lib
 COPY --from=builder /opt/3rd/poco/bin/lib /opt/3rd/poco/bin/lib
