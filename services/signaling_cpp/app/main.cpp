@@ -48,6 +48,10 @@ int main() {
         return -1;
     }
     auto endpoint = std::make_shared<RawEndpoint>(raw_host, raw_port, engine);
+
+    // Connect engine to endpoint for subscriber event delivery
+    endpoint->connectEngine(engine);
+
     MLOG_D("create objects - ok");
     endpoint->start();
     signals.wait();

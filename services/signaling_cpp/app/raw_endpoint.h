@@ -30,6 +30,9 @@ public:
     virtual bool stop()  override;
     virtual void handleEvent(const EventData& event) override;
 
+    // Connect engine and set up subscriber callback (must be called after construction)
+    void connectEngine(SignalingEnginePtr engine);
+
 private:
 
     void acceptLoop();
@@ -49,6 +52,9 @@ private:
     // Send response methods
     void sendHeartbeat(uint64_t clientId);
     void sendResponse(uint64_t clientId, uint64_t seq, bool success, const boost::json::object& data = {});
+
+    // Send a push event to a specific subscribed client
+    void sendEventToClient(uint64_t clientId, const StoredEventData& event_data);
 
     Poco::Net::ServerSocket _serverSocket;
     std::map<uint64_t, RE_Client_ptr> _clients;

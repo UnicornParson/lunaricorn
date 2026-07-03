@@ -1,8 +1,127 @@
-# План работ: P3 — Интеграция подписок с SignalingEngine
+# Выполнено: P3 — Интеграция подписок с SignalingEngine
 
-## Проблема
+## Статус: ✅ ЗАВЕРШЕНО
 
-`RawEndpoint::processSubscription()` отправляет ACK клиенту, но не вызывает `engine->subscribe()`. В результате клиенты не получают pushed события после подписки.
+Все этапы плана реализованы и успешно собраны.
+
+---
+
+## Реализованные изменения
+
+### Проблема
+
+`RawEndpoint::processSubscription()` отправлял ACK клиенту, но не вызывал `engine->subscribe()`. В результате клиенты не получали pushed события после подписки.
+
+### Решение
+
+Реализована полная цепочка подписок: клиент подписывается → события парсятся → рассылка подписанным клиентам.
+
+---
+
+### Этап 1: Парсинг payload подписки ✅
+
+**Файл:** `app/raw_endpoint.cpp`
+
+- Добавлен `parseSubscriptionPayload()` — принимает `boost::json::value`, извлекает `types`, `sources`, `affected`, `tags`
+- Обновлён `processSubscription()` — парсит JSON payload и вызывает `_engine->subscribe()`
+- Helper-функции обновлены для работы с `boost::json::value` напрямую:
+  - `extractJsonStringField()`
+  - `extractOptionalJsonString()`
+  - `extractJsonValueField()`
+  - `extractJsonTagsField()`
+
+**Формат payload:**
+```json
+{
+  "types": ["orb.system", "orb.alert"],
+  "sources": ["risk_engine"],
+  "affected": ["EURUSD"],
+  "tags": ["News", "Md"]
+}
+```
+Все поля опциональны. Пустой payload = подписка на все события.
+
+### Этап 2: Broadcast событий ✅
+
+**Файл:** `app/raw_endpoint.cpp`
+
+- `processPushRequest()` теперь:
+  1. Парсит JSON payload
+  2. Преобразует в `StoredEventData`
+  3. Вызывает `_engine->createEvent()` для сохранения
+  4. Вызывает `_engine->dispatchEvent()` для рассылки подписанным клиентам
+  5. Отвечает клиенту с `event_id`
+
+### Этап 3: Отправка событий подписанным клиентам ✅
+
+**Файл:** `app/raw_endpoint.h`
+- Добавлен публичный метод `connectEngine(SignalingEnginePtr engine)`
+
+**Файл:** `app/raw_endpoint.cpp`
+- Реализован `sendEventToClient()` — отправляет событие конкретному клиенту через WebSocket
+- Реализован `connectEngine()` — связывает `SignalingEngine` с `RawEndpoint`:
+  - Устанавливает `_engine`
+  - Подключает callback `setOnSubEvent()` для рассылки событий подписанным клиентам
+
+**Файл:** `app/main.cpp`
+- Добавлен вызов `endpoint->connectEngine(engine)` после создания endpoint
+
+### Этап 4: Автоотписка при disconnect ✅
+
+**Файл:** `app/raw_endpoint.cpp`
+
+- `on_client_closed()` теперь вызывает `_engine->unsubscribe(clientId)` при отключении клиента
+
+### Этап 5: Тестирование ✅
+
+- Сборка через `make_app.sh` прошла успешно
+- Все C++ файлы компилируются без ошибок
+
+---
+
+## Архитектура подписок
+
+```
+Клиент → MT_Sub (JSON filters) → processSubscription()
+    ↓
+engine->subscribe(clientId, types, sources, affected, tags)
+    ↓
+Клиент → MT_PubReq (JSON event) → processPushRequest()
+    ↓
+engine->createEvent(event_data) → сохранение в БД
+engine->dispatchEvent(event_data) → broadcast подписанным
+    ↓
+onSubEvent_(clientId, event_data) → sendEventToClient()
+    ↓
+WebSocket send → клиент получает событие
+    ↓
+Клиент disconnect → on_client_closed() → engine->unsubscribe(clientId)
+```
+
+---
+
+## Завязки между файлами
+
+| Файл | Изменения |
+|------|-----------|
+| `app/raw_endpoint.h` | `connectEngine()` перемещён в `public` |
+| `app/raw_endpoint.cpp` | Парсинг, broadcast, sendEventToClient, connectEngine, автоотписка |
+| `app/main.cpp` | Вызов `connectEngine()` |
+
+---
+
+## Риски (актуальные)
+
+| Риск | Вероятность | Митигация |
+|------|-------------|-----------|
+| Circular reference: engine ↔ endpoint | Низкая | `connectEngine()` вызывается после создания объектов |
+| Deadlock при sendEventToClient + mutex | Низкая | `_clientsMutex` не удерживается во время WebSocket send |
+| Подписчик с медленным recv → буфер переполняется | Средняя | Добавить backpressure / очередь в будущем |
+
+---
+
+*Завершено: 03.07.2026*
+*Сборка: успешно (make_app.sh)*
 
 ## Цели
 

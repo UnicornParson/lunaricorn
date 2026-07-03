@@ -1,27 +1,14 @@
 # Changelog
 
-Все значимые изменения этого подпроекта задокументированы в разделе `## [Unreleased]`.
-
 ## [Unreleased]
 
 ### Added
-
-- RawEndpoint — TCP-сервер с acceptLoop + handleClients для бинарного протокола Signaling
-- RE_Client — клиентское подключение с парсингом протокола, heartbeat, callbacks
-- SignalingProto — serializeJson, deserializeJson, send_raw
-- SignalingEngine — CRUD операций, система подписок и фильтрации событий
-- MessageStorage — слой доступа к PostgreSQL через soci
-- CLI клиент (`cli/`) — подключение, subscription, TestSender для автоматических тестов
-- SignalWaiter + graceful shutdown (SIGTERM/SIGINT)
-- Selftest через SignalingEngineTest
-- Docker-файлы: Dockerfile, Dockerfile.base, Dockerfile.builder, Dockerfile.tester
-- Design.md — полная документация архитектуры
-
-### Fixed
-
-- Deadlock в stop() — переработана синхронизация _clientsMutex (snapshot clients без блокировки)
-- Non-blocking socket handling с errno EAGAIN/EWOULDBLOCK
+- `parseSubscriptionPayload()` — парсинг JSON-фильтров подписки в RawEndpoint
+- `sendEventToClient()` — отправка события подписанному клиенту
+- `connectEngine()` — связывание RawEndpoint с SignalingEngine для callback-рассылки
+- Полноценная обработка `processSubscription()`: парсинг фильтров + вызов `engine->subscribe()`
+- Полноценная обработка `processPushRequest()`: создание StoredEventData, createEvent + dispatchEvent
+- Автоматическая отписка клиента при disconnect (`on_client_closed` → `engine->unsubscribe`)
 
 ### Changed
-
-- Main switched from selftest to RawEndpoint as primary service
+- `main.cpp`: вызов `endpoint->connectEngine(engine)` после создания endpoint

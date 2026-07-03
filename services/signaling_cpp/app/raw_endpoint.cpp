@@ -4,6 +4,7 @@
 #include <Poco/Timespan.h>
 #include <Poco/Exception.h>
 #include <cerrno>
+#include <boost/json.hpp>
 
 #include "stdafx.h"
 
@@ -12,6 +13,107 @@ namespace lunaricorn
 
 static constexpr auto SERVER_HB_PERIOD = std::chrono::seconds(10);
 static constexpr auto CLIENT_HB_PERIOD = std::chrono::seconds(10);
+
+// ---- Helper: parse subscription JSON payload ----
+static bool parseSubscriptionPayload(
+    const boost::json::value& jv,
+    std::vector<std::string>& types,
+    std::vector<std::string>& sources,
+    std::vector<std::string>& affected,
+    std::vector<std::string>& tags)
+{
+    if (!jv.is_object()) {
+        MLOG_E("parseSubscriptionPayload: payload is not a JSON object");
+        return false;
+    }
+
+    const auto& obj = jv.as_object();
+
+    auto extract_array = [](const boost::json::value& val) -> std::vector<std::string> {
+        std::vector<std::string> result;
+        if (val.is_array()) {
+            for (const auto& elem : val.as_array()) {
+                if (elem.is_string()) {
+                    result.push_back(elem.as_string().c_str());
+                }
+            }
+        }
+        return result;
+    };
+
+    if (obj.contains("types")) {
+        types = extract_array(obj.at("types"));
+    }
+    if (obj.contains("sources")) {
+        sources = extract_array(obj.at("sources"));
+    }
+    if (obj.contains("affected")) {
+        affected = extract_array(obj.at("affected"));
+    }
+    if (obj.contains("tags")) {
+        tags = extract_array(obj.at("tags"));
+    }
+
+    return true;
+}
+
+// ---- Helper: extract a string field from a JSON object ----
+static std::string extractJsonStringField(const boost::json::value& jv, const std::string& field, const std::string& default_val)
+{
+    if (jv.is_object() && jv.as_object().contains(field)) {
+        const auto& val = jv.as_object().at(field);
+        if (val.is_string()) {
+            return val.as_string().c_str();
+        }
+    }
+    return default_val;
+}
+
+// ---- Helper: extract an optional string field from JSON ----
+static std::optional<std::string> extractOptionalJsonString(const boost::json::value& jv, const std::string& field)
+{
+    if (jv.is_object() && jv.as_object().contains(field)) {
+        const auto& val = jv.as_object().at(field);
+        if (val.is_string()) {
+            return std::string(val.as_string().c_str());
+        }
+    }
+    return std::nullopt;
+}
+
+// ---- Helper: extract json::value field ----
+static boost::json::value extractJsonValueField(const boost::json::value& jv, const std::string& field)
+{
+    if (jv.is_object() && jv.as_object().contains(field)) {
+        return jv.as_object().at(field);
+    }
+    return boost::json::value();
+}
+
+// ---- Helper: extract tags array from JSON ----
+static std::vector<std::string> extractJsonTagsField(const boost::json::value& jv)
+{
+    if (jv.is_object() && jv.as_object().contains("tags")) {
+        const auto& tags_val = jv.as_object().at("tags");
+        if (tags_val.is_array()) {
+            std::vector<std::string> result;
+            for (const auto& elem : tags_val.as_array()) {
+                if (elem.is_string()) {
+                    result.push_back(elem.as_string().c_str());
+                }
+            }
+            return result;
+        }
+    }
+    return {};
+}
+
+// ---- Helper: get current timestamp in seconds since epoch ----
+static double getCurrentTimestamp()
+{
+    return std::chrono::duration<double>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
 
 RawEndpoint::RawEndpoint(const std::string& ip, Poco::UInt16 port, SignalingEnginePtr engine)
     : _serverSocket(Poco::Net::SocketAddress(Poco::Net::IPAddress(ip), port)),
@@ -308,19 +410,27 @@ void RawEndpoint::on_client_closed(uint64_t clientId)
     MLOG_D("on_client_closed[{}]: client closing, current connected: {}", 
            clientId, _clients.size());
 
-    std::lock_guard<std::mutex> lock(_clientsMutex);
-    auto it = _clients.find(clientId);
-    if (it != _clients.end())
     {
-        auto client = it->second;
-        _clients.erase(it);
-        if(!client){MBUG("null client data for {}", clientId); return;}
-        try { client->socket().close();} catch (...) {}
-        const auto s = std::chrono::duration_cast<std::chrono::seconds>(client->client_hb_delay()).count();
-        MLOG_D("on_client_closed[{}]: client disconnected. session_duration={}s, total connected: {}", 
-               clientId, s, _clients.size());
-    } else {
-        MLOG_D("on_client_closed[{}]: client not found in map (already removed)", clientId);
+        std::lock_guard<std::mutex> lock(_clientsMutex);
+        auto it = _clients.find(clientId);
+        if (it != _clients.end())
+        {
+            auto client = it->second;
+            _clients.erase(it);
+            if(!client){MBUG("null client data for {}", clientId); return;}
+            try { client->socket().close();} catch (...) {}
+            const auto s = std::chrono::duration_cast<std::chrono::seconds>(client->client_hb_delay()).count();
+            MLOG_D("on_client_closed[{}]: client disconnected. session_duration={}s, total connected: {}", 
+                   clientId, s, _clients.size());
+        } else {
+            MLOG_D("on_client_closed[{}]: client not found in map (already removed)", clientId);
+        }
+    }
+
+    // Auto-unsubscribe from events when client disconnects
+    if (_engine) {
+        _engine->unsubscribe(clientId);
+        MLOG_D("on_client_closed[{}]: auto-unsubscribed from events", clientId);
     }
 }
 
@@ -343,17 +453,33 @@ void RawEndpoint::processSubscription(uint64_t clientId, const lunaricorn::inter
     MLOG_D("processSubscription[{}]: received subscription request, seq={}, data_len={}", 
            clientId, msg.header.seq, msg.header.data_len);
     
-    // Log subscription data if available
-    if (msg.header.data_len > 0 && !msg.data.empty()) {
-        MLOG_D("processSubscription[{}]: subscription payload size={}", 
-               clientId, msg.data.size());
+    std::vector<std::string> types, sources, affected, tags;
+    
+    try {
+        boost::json::value jv = boost::json::value(msg.data);
+        if (!parseSubscriptionPayload(jv, types, sources, affected, tags)) {
+            MLOG_E("processSubscription[{}]: invalid subscription payload", clientId);
+            sendResponse(clientId, msg.header.seq, false, 
+                {{"error", boost::json::value("invalid subscription payload")}});
+            return;
+        }
+        MLOG_D("processSubscription[{}]: parsed filters: types={} sources={} affected={} tags={}", 
+               clientId, types.size(), sources.size(), affected.size(), tags.size());
+        
+        // Subscribe client in the engine
+        _engine->subscribe(clientId, types, sources, affected, tags);
+        
+        MLOG_D("processSubscription[{}]: subscribed with {} filters", clientId, 
+               types.size() + sources.size() + affected.size() + tags.size());
+        
+        sendResponse(clientId, msg.header.seq, true, 
+            {{"subscribed", true}, {"client_id", (uint64_t)clientId}});
+    } catch (const std::exception& e) {
+        MLOG_E("processSubscription[{}]: error: {}", clientId, e.what());
+        sendResponse(clientId, msg.header.seq, false, 
+            {{"error", boost::json::value(e.what())}});
+        return;
     }
-
-    // Handle subscription request
-    // In a real implementation, this would register the client for specific event types
-    MLOG_D("processSubscription[{}]: sending acknowledgment", clientId);
-    sendResponse(clientId, msg.header.seq, true);  // Acknowledge subscription
-    MLOG_D("processSubscription[{}]: subscription acknowledged", clientId);
 }
 
 void RawEndpoint::processPushRequest(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
@@ -361,18 +487,44 @@ void RawEndpoint::processPushRequest(uint64_t clientId, const lunaricorn::intern
     MLOG_D("processPushRequest[{}]: received push request, seq={}, data_len={}", 
            clientId, msg.header.seq, msg.header.data_len);
     
-    // Log push data if available
-    if (msg.header.data_len > 0 && !msg.data.empty()) {
-        MLOG_D("processPushRequest[{}]: push payload size={}", 
-               clientId, msg.data.size());
+    if (msg.header.data_len > 0) {
+        try {
+            // Convert incoming message to StoredEventData
+            boost::json::value jv = boost::json::value(msg.data);
+            StoredEventData event_data;
+            event_data.event_type = extractJsonStringField(jv, "type", "unknown");
+            event_data.source = extractOptionalJsonString(jv, "source");
+            event_data.affected = extractJsonValueField(jv, "affected");
+            if (!event_data.affected.is_array()) {
+                event_data.affected = boost::json::array();
+            }
+            event_data.tags = extractJsonTagsField(jv);
+            event_data.payload = extractJsonValueField(jv, "payload");
+            if (event_data.payload.is_null()) {
+                // Use the whole data as payload if no "payload" key
+                event_data.payload = jv;
+            }
+            event_data.timestamp = getCurrentTimestamp();
+            
+            // Create event in storage and broadcast to subscribers
+            long long eid = _engine->createEvent(event_data);
+            _engine->dispatchEvent(event_data);
+            
+            MLOG_D("processPushRequest[{}]: event created id={} type={} broadcast to subscribers", 
+                   clientId, eid, event_data.event_type);
+            
+            sendResponse(clientId, msg.header.seq, true, 
+                {{"event_id", (long long)eid}, {"published", true}});
+        } catch (const std::exception& e) {
+            MLOG_E("processPushRequest[{}]: failed: {}", clientId, e.what());
+            sendResponse(clientId, msg.header.seq, false, 
+                {{"error", boost::json::value(e.what())}});
+        }
+    } else {
+        MLOG_W("processPushRequest[{}]: empty payload", clientId);
+        sendResponse(clientId, msg.header.seq, false, 
+            {{"error", boost::json::value("empty payload")}});
     }
-
-    // Handle push request - forward to event system
-    // In a real implementation, this would process the event and broadcast it
-    
-    // Send acknowledgment response
-    MLOG_D("processPushRequest[{}]: sending acknowledgment", clientId);
-    sendResponse(clientId, msg.header.seq, true);  // Acknowledge receipt
 }
 
 void RawEndpoint::processResponse(uint64_t clientId, const lunaricorn::internal::IncomingMessage& msg)
@@ -477,6 +629,73 @@ void RawEndpoint::sendResponse(uint64_t clientId, uint64_t seq, bool success, co
     } else {
         MBUG("sendResponse[{}]: client not found in _clients map", clientId);
     }
+}
+
+void RawEndpoint::sendEventToClient(uint64_t clientId, const StoredEventData& event_data)
+{
+    std::lock_guard<std::mutex> lock(_clientsMutex);
+    auto it = _clients.find(clientId);
+    if (it == _clients.end() || !it->second) {
+        MLOG_W("sendEventToClient[{}]: client not found", clientId);
+        return;
+    }
+
+    // Create MessageHeader for push event to client
+    lunaricorn::internal::MessageHeader hdr;
+    hdr.magic = lunaricorn::internal::HeaderMagic;
+    hdr.version = lunaricorn::internal::PROTOCOL_VERSION;
+    hdr.type = lunaricorn::internal::MessageType::MT_PubReq;
+    hdr.data_type = lunaricorn::internal::ContentType::CT_Json;
+    hdr.flags = 0;
+    hdr.seq = 0; // pushes have no seq
+    hdr.data_len = 0;
+    hdr.crc = 0;
+
+    // Build payload
+    boost::json::object payload;
+    payload["type"] = boost::json::value(event_data.event_type);
+    if (event_data.source.has_value()) {
+        payload["source"] = boost::json::value(*event_data.source);
+    } else {
+        payload["source"] = boost::json::value(std::string("unknown"));
+    }
+    payload["payload"] = event_data.payload;
+    payload["timestamp"] = boost::json::value(static_cast<int64_t>(event_data.timestamp));
+
+    // Add tags
+    boost::json::array tags_arr;
+    for (const auto& tag : event_data.tags) {
+        tags_arr.push_back(boost::json::value(tag));
+    }
+    payload["tags"] = std::move(tags_arr);
+
+    // Add affected if present
+    if (event_data.affected.is_array() && !event_data.affected.as_array().empty()) {
+        payload["affected"] = event_data.affected;
+    }
+
+    // Send
+    try {
+        it->second->send_message(hdr, payload);
+        MLOG_D("sendEventToClient[{}]: event {} sent", clientId, event_data.event_type);
+    } catch (const std::exception& e) {
+        MLOG_E("sendEventToClient[{}]: failed to send: {}", clientId, e.what());
+        // If send failed, mark client as dead (will be cleaned up on next iter)
+        // Don't call on_client_closed directly to avoid recursive locking
+    }
+}
+
+void RawEndpoint::connectEngine(SignalingEnginePtr engine)
+{
+    if (!engine) {
+        MLOG_E("connectEngine: engine pointer is null");
+        return;
+    }
+    _engine = engine;
+    _engine->setOnSubEvent([this](uint64_t clientId, const StoredEventData& event_data) {
+        sendEventToClient(clientId, event_data);
+    });
+    MLOG_D("connectEngine: subscriber callback connected, engine set");
 }
 
 void RawEndpoint::handleEvent(const EventData& event)
