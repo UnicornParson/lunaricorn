@@ -3,6 +3,7 @@
 #include <Poco/Net/NetException.h>
 #include <Poco/Timespan.h>
 #include <Poco/Exception.h>
+#include <cerrno>
 
 #include "stdafx.h"
 
@@ -228,16 +229,17 @@ void RawEndpoint::handleClients()
                             else
                             {
                                 // bytesRead < 0: non-blocking read returned error
-                                // Check if it's EAGAIN/EWOULDBLOCK (no data available) — normal for non-blocking sockets
-                                int errorCode = Poco::Net::NetException::getErrorCode();
-                                if (errorCode == POCO_ERR_EAGAIN || errorCode == POCO_ERR_EWOULDBLOCK
+                                // In modern POCO, check errno directly for EAGAIN/EWOULDBLOCK
 #ifdef EAGAIN
-                                    || errno == EAGAIN
+                                if (errno == EAGAIN)
 #endif
+                                {
+                                    // No data available, skip to next client
+                                    break;
+                                }
 #ifdef EWOULDBLOCK
-                                    || errno == EWOULDBLOCK
+                                if (errno == EWOULDBLOCK)
 #endif
-                                )
                                 {
                                     // No data available, skip to next client
                                     break;
