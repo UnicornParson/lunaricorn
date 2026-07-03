@@ -196,6 +196,7 @@ int main(int argc, char* argv[])
     std::signal(SIGINT,  signal_handler);
     std::signal(SIGTERM, signal_handler);
     lunaricorn::MLog::is_stub = true;
+    lunaricorn::MLog::quiet = true;
     lunaricorn::MLog::owner = "signaling_cli";
     lunaricorn::MLog::token = "c9e29f33-f893-49ef-81ac-f921c69372be";
 

@@ -117,7 +117,7 @@ public:
     static std::string owner;
     static std::string token;
     static inline bool is_stub = false;
-
+    static inline bool quiet = false; // no messages to console
     // Generic log entry
     static void log(std::string_view msg,
                     const std::source_location& loc = std::source_location::current());
