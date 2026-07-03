@@ -83,8 +83,8 @@ BOOST_AUTO_TEST_CASE(SerializeJson_EmptyObject_Works) {
 }
 
 BOOST_AUTO_TEST_CASE(SerializeJson_DataTooLarge_ThrowsLengthError) {
-    // Создаём JSON, который после сериализации превышает MAX_DATA_LEN (128 МБ)
-    // Чтобы не выделять 128 МБ памяти, используем длинную строку
+    // Создаём JSON, который после сериализации превышает MAX_DATA_LEN (10 МБ)
+    // Чтобы не выделять 10 МБ памяти, используем длинную строку
     std::string longStr(MAX_DATA_LEN + 1, 'x');
     boost::json::object data = {{"big", longStr}};
     std::vector<uint8_t> buffer;

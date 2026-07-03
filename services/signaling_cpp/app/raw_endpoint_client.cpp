@@ -105,12 +105,16 @@ void RE_Client::processData(const std::vector<char>& data)
                 return;
             }
 
-            // Check for size_t overflow: sizeof(MessageHeader) + data_len must not wrap around
-            if (sizeof(MessageHeader) + _pstate.header.data_len < sizeof(MessageHeader))
+            // Defensive check: ensure sizeof(MessageHeader) + data_len does not exceed vector max_size
             {
-                MLOG_E("data_len overflow detected: data_len={}", _pstate.header.data_len);
-                _pstate.reset();
-                return;
+                const size_t totalSize = sizeof(MessageHeader) + _pstate.header.data_len;
+                if (totalSize > _pstate.buffer.max_size())
+                {
+                    MLOG_E("buffer size overflow: sizeof(Header)={} + data_len={} exceeds max_size={}",
+                           sizeof(MessageHeader), _pstate.header.data_len, _pstate.buffer.max_size());
+                    _pstate.reset();
+                    return;
+                }
             }
 
             _pstate.buffer.resize(sizeof(MessageHeader) + _pstate.header.data_len);

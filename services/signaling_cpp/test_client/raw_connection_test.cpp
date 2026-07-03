@@ -450,7 +450,7 @@ BOOST_AUTO_TEST_CASE(MessageHeader_DefaultValues) {
 BOOST_AUTO_TEST_CASE(ProtocolConstants) {
     BOOST_CHECK_EQUAL(HeaderMagic, 0x12345678);
     BOOST_CHECK_EQUAL(PROTOCOL_VERSION, 1);
-    BOOST_CHECK_EQUAL(MAX_DATA_LEN, 128 * 1024 * 1024);  // 128MB
+    BOOST_CHECK_EQUAL(MAX_DATA_LEN, 10 * 1024 * 1024);  // 10 MB hard limit for network packet
     BOOST_CHECK_EQUAL(PH, 0xAB);
 }
 

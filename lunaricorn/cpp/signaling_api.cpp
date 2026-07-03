@@ -71,6 +71,14 @@ bool SignalingConnector::start(const std::string& host, Poco::UInt16 raw_port)
     const Poco::Net::SocketAddress addr(_host, _raw_port);
     _sock = std::make_shared<Poco::Net::StreamSocket>(addr);
     _thread_state = std::make_shared<ThreadState>();  // FIX: store state for stop_runner()
+    
+    // [FIX #2] Set _connected = true BEFORE starting the heartbeat timer.
+    // ready() checks _connected && _sock && _sock->impl()->initialized().
+    // If _connected is true before the socket is ready for I/O, the heartbeat
+    // timer may send messages before runner() starts polling, causing data
+    // to remain in the socket buffer unread.
+    _connected = true;
+    
     _runner_thread = std::jthread([this](std::stop_token st){runner(st, _thread_state);});
     {
         std::lock_guard<std::mutex> lock(_last_send_mutex);
@@ -78,7 +86,6 @@ bool SignalingConnector::start(const std::string& host, Poco::UInt16 raw_port)
     }
     _hb_timer.start(Poco::TimerCallback<SignalingConnector>(*this, &SignalingConnector::onHBTimer));
 
-    _connected = true;
     return _connected;
 }
 bool SignalingConnector::stop()
@@ -408,7 +415,7 @@ void SignalingConnector::runner(std::stop_token stopToken, std::shared_ptr<lunar
             state->finished.store(true, std::memory_order_release);
         }
     } finishGuard{ state };
-    static const Poco::Timespan pollTimeout(1000000); // 1s
+    static const Poco::Timespan pollTimeout(100000); // 100ms — Fix #3: reduced from 1s to avoid delayed reads
     std::vector<uint8_t> buffer(kRecvBufSize);
     bool normal_break = true;
     uint64_t magic = 0;
@@ -513,6 +520,11 @@ bool SignalingConnector::push(const SignalingEvent& event)
     msg.make_header(header);
     SignalingResponse resp(seq);
     resp.origin.emplace<SignalingPushRequest>(msg);
+    DUMP_HEADER(header);
+    bool send_rc = send_message(header, msg.data);
+    // Fix #4: set _pending_responses AFTER successful send to avoid race condition
+    // where response arrives before pending entry is registered
+    if (send_rc)
     {
         std::lock_guard<std::mutex> lock(_pending_responses_mutex);
         if (_pending_responses.contains(seq))
@@ -521,11 +533,6 @@ bool SignalingConnector::push(const SignalingEvent& event)
             return false;
         }
         _pending_responses[seq] = resp;
-    }
-    DUMP_HEADER(header);
-    bool send_rc = send_message(header, msg.data);
-    if (send_rc)
-    {
         MLOG_D("pushed event with seq {}", seq);
     } else {
         MLOG_E("push event failed seq {}", seq);
@@ -534,9 +541,9 @@ bool SignalingConnector::push(const SignalingEvent& event)
 }
 
 bool SignalingConnector::subscribe(const std::vector<std::string>& types,
-                                    const std::vector<std::string>& sources,
-                                    const std::vector<std::string>& affected,
-                                    const std::vector<std::string>& tags)
+                                     const std::vector<std::string>& sources,
+                                     const std::vector<std::string>& affected,
+                                     const std::vector<std::string>& tags)
 {
     if (!ready()) {
         MLOG_E("not connected");
@@ -588,13 +595,17 @@ bool SignalingConnector::subscribe(const std::vector<std::string>& types,
 
     SignalingResponse resp(seq);
     resp.origin.emplace<SignalingPushRequest>(SignalingPushRequest(seq));
+
+    MLOG_D("send subscribe seq={}, types={}", seq, types.size());
+    bool send_rc = send_message(header, sub_data);
+    // Fix #4: set _pending_responses AFTER successful send to avoid race condition
+    // where response arrives before pending entry is registered
+    if (send_rc)
     {
         std::lock_guard<std::mutex> lock(_pending_responses_mutex);
         _pending_responses[seq] = resp;
     }
-
-    MLOG_D("send subscribe seq={}, types={}", seq, types.size());
-    return send_message(header, sub_data);
+    return send_rc;
 }
 
 bool SignalingConnector::unsubscribe()

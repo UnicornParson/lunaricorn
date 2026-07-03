@@ -17,7 +17,7 @@ namespace internal {
 static constexpr uint8_t PH = 0xAB;
 static constexpr uint32_t HeaderMagic = 0x12345678;
 static constexpr uint8_t  PROTOCOL_VERSION = 1;
-static constexpr uint32_t MAX_DATA_LEN = 128 * 1024 * 1024; // 128mb
+static constexpr uint32_t MAX_DATA_LEN = 10 * 1024 * 1024;  // 10 MB hard limit for network packet
 
 using StringList = std::list<std::string>;
 

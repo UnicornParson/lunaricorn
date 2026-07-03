@@ -214,13 +214,38 @@ void RawEndpoint::handleClients()
                         try 
                         {
                             int bytesRead = client->socket().receiveBytes(buffer.data(), static_cast<int>(buffer.size()));
-                            if (bytesRead == 0) 
+                            if (bytesRead > 0)
                             {
+                                // Pass data to client for accumulation and parsing
+                                client->processData(std::vector<char>(buffer.begin(), buffer.begin() + bytesRead));
+                            }
+                            else if (bytesRead == 0)
+                            {
+                                // Connection closed by peer
                                 on_client_closed(id);
                                 break;
                             }
-                            // Pass data to client for accumulation and parsing
-                            client->processData(std::vector<char>(buffer.begin(), buffer.begin() + bytesRead));
+                            else
+                            {
+                                // bytesRead < 0: non-blocking read returned error
+                                // Check if it's EAGAIN/EWOULDBLOCK (no data available) — normal for non-blocking sockets
+                                int errorCode = Poco::Net::NetException::getErrorCode();
+                                if (errorCode == POCO_ERR_EAGAIN || errorCode == POCO_ERR_EWOULDBLOCK
+#ifdef EAGAIN
+                                    || errno == EAGAIN
+#endif
+#ifdef EWOULDBLOCK
+                                    || errno == EWOULDBLOCK
+#endif
+                                )
+                                {
+                                    // No data available, skip to next client
+                                    break;
+                                }
+                                MLOG_E("receiveBytes failed for client#{}: error code={}", id, bytesRead);
+                                on_client_closed(id);
+                                break;
+                            }
                         }
                         catch (const Poco::TimeoutException&)
                         {
