@@ -362,12 +362,12 @@ void SignalingConnector::on_message(const lunaricorn::internal::IncomingMessage&
 
 void SignalingConnector::on_server_request(const lunaricorn::internal::IncomingMessage& msg)
 {
-    if (!_subCbk) {return;}
     const auto type = msg.header.type;
     switch (type)
     {
     case MT_Sub:
     {
+        if (!_subCbk) {return;}
         SignalingSubEvent sub(0);
         bool buildRc = sub.build(msg.data);
         if (!buildRc) 
@@ -382,6 +382,27 @@ void SignalingConnector::on_server_request(const lunaricorn::internal::IncomingM
         catch(const std::exception& e)
         {
             MLOG_E("subscribe processing: exception occurred: {}", e.what());
+            return;
+        }
+        break;
+    }
+    case MT_PubReq:
+    {
+        if (!_pushCbk) {return;}
+        lunaricorn::internal::SignalingEvent event;
+        if (msg.data.empty())
+        {
+            MLOG_E("MT_PubReq with empty data");
+            return;
+        }
+        event.fromDict(msg.data);
+        try
+        {
+            _pushCbk.value()(event);
+        }
+        catch(const std::exception& e)
+        {
+            MLOG_E("push processing: exception occurred: {}", e.what());
             return;
         }
         break;

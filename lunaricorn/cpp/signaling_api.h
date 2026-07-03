@@ -77,9 +77,11 @@ class SignalingConnector
 public:
     using ResponseCallback = std::function<void(const SignalingResponse&)>;
     using SubscriptionCallback = std::function<void(const SignalingSubEvent&)>;
+    using PushCallback = std::function<void(const internal::SignalingEvent&)>;
     using DisconnectCallback = std::function<void(const std::string& reason, uint64_t magic)>; // disconnect reason and random token for grep
     using ResponseCallbackOpt = std::optional<ResponseCallback>;
     using SubscriptionCallbackOpt = std::optional<SubscriptionCallback>;
+    using PushCallbackOpt = std::optional<PushCallback>;
     using DisconnectCallbackOpt = std::optional<DisconnectCallback>;
 
 
@@ -92,6 +94,7 @@ public:
 
     inline void set_response_callback(const ResponseCallbackOpt& callback) { _respCbk = callback; }
     inline void set_subscription_callback(const SubscriptionCallbackOpt& callback)  { _subCbk = callback; }
+    inline void set_push_callback(const PushCallbackOpt& callback) { _pushCbk = callback; }
     inline void set_disconnect_callback(const DisconnectCallbackOpt& callback) { _disconnectCbk = callback; }
 
 
@@ -154,9 +157,10 @@ struct IncomingPacketState
     std::map<seq_t, SignalingResponse> _pending_responses;
     std::mutex _pending_responses_mutex;
 
-    ResponseCallbackOpt _respCbk;
-    SubscriptionCallbackOpt _subCbk;
-    DisconnectCallbackOpt _disconnectCbk;
+     ResponseCallbackOpt _respCbk;
+     SubscriptionCallbackOpt _subCbk;
+     PushCallbackOpt _pushCbk;
+     DisconnectCallbackOpt _disconnectCbk;
 
 }; // class SignalingConnector
 } // namespace lunaricorn

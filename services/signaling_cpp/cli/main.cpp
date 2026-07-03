@@ -217,6 +217,7 @@ int main(int argc, char* argv[])
     // Set up callbacks
     connector.set_response_callback(on_response);
     connector.set_subscription_callback(on_subscription);
+    connector.set_push_callback(on_push_event);
     connector.set_disconnect_callback(on_disconnect);
 
     // Connect
