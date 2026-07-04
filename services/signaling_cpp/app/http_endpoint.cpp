@@ -43,7 +43,7 @@ void Session::on_read(boost::beast::error_code ec, std::size_t)
         return;
     }
     if (ec) {
-        MLOG_E("HTTP read error: %s", ec.message().c_str());
+        MLOG_E("HTTP read error: {}", ec.message());
         server_.decrement_active();
         return;
     }
@@ -83,7 +83,7 @@ void Session::process_request()
                 json::value({{"error", "Not found"}}));
         }
     } catch (const std::exception& e) {
-        MLOG_E("HTTP exception: %s", e.what());
+        MLOG_E("HTTP exception: {}", e.what());
         response_status = http::status::internal_server_error;
         send_json_response(response_status,
             json::value({{"error", "Internal server error"}}));
@@ -92,10 +92,11 @@ void Session::process_request()
     const auto end_time = std::chrono::steady_clock::now();
     const double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         end_time - start_time).count();
-    MLOG_D("HTTP %s %.*s -> %d (%.0fms)",
-        std::string(request_.method_string()).c_str(),
-        static_cast<int>(target.size()), target.data(),
-        static_cast<int>(response_status), elapsed);
+    MLOG_D("HTTP {} {} -> {} ({:.0f}ms)",
+        request_.method_string(),
+        target,
+        static_cast<int>(response_status),
+        elapsed);
 }
 
 void Session::send_response(http::status status, const std::string& content_type,
@@ -283,7 +284,7 @@ void Session::handle_pull()
         // Use the engine's storage to pull events
         // We'll use a simple approach: return telemetry data as fallback
         // In a full implementation, the engine would expose a pullEvents method
-        MLOG_D("pull: offset=%d (event retrieval not implemented yet)", offset);
+        MLOG_D("pull: offset={} (event retrieval not implemented yet)", offset);
     }
 
     json::object resp;
@@ -343,7 +344,7 @@ bool HttpServer::start()
     acceptor_.bind(endpoint);
     acceptor_.listen(boost::asio::socket_base::max_listen_connections);
 
-    MLOG_D("HTTP server listening on %s:%d", config_.address.c_str(), config_.port);
+    MLOG_D("HTTP server listening on {}:{}", config_.address, config_.port);
 
     // Start accepting connections
     do_accept();
