@@ -33,8 +33,8 @@ private:
     // The thread function that runs in its own thread
     void runner(std::stop_token stopToken);
 
-    // Create and send a test event
-    void send_test_event();
+    // Create and send a test event + verify via query
+    void send_and_verify();
 
     // Callback for responses from test messages
     void on_test_response(const lunaricorn::SignalingResponse& resp);
@@ -49,4 +49,8 @@ private:
     std::thread m_thread;
     std::stop_source m_stop_source;
     std::shared_ptr<lunaricorn::SignalingConnector> m_connector;
+
+    // Track last pushed event type for query verification
+    std::string m_last_event_type;
+    int m_last_event_type_idx{0};
 };

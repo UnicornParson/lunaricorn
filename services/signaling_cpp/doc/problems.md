@@ -15,11 +15,11 @@
 - **Рекомендация:** Написать unit-тесты для SignalingProto (сериализация/десериализация), MessageStorage (CRUD), RawEndpoint (protocol handling), SignalingEngine (подписки/диспатч).
 
 ### P3: processQueryRequest не связан с SignalingEngine
-- **Статус:** ⚠️ Заглушка
+- **Статус:** ✅ Реализовано
 - **Файл:** `app/raw_endpoint.cpp::processQueryRequest()`
-- **Проблема:** Отправляет ACK, но не выполняет поиск через `engine->findEvents()` или `engine->findEventsByType()`.
-- **Влияние:** Клиенты не могут получить историю событий через raw-протокол.
-- **Рекомендация:** Связать с SignalingEngine, парсить query-параметры из payload.
+- **Проблема:** Отправлял ACK, но не выполнял поиск через `engine->findEvents()`.
+- **Влияние:** Решено. Клиенты могут запрашивать историю событий через raw-протокол с фильтрацией по timestamp, types, sources, affected, tags и limit.
+- **Рекомендация:** Добавить интеграционные тесты для query-запросов.
 
 ## Средние
 

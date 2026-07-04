@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+- `SignalingConnector::query()` — новый метод для отправки query-запросов (MT_QueryReq) с фильтрацией
+- `TestSender::send_and_verify()` — после каждого push отправляется query на тот же тип события и проверяется, что событие найдено
+  - Вывод `Query OK: found N events, matched type=...` при успехе
+  - Вывод `Query FAIL` или `Query PARTIAL` с инкрементом error_count при проблемах
+  - Раздельная обработка push-response (event_id) и query-response (events/count) в callback
+- `RawEndpoint::processQueryRequest()`: полноценная обработка query-запросов через raw-протокол
+  - Парсинг JSON-параметров: timestamp, types, sources, affected, tags, limit
+  - Вызов `_engine->findEvents()` для поиска событий в БД
+  - Формирование ответа с массивом найденных событий и их количеством
+  - Валидация входных данных (пустой payload, не-JSON объект)
+  - Логирование параметров запроса и количества результатов
+
 ### Fixed
 - `signaling_api.cpp::reconnect_loop()`: исправлен вызов `Poco::Timer::restart()` — убран второй аргумент. `restart()` принимает только один интервал (ms), второй вызов был ошибочным.
 

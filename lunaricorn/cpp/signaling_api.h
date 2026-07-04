@@ -107,6 +107,10 @@ public:
 
     bool push(const lunaricorn::internal::SignalingEvent& event);
     
+    // Query historical events with optional filters
+    // Returns true if query request was sent successfully (response via callback)
+    bool query(const boost::json::object& query_params);
+    
     // Subscribe/unsubscribe to event types
     bool subscribe(const std::vector<std::string>& types,
                    const std::vector<std::string>& sources = {},

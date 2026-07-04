@@ -547,15 +547,125 @@ void RawEndpoint::processQueryRequest(uint64_t clientId, const lunaricorn::inter
     MLOG_D("processQueryRequest[{}]: received query request, seq={}, data_len={}", 
            clientId, msg.header.seq, msg.header.data_len);
     
-    // Log query data if available
-    if (msg.header.data_len > 0 && !msg.data.empty()) {
-        MLOG_D("processQueryRequest[{}]: query payload size={}", 
-               clientId, msg.data.size());
+    if (msg.header.data_len == 0 || msg.data.empty()) {
+        MLOG_W("processQueryRequest[{}]: empty query payload", clientId);
+        sendResponse(clientId, msg.header.seq, false,
+            {{"error", boost::json::value("empty query payload")}});
+        return;
     }
 
-    // Handle query request - forward to event system
-    MLOG_D("processQueryRequest[{}]: sending acknowledgment", clientId);
-    sendResponse(clientId, msg.header.seq, true);  // Acknowledge query
+    try {
+        boost::json::value jv = boost::json::value(msg.data);
+        if (!jv.is_object()) {
+            MLOG_E("processQueryRequest[{}]: query payload is not a JSON object", clientId);
+            sendResponse(clientId, msg.header.seq, false,
+                {{"error", boost::json::value("query payload must be a JSON object")}});
+            return;
+        }
+
+        const auto& obj = jv.as_object();
+
+        // Parse optional timestamp filter (default: 0 = from beginning of time)
+        double timestamp = 0.0;
+        auto ts_it = obj.find("timestamp");
+        if (ts_it != obj.end() && ts_it->value().is_double()) {
+            timestamp = ts_it->value().as_double();
+        } else if (ts_it != obj.end() && ts_it->value().is_int64()) {
+            timestamp = static_cast<double>(ts_it->value().as_int64());
+        }
+
+        // Parse optional 'types' filter
+        std::vector<std::string> types;
+        auto types_it = obj.find("types");
+        if (types_it != obj.end() && types_it->value().is_array()) {
+            for (const auto& elem : types_it->value().as_array()) {
+                if (elem.is_string()) {
+                    types.push_back(elem.as_string().c_str());
+                }
+            }
+        }
+
+        // Parse optional 'sources' filter
+        std::vector<std::string> sources;
+        auto sources_it = obj.find("sources");
+        if (sources_it != obj.end() && sources_it->value().is_array()) {
+            for (const auto& elem : sources_it->value().as_array()) {
+                if (elem.is_string()) {
+                    sources.push_back(elem.as_string().c_str());
+                }
+            }
+        }
+
+        // Parse optional 'affected' filter
+        std::vector<std::string> affected;
+        auto affected_it = obj.find("affected");
+        if (affected_it != obj.end() && affected_it->value().is_array()) {
+            for (const auto& elem : affected_it->value().as_array()) {
+                if (elem.is_string()) {
+                    affected.push_back(elem.as_string().c_str());
+                }
+            }
+        }
+
+        // Parse optional 'tags' filter
+        std::vector<std::string> tags;
+        auto tags_it = obj.find("tags");
+        if (tags_it != obj.end() && tags_it->value().is_array()) {
+            for (const auto& elem : tags_it->value().as_array()) {
+                if (elem.is_string()) {
+                    tags.push_back(elem.as_string().c_str());
+                }
+            }
+        }
+
+        // Parse optional limit
+        int limit = 0;
+        auto limit_it = obj.find("limit");
+        if (limit_it != obj.end() && limit_it->value().is_int64()) {
+            limit = static_cast<int>(limit_it->value().as_int64());
+        }
+
+        MLOG_D("processQueryRequest[{}]: query params: timestamp={}, types={}, sources={}, affected={}, tags={}, limit={}",
+               clientId, timestamp, types.size(), sources.size(), affected.size(), tags.size(), limit);
+
+        // Execute search through the engine
+        auto results = _engine->findEvents(timestamp, types, sources, affected, tags, limit);
+
+        MLOG_D("processQueryRequest[{}]: found {} events", clientId, results.size());
+
+        // Build response payload
+        boost::json::array events_arr;
+        for (const auto& event : results) {
+            boost::json::object ev;
+            ev["eid"] = boost::json::value(static_cast<int64_t>(event.eid));
+            ev["type"] = boost::json::value(event.event_type);
+            if (event.source.has_value()) {
+                ev["source"] = boost::json::value(*event.source);
+            }
+            ev["timestamp"] = boost::json::value(event.timestamp);
+            ev["payload"] = event.payload;
+            if (event.affected.is_array() && !event.affected.as_array().empty()) {
+                ev["affected"] = event.affected;
+            }
+            // Add tags
+            boost::json::array tags_arr;
+            for (const auto& tag : event.tags) {
+                tags_arr.push_back(boost::json::value(tag));
+            }
+            ev["tags"] = std::move(tags_arr);
+            events_arr.push_back(std::move(ev));
+        }
+
+        Telemetry::instance().recordPushSuccess(); // reuse counter for successful queries
+        sendResponse(clientId, msg.header.seq, true,
+            {{"events", std::move(events_arr)}, {"count", static_cast<int64_t>(results.size())}});
+
+    } catch (const std::exception& e) {
+        Telemetry::instance().recordError();
+        MLOG_E("processQueryRequest[{}]: failed: {}", clientId, e.what());
+        sendResponse(clientId, msg.header.seq, false,
+            {{"error", boost::json::value(e.what())}});
+    }
 }
 
 void RawEndpoint::processUnknownMessageType(uint64_t clientId, const lunaricorn::internal::MessageHeader& header)

@@ -139,14 +139,14 @@ void TestSender::runner(std::stop_token /*stopToken*/)
     std::cout << "[" << now_ts() << "] [TestSender] Runner thread started" << std::endl;
 
     while (m_running.load()) {
-        send_test_event();
+        send_and_verify();
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
     std::cout << "[" << now_ts() << "] [TestSender] Runner thread exiting" << std::endl;
 }
 
-void TestSender::send_test_event()
+void TestSender::send_and_verify()
 {
     if (!m_running.load() || !m_connector || !m_connector->ready()) {
         m_error_count.fetch_add(1);
@@ -181,26 +181,103 @@ void TestSender::send_test_event()
     payload["event_type_idx"] = boost::json::value(typeIdx);
     event.payload = std::move(payload);
 
+    // Step 1: Push event
     bool ok = m_connector->push(event);
     if (!ok) {
         m_error_count.fetch_add(1);
         std::cerr << "[" << now_ts() << "] [TestSender] Failed to push event" << std::endl;
-    } else {
-        std::cout << "[" << now_ts() << "] [TestSender] Pushed event seq="
-                  << m_sent_count.load()
-                  << " type=" << event.type
-                  << " source=" << event.source
-                  << " payload=" << boost::json::serialize(event.payload)
-                  << std::endl;
+        return;
+    }
+
+    std::cout << "[" << now_ts() << "] [TestSender] Pushed event seq="
+              << m_sent_count.load()
+              << " type=" << event.type
+              << " source=" << event.source
+              << std::endl;
+
+    // Save event type for query verification
+    m_last_event_type = event.type;
+    m_last_event_type_idx = typeIdx;
+
+    // Step 2: Send query to find the newly pushed event
+    boost::json::object query_params;
+    query_params["types"] = boost::json::array{boost::json::value(event.type)};
+    query_params["limit"] = boost::json::value(static_cast<int64_t>(10));
+
+    ok = m_connector->query(query_params);
+    if (!ok) {
+        m_error_count.fetch_add(1);
+        std::cerr << "[" << now_ts() << "] [TestSender] Failed to send query" << std::endl;
     }
 }
 
 void TestSender::on_test_response(const lunaricorn::SignalingResponse& resp)
 {
-    std::cout << "[" << now_ts() << "] [TestSender] Response seq=" << resp._seq
-              << " ok=" << (resp.ok ? "true" : "false");
-    if (!resp.error.empty()) {
-        std::cout << " error=" << resp.error;
+    // Distinguish push response from query response
+    // Push response has "event_id" and "published" fields
+    // Query response has "events" and "count" fields
+
+    if (resp.data.contains("events")) {
+        // This is a query response
+        long long count = 0;
+        auto count_it = resp.data.find("count");
+        if (count_it != resp.data.end() && count_it->value().is_int64()) {
+            count = count_it->value().as_int64();
+        }
+
+        // Check if we found events matching our type
+        // The query response uses "event_type" field (see RawEndpoint::processQueryRequest)
+        bool found_matching = false;
+        auto events_it = resp.data.find("events");
+        if (events_it != resp.data.end() && events_it->value().is_array()) {
+            for (const auto& ev : events_it->value().as_array()) {
+                if (ev.is_object()) {
+                    // Try "event_type" first (the actual field name in processQueryRequest)
+                    auto type_it = ev.as_object().find("event_type");
+                    if (type_it == ev.as_object().end()) {
+                        // Fallback to "type" for compatibility
+                        type_it = ev.as_object().find("type");
+                    }
+                    if (type_it != ev.as_object().end() && type_it->value().is_string()) {
+                        std::string ev_type = type_it->value().as_string().c_str();
+                        if (ev_type == m_last_event_type) {
+                            found_matching = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (count > 0 && found_matching) {
+            std::cout << "[" << now_ts() << "] [TestSender] Query OK: found "
+                      << count << " events, matched type=" << m_last_event_type
+                      << std::endl;
+        } else if (count > 0) {
+            std::cout << "[" << now_ts() << "] [TestSender] Query PARTIAL: found "
+                      << count << " events but none matched type=" << m_last_event_type
+                      << std::endl;
+            m_error_count.fetch_add(1);
+        } else {
+            std::cout << "[" << now_ts() << "] [TestSender] Query FAIL: no events found for type="
+                      << m_last_event_type << std::endl;
+            m_error_count.fetch_add(1);
+        }
+    } else if (resp.data.contains("event_id")) {
+        // This is a push response
+        std::cout << "[" << now_ts() << "] [TestSender] Push response seq=" << resp._seq
+                  << " ok=" << (resp.ok ? "true" : "false");
+        if (!resp.error.empty()) {
+            std::cout << " error=" << resp.error;
+        }
+        std::cout << std::endl;
+    } else {
+        // Generic response
+        std::cout << "[" << now_ts() << "] [TestSender] Response seq=" << resp._seq
+                  << " ok=" << (resp.ok ? "true" : "false");
+        if (!resp.error.empty()) {
+            std::cout << " error=" << resp.error;
+        }
+        std::cout << std::endl;
     }
-    std::cout << std::endl;
 }

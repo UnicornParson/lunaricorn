@@ -777,6 +777,40 @@ bool SignalingConnector::subscribe(const std::vector<std::string>& types,
     return send_rc;
 }
 
+bool SignalingConnector::query(const boost::json::object& query_params)
+{
+    if (!ready()) {
+        MLOG_E("not connected");
+        return false;
+    }
+
+    const seq_t seq = make_seq();
+
+    // Create MT_QueryReq message
+    lunaricorn::internal::MessageHeader header{};
+    header.magic = lunaricorn::internal::HeaderMagic;
+    header.version = lunaricorn::internal::PROTOCOL_VERSION;
+    header.type = lunaricorn::internal::MessageType::MT_QueryReq;
+    header.data_type = lunaricorn::internal::ContentType::CT_Json;
+    header.flags = 0;
+    header.seq = seq;
+    header.data_len = static_cast<uint32_t>(boost::json::serialize(query_params).size());
+    header.crc = 0;
+
+    SignalingResponse resp(seq);
+    // Use SignalingPushRequest as a placeholder origin (no dedicated QueryRequest class)
+    resp.origin.emplace<SignalingPushRequest>(SignalingPushRequest(seq));
+
+    MLOG_D("send query seq={}, params={}", seq, boost::json::serialize(query_params));
+    bool send_rc = send_message(header, query_params);
+    if (send_rc)
+    {
+        std::lock_guard<std::mutex> lock(_pending_responses_mutex);
+        _pending_responses[seq] = resp;
+    }
+    return send_rc;
+}
+
 bool SignalingConnector::unsubscribe()
 {
     if (!ready()) {
