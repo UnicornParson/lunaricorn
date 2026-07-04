@@ -25,7 +25,7 @@ set(BOOST_ROOT "/opt/3rd/boost/bin")
 # Tell CMake to search for static Boost libraries
 set(Boost_USE_STATIC_LIBS ON)
 # Find Boost components (add or remove as needed)
-find_package(Boost REQUIRED COMPONENTS system filesystem json)
+find_package(Boost REQUIRED COMPONENTS system filesystem json beast)
 include(FetchContent)
 FetchContent_Declare(
   yaml-cpp
@@ -115,6 +115,7 @@ target_link_libraries(signaling
     Boost::json
     Boost::system
     Boost::filesystem
+    Boost::beast
     ${POCO_LIBRARIES}
     lunaricorn_api
     yaml-cpp::yaml-cpp

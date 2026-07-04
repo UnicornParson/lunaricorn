@@ -156,7 +156,144 @@ cli/main.cpp <host> <port>
 - `SignalingConnector` — основное подключение (приём событий)
 - `TestSender` — автоматическая отправка тестовых событий
 
-## Внешние API
+### HttpServer
+
+**Назначение:** HTTP сервер на Boost.Beast для REST API signaling сервиса.
+
+**Порт:** `8081` (по умолчанию)
+
+**Архитектура:**
+```
+HttpServer (Endpoint impl)
+├── boost::asio::io_context (ioc_)
+├── tcp::acceptor (acceptor_)
+├── std::vector<std::thread> (threads_)
+└── Session (per-connection)
+    ├── boost::beast::flat_buffer (buffer_)
+    ├── http::request (request_)
+    ├── tcp::socket (socket_)
+    └── routing:
+        ├── handle_root() → GET /
+        ├── handle_health() → GET /health
+        ├── handle_push() → POST /push
+        ├── handle_pull() → GET /pull
+        └── handle_stat() → GET /stat
+```
+
+**Конфигурация:**
+| Параметр | Значение по умолчанию | Описание |
+|----------|----------------------|----------|
+| `address` | `"0.0.0.0"` | Адрес прослушки |
+| `port` | `8081` | Порт |
+| `num_threads` | `1` | Количество IO потоков |
+
+**Публичный API:**
+| Метод | Назначение |
+|-------|------------|
+| `HttpServerConfig()` | Конструктор конфигурации |
+| `set_engine(engine)` | Связывание с SignalingEngine |
+| `start()` | Запуск сервера (accept + threads) |
+| `stop()` | Остановка сервера (close + join) |
+| `io_context()` | Доступ к boost::asio::io_context |
+| `get_telemetry_snapshot()` | Экспорт метрик |
+
+### REST API
+
+#### GET /
+Возвращает статус сервиса.
+
+**Response (200 OK):**
+```json
+{
+  "status": "online",
+  "service": "signaling"
+}
+```
+
+#### GET /health
+Health check endpoint.
+
+**Response (200 OK):**
+```json
+{
+  "status": "online"
+}
+```
+
+#### POST /push
+Публикация события (аналог RawEndpoint::processPushRequest).
+
+**Request Body (application/json):**
+```json
+{
+  "type": "event_type_name",
+  "source": "optional_source",
+  "affected": ["item1", "item2"],
+  "tags": ["tag1", "tag2"],
+  "payload": { "key": "value" }
+}
+```
+
+- `type` — обязательное поле (string)
+- `source` — опциональное поле (string)
+- `affected` — опциональное поле (array или string)
+- `tags` — опциональное поле (array of strings)
+- `payload` — опциональное, по умолчанию — весь объект минус `type`
+
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "event_id": 42,
+  "published": true
+}
+```
+
+**Response (400 Bad Request):**
+```json
+{
+  "error": "Missing required field: type"
+}
+```
+
+#### GET /pull?offset=N
+Запрос событий (аналог RawEndpoint::processQueryRequest).
+
+**Query Parameters:**
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| `offset` | int | Смещение (по умолчанию 0) |
+
+**Response (200 OK):**
+```json
+{
+  "events": [],
+  "offset": 0,
+  "count": 0
+}
+```
+
+> **Примечание:** Ретrieve events через HTTP пока не реализован. В future — добавить метод `pullEvents()` в SignalingEngine.
+
+#### GET /stat
+Возвращает JSON с текущей телеметрией.
+
+**Response (200 OK):**
+```json
+{
+  "telemetry": {
+    "total_push_ok": 100,
+    "active_clients": 5,
+    "pushes_per_minute": 10,
+    "errors_per_minute": 2
+  },
+  "stats": {
+    "active_requests": 3,
+    "endpoint_requests": 150,
+    "endpoint_errors": 5
+  }
+}
+```
 
 ### PostgreSQL
 

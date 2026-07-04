@@ -7,12 +7,15 @@
 #include "signaling_engine_test.h"
 #include "signal_waiter.h"
 #include "raw_endpoint.h"
+#include "http_endpoint.h"
 #include "telemetry.h"
 
 constexpr std::string app_name { "signaling" };
 constexpr std::string app_ver { "0.2" };
 constexpr std::string raw_host { "127.0.0.1" };
 constexpr Poco::UInt16 raw_port = 8080;
+constexpr std::string http_host { "0.0.0.0" };
+constexpr Poco::UInt16 http_port = 8081;
 
 
 using namespace lunaricorn;
@@ -53,14 +56,24 @@ int main() {
     // Connect engine to endpoint for subscriber event delivery
     endpoint->connectEngine(engine);
 
+    // Create and start HTTP endpoint
+    HttpServerConfig httpCfg;
+    httpCfg.address = http_host;
+    httpCfg.port = http_port;
+    httpCfg.num_threads = 1;
+    auto httpEndpoint = std::make_shared<HttpServer>(httpCfg);
+    httpEndpoint->set_engine(engine);
+
     MLOG_D("create objects - ok");
 
     // Start periodic telemetry reporting (every 60 s via internal Poco::Timer)
     Telemetry::instance().start();
 
+    httpEndpoint->start();
     endpoint->start();
     signals.wait();
     endpoint->stop();
+    httpEndpoint->stop();
 
     Telemetry::instance().stop();
 
