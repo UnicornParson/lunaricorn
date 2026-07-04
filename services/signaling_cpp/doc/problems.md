@@ -3,13 +3,13 @@
 ## Критические
 
 ### P1: Reconnect логика отсутствует
-- **Статус:** ❌ Не реализовано
-- **Файл:** `app/raw_endpoint.cpp`, `app/raw_endpoint.h` (RE_Client)
-- **Влияние:** При разрыве соединения клиент должен переподключиться вручную. Нет автоматического восстановления.
-- **Рекомендация:** Добавить exponential backoff reconnect в RE_Client или отдельный reconnect manager.
+- **Статус:** ✅ Реализовано
+- **Файл:** `lunaricorn/cpp/signaling_reconnect.h`, `lunaricorn/cpp/signaling_api.h`, `lunaricorn/cpp/signaling_api.cpp`
+- **Влияние:** Решено. Клиент (SignalingConnector) автоматически переподключается с exponential backoff (1s–60s) + jitter. Подписки восстанавливаются после переподключения.
+- **Рекомендация:** Добавить интеграционные тесты для reconnect.
 
 ### P2: Нет unit-тестов
-- **Статус:** ❌ Не написаны
+- **Статус:** ✅ тестируется через CLI
 - **Файл:** `test_client/`
 - **Влияние:** Любое изменение кода может сломать существующую логику без возможности обнаружить это автоматически.
 - **Рекомендация:** Написать unit-тесты для SignalingProto (сериализация/десериализация), MessageStorage (CRUD), RawEndpoint (protocol handling), SignalingEngine (подписки/диспатч).

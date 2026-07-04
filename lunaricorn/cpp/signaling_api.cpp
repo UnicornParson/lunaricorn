@@ -86,6 +86,9 @@ bool SignalingConnector::start(const std::string& host, Poco::UInt16 raw_port)
     }
     _hb_timer.start(Poco::TimerCallback<SignalingConnector>(*this, &SignalingConnector::onHBTimer));
 
+    // Reset reconnect strategy on successful manual connect
+    _reconnect_strategy.reset();
+
     return _connected;
 }
 bool SignalingConnector::stop()
@@ -98,6 +101,7 @@ bool SignalingConnector::stop()
     }
     _stopping = true;
     _connected = false;
+    _auto_reconnect = false; // prevent reconnect loop from starting
     _hb_timer.stop();
     stop_runner();
     std::lock_guard<std::mutex> lock(_connection_mutex);
@@ -181,8 +185,131 @@ void SignalingConnector::send_client_hb()
     }
 }
 
+/// Exponential backoff reconnect loop.
+/// Runs in a thread after disconnect. Tries to reconnect with capped exponential
+/// backoff + full jitter (1s..60s). On success, restores subscriptions and returns true.
+/// Returns false if the connector was stopped (via stop() or destructor).
+bool SignalingConnector::reconnect_loop()
+{
+    MLOG_W("SignalingConnector: starting reconnect loop (auto_reconnect={})", _auto_reconnect);
+
+    while (_auto_reconnect && !_stopping)
+    {
+        if (!_reconnect_strategy.should_retry())
+        {
+            MLOG_E("SignalingConnector: max reconnect attempts reached, giving up");
+            if (_disconnectCbk)
+            {
+                try {
+                    _disconnectCbk.value()("max reconnect attempts reached", 0);
+                } catch (...) {}
+            }
+            return false;
+        }
+
+        auto delay = _reconnect_strategy.next_delay();
+        MLOG_W("SignalingConnector: reconnecting in {}ms (attempt #{})",
+               delay.count(), _reconnect_strategy.attempt());
+
+        // Sleep with wakeup check for stop
+        auto deadline = std::chrono::steady_clock::now() + delay;
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            if (_stopping || !_auto_reconnect) return false;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        if (_stopping || !_auto_reconnect) return false;
+
+        MLOG_D("SignalingConnector: reconnecting to {}:{}", _host, _raw_port);
+
+        // Attempt to connect
+        std::lock_guard<std::mutex> lock(_connection_mutex);
+        if (_sock)
+        {
+            try { _sock->close(); } catch (...) {}
+            _sock.reset();
+        }
+
+        try
+        {
+            const Poco::Net::SocketAddress addr(_host, _raw_port);
+            _sock = std::make_shared<Poco::Net::StreamSocket>(addr);
+            _sock->setBlocking(false);
+            _sock->setSendTimeout(Poco::Timespan(1, 0));
+
+            _connected = true;
+            _pstate.reset();
+
+            // Restart runner thread
+            _thread_state = std::make_shared<ThreadState>();
+            _runner_thread = std::jthread([this](std::stop_token st){runner(st, _thread_state);});
+
+            // Restart heartbeat timer
+            _hb_timer.restart(kHeartbeatIntervalMs);
+
+            MLOG_W("SignalingConnector: reconnected successfully after {} attempts",
+                   _reconnect_strategy.attempt());
+
+            // Restore subscriptions if any were cached
+            if (_sub_cache.has_subscription)
+            {
+                MLOG_D("SignalingConnector: restoring subscription after reconnect");
+                // Give the runner thread a moment to start polling
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                bool sub_ok = subscribe(
+                    _sub_cache.types,
+                    _sub_cache.sources,
+                    _sub_cache.affected,
+                    _sub_cache.tags
+                );
+                if (sub_ok)
+                {
+                    MLOG_D("SignalingConnector: subscription restored successfully");
+                }
+                else
+                {
+                    MLOG_E("SignalingConnector: failed to restore subscription");
+                }
+            }
+
+            _reconnect_strategy.reset();
+            return true;
+        }
+        catch (const Poco::Exception& e)
+        {
+            MLOG_W("SignalingConnector: reconnect attempt failed: {}", e.displayText());
+            _connected = false;
+            if (_sock)
+            {
+                try { _sock->close(); } catch (...) {}
+                _sock.reset();
+            }
+            continue;
+        }
+        catch (const std::exception& e)
+        {
+            MLOG_W("SignalingConnector: reconnect attempt failed: {}", e.what());
+            _connected = false;
+            if (_sock)
+            {
+                try { _sock->close(); } catch (...) {}
+                _sock.reset();
+            }
+            continue;
+        }
+    }
+
+    MLOG_D("SignalingConnector: reconnect loop ended (auto_reconnect={}, stopping={})",
+           _auto_reconnect, _stopping.load());
+    return false;
+}
+
 void SignalingConnector::on_disconnect(const std::string& reason, uint64_t magic)
 {
+    MLOG_W("SignalingConnector::on_disconnect: reason='{}' magic={}", reason, magic);
+
+    // Notify user callback
     if (_disconnectCbk)
     {
         try
@@ -197,9 +324,21 @@ void SignalingConnector::on_disconnect(const std::string& reason, uint64_t magic
 
     _connected = false;
     _hb_timer.stop();
+
+    // Clean up the runner
     if (_runner_thread.has_value())
     {
         _runner_thread->request_stop();
+    }
+
+    // Stop old runner if still running
+    stop_runner();
+
+    // Start reconnect loop if auto-reconnect is enabled and we're not stopping
+    if (_auto_reconnect && !_stopping)
+    {
+        MLOG_D("SignalingConnector: triggering reconnect loop");
+        reconnect_loop();
     }
 }
 
@@ -566,6 +705,15 @@ bool SignalingConnector::subscribe(const std::vector<std::string>& types,
                                      const std::vector<std::string>& affected,
                                      const std::vector<std::string>& tags)
 {
+    // Cache subscription parameters for reconnect restore
+    {
+        _sub_cache.types = types;
+        _sub_cache.sources = sources;
+        _sub_cache.affected = affected;
+        _sub_cache.tags = tags;
+        _sub_cache.has_subscription = true;
+    }
+
     if (!ready()) {
         MLOG_E("not connected");
         return false;
@@ -652,6 +800,14 @@ bool SignalingConnector::unsubscribe()
     header.crc = 0;
 
     MLOG_D("send unsubscribe seq={}", seq);
+
+    // Clear subscription cache on explicit unsubscribe
+    _sub_cache.has_subscription = false;
+    _sub_cache.types.clear();
+    _sub_cache.sources.clear();
+    _sub_cache.affected.clear();
+    _sub_cache.tags.clear();
+
     return send_message(header, sub_data);
 }
 

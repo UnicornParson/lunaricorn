@@ -232,7 +232,9 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    std::cout << "[" << now_ts() << "] Connected!" << std::endl;
+    // Enable auto-reconnect with exponential backoff
+    connector.set_auto_reconnect(true);
+    std::cout << "[" << now_ts() << "] Auto-reconnect enabled (exponential backoff 1s-60s)" << std::endl;
 
     // Subscribe to ALL event types (empty filter = subscribe to everything)
     if (!connector.subscribe({})) {

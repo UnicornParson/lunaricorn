@@ -23,7 +23,7 @@
 | processSubscription (подписки) | ✅ Работает | Парсинг фильтров + engine->subscribe() |
 | processPushRequest (публикация) | ✅ Работает | createEvent + dispatchEvent + sendEventToClient |
 | processQueryRequest (запрос событий) | ⚠️ Заглушка | Отправляет ACK, не использует engine->findEvents() |
-| Reconnect (автопереподключение) | ❌ Отсутствует | Клиенты не переподключаются |
+| Reconnect (автопереподключение) | ✅ Реализовано | Exponential backoff (1s–60s) + jitter + restore subscriptions |
 
 ---
 
@@ -44,11 +44,12 @@
   - `SignalingEngine`: subscribe → dispatch → subscriber callback
   - Файл: `test_client/`
 
-- [ ] **Добавить reconnect логику для клиентов**
-  - Exponential backoff (1s, 2s, 4s, 8s, max 60s)
-  - Автоматическое переподключение RE_Client при разрыве
-  - Восстановление подписок после переподключения
-  - Файл: `app/raw_endpoint.h/cpp`, `app/raw_endpoint_client.h`
+- [x] **Добавить reconnect логику для клиентов**
+  - Exponential backoff (1s–60s) + full jitter (ReconnectStrategy)
+  - Автоматическое переподключение SignalingConnector при разрыве
+  - Восстановление подписок после переподключения (SubscriptionCache)
+  - Файлы: `lunaricorn/cpp/signaling_reconnect.h`, `lunaricorn/cpp/signaling_api.h/cpp`
+  - CLI: `cli/main.cpp` — `connector.set_auto_reconnect(true)`
 
 - [ ] **Интеграционные тесты (end-to-end)**
   - Доработать `it.sh`: запуск сервера → CLI клиент → проверка heartbeat → публикация → подписка → получение → отключение
@@ -120,10 +121,10 @@
 3. ✅ Подписки работают: client → subscribe → push → dispatch → subscriber получает событие
 4. ⚠️ **processQueryRequest должен быть реализован** (заглушка)
 5. ⚠️ **Unit-тесты должны покрывать критический функционал**
-6. ⚠️ **Reconnect должен быть реализован** (иначе клиенты теряют связь навсегда)
+6. ✅ **Reconnect реализован** (exponential backoff, auto-reconnect, restore subscriptions)
 7. ⚠️ **Интеграционные тесты должны проходить** (it.sh)
 
-Пункты 4-7 — минимальный набор для перехода к разработке следующего сервиса.
+Пункты 4, 5, 7 — минимальный набор для перехода к разработке следующего сервиса.
 
 ---
 

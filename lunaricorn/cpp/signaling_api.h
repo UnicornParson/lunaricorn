@@ -12,6 +12,7 @@
 #include "proto/signaling.h"
 #include "lunaricorn.h"
 #include "internal/thread_control.h"
+#include "signaling_reconnect.h"
 namespace lunaricorn
 {
 
@@ -92,6 +93,12 @@ public:
     bool ready();
     void onHBTimer(Poco::Timer&);
 
+    /// Enable/disable auto-reconnect on disconnect.
+    /// When enabled, the client will attempt to reconnect using exponential backoff
+    /// and restore any active subscriptions.
+    inline void set_auto_reconnect(bool enabled) { _auto_reconnect = enabled; }
+    inline bool auto_reconnect() const { return _auto_reconnect; }
+
     inline void set_response_callback(const ResponseCallbackOpt& callback) { _respCbk = callback; }
     inline void set_subscription_callback(const SubscriptionCallbackOpt& callback)  { _subCbk = callback; }
     inline void set_push_callback(const PushCallbackOpt& callback) { _pushCbk = callback; }
@@ -107,6 +114,24 @@ public:
                    const std::vector<std::string>& tags = {});
     bool unsubscribe();
 private:
+    // Cached subscription parameters for restore after reconnect
+    struct SubscriptionCache
+    {
+        std::vector<std::string> types;
+        std::vector<std::string> sources;
+        std::vector<std::string> affected;
+        std::vector<std::string> tags;
+        bool has_subscription = false;
+    };
+    SubscriptionCache _sub_cache;
+
+    bool _auto_reconnect = false;
+    ReconnectStrategy _reconnect_strategy;
+
+    /// Reconnect loop: repeatedly try to connect, restore subscriptions, return on success or stop.
+    /// Returns true if reconnected successfully, false if stopped.
+    bool reconnect_loop();
+
 struct IncomingPacketState
 {
     using PacketHeader = lunaricorn::internal::MessageHeader;
