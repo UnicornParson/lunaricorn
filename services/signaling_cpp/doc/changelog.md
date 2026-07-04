@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added
+- `HttpTest` — новый класс в `cli/`, циклический тестер HTTP-эндпоинтов (`GET /health`, `GET /stat`, `POST /push`) через Poco HTTPClientSession
+  - Автоматический запуск вместе с TestSender в `cli/main.cpp`
+  - Вывод результата каждого запроса с телом ответа в консоль
+  - Статистика `health_ok`, `stat_ok`, `push_ok`, `errors`
+  - Сигнатурная обработка в `signal_handler` для корректной остановки по Ctrl+C
 - `Telemetry` — глобальный класс-синглтон для сбора статистики сервиса
   - `recordPushSuccess()` / `recordError()` — учёт успешных push и ошибок
   - `setActiveClients()` — обновление количества активных клиентов
@@ -36,3 +41,7 @@
 - `main.cpp`: добавлена инициализация и запуск HttpServer alongside RawEndpoint
 - `main.cpp`: порядок запуска/остановки: httpEndpoint → endpoint → stop order reverse
 - CMakeLists.txt: `find_package(Boost REQUIRED COMPONENTS system filesystem json beast)`
+
+### Documentation
+- `problems.md`: полная актуализация — удалены решённые проблемы (HTTP endpoint, подписки, push), переписаны P1-P3, M1-M3, L1-L3 по текущему состоянию
+- `TODO.md`: переписан в формат чеклиста готовности, исправлены статусы компонентов, удалены устаревшие данные

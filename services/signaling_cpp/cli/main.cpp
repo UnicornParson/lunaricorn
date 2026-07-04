@@ -21,12 +21,14 @@
 #include "proto/signaling.h"
 #include "event_data.h"
 #include "test_sender.h"
+#include "http_test.h"
 
 using namespace lunaricorn;
 using namespace lunaricorn::internal;
 
 static std::atomic<bool> g_running{true};
 static std::atomic<TestSender*> g_test_sender{nullptr};
+static std::atomic<HttpTest*> g_http_test{nullptr};
 
 static void signal_handler(int signum)
 {
@@ -35,6 +37,10 @@ static void signal_handler(int signum)
     TestSender* ts = g_test_sender.load();
     if (ts) {
         ts->stop();
+    }
+    HttpTest* ht = g_http_test.load();
+    if (ht) {
+        ht->stop();
     }
 }
 
@@ -244,6 +250,18 @@ int main(int argc, char* argv[])
         std::cout << "[" << now_ts() << "] Test sender started" << std::endl;
     } else {
         std::cerr << "[" << now_ts() << "] Failed to start test sender" << std::endl;
+    }
+
+    // Start HTTP test timer (tests /health, /stat, /push endpoints)
+    // Uses port 8081 by default (the HTTP API port from HttpServerConfig)
+    HttpTest http_test;
+    g_http_test.store(&http_test);
+    uint16_t http_port = 8081; // Default HttpServerConfig port
+
+    if (http_test.start(host, http_port)) {
+        std::cout << "[" << now_ts() << "] HTTP test started against " << host << ":" << http_port << std::endl;
+    } else {
+        std::cerr << "[" << now_ts() << "] Failed to start HTTP test" << std::endl;
     }
 
     std::cout << std::endl;

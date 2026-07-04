@@ -66,6 +66,7 @@ add_subdirectory(apilib)
 add_executable(signaling_cli
     main.cpp
     test_sender.cpp
+    http_test.cpp
 )
 
 target_include_directories(signaling_cli PRIVATE
