@@ -4,9 +4,8 @@
 #include <mutex>
 #include <deque>
 #include <chrono>
+#include <thread>
 #include <boost/json.hpp>
-
-#include <Poco/Timer.h>
 
 namespace lunaricorn
 {
@@ -84,8 +83,8 @@ private:
     /// Evict entries older than 60 seconds from a sliding window deque.
     static void evictOld(std::deque<std::chrono::steady_clock::time_point>& dq);
 
-    /// Timer callback — calls printReport().
-    void onTimer(Poco::Timer& timer);
+    /// Background thread loop — sleeps 60 s, prints report.
+    void reportLoop();
 
     // ---- State ----
     std::atomic<uint64_t> _totalPushOk{ 0 };
@@ -96,11 +95,9 @@ private:
     std::deque<std::chrono::steady_clock::time_point> _pushTimestamps;
     std::deque<std::chrono::steady_clock::time_point> _errorTimestamps;
 
-    Poco::Timer _timer;
+    std::thread _reportThread;
 
     static constexpr auto WINDOW_DURATION = std::chrono::seconds(60);
-    static constexpr long REPORT_INTERVAL_MS = 60 * 1000; // 60 seconds
-    static constexpr long START_DELAY_MS     = 60 * 1000; // first report after 60 s
 }; // class Telemetry
 
 } // namespace lunaricorn

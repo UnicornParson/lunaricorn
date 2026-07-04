@@ -1,8 +1,6 @@
 #include "telemetry.h"
 #include <iostream>
 
-#include <Poco/TimerCallback.h>
-
 namespace lunaricorn
 {
 
@@ -21,10 +19,9 @@ void Telemetry::start()
         return;
     }
 
-    // TimerCallback adapter: calls Telemetry::onTimer
-    _timer.start(Poco::TimerCallback<Telemetry>(*this, &Telemetry::onTimer),
-                 START_DELAY_MS, REPORT_INTERVAL_MS);
-    MLOG_D("Telemetry: started, report interval={}ms", REPORT_INTERVAL_MS);
+    _reportThread = std::thread(&Telemetry::reportLoop, this);
+    MLOG_D("Telemetry: started, report interval={}s",
+           std::chrono::duration_cast<std::chrono::seconds>(WINDOW_DURATION).count());
 }
 
 void Telemetry::stop()
@@ -36,13 +33,23 @@ void Telemetry::stop()
         return;
     }
 
-    _timer.stop();
+    if (_reportThread.joinable())
+    {
+        _reportThread.join();
+    }
     MLOG_D("Telemetry: stopped");
 }
 
-void Telemetry::onTimer(Poco::Timer& /*timer*/)
+void Telemetry::reportLoop()
 {
-    printReport();
+    // First report after 60 seconds
+    std::this_thread::sleep_for(WINDOW_DURATION);
+
+    while (_running.load(std::memory_order_relaxed))
+    {
+        printReport();
+        std::this_thread::sleep_for(WINDOW_DURATION);
+    }
 }
 
 void Telemetry::evictOld(std::deque<std::chrono::steady_clock::time_point>& dq)
