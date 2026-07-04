@@ -1,9 +1,8 @@
 #include "http_endpoint.h"
-#include "stdafx.h"
 #include <sstream>
 #include <chrono>
 #include <ctime>
-#include <iomanip>
+#include <boost/json/src.hpp>
 
 namespace lunaricorn
 {
@@ -53,46 +52,50 @@ void Session::on_read(boost::beast::error_code ec, std::size_t)
 
 void Session::process_request()
 {
-    std::string target = request_.target();
-    std::string method = request_.method_string().to_string();
+    auto target = request_.target();
+    auto method = request_.method();
     const auto start_time = std::chrono::steady_clock::now();
-
+    http::status response_status = http::status::ok;
     try {
         // Route: GET /
-        if (method == "GET" && target == "/") {
+        if (method == http::verb::get && target == "/") {
             handle_root();
         }
         // Route: GET /health
-        else if (method == "GET" && target == "/health") {
+        else if (method == http::verb::get && target == "/health") {
             handle_health();
         }
         // Route: POST /push
-        else if (method == "POST" && target == "/push") {
+        else if (method == http::verb::post && target == "/push") {
             handle_push();
         }
         // Route: GET /pull
-        else if (method == "GET" && target == "/pull") {
+        else if (method == http::verb::get && target.starts_with("/pull")) {
             handle_pull();
         }
         // Route: GET /stat
-        else if (method == "GET" && target == "/stat") {
+        else if (method == http::verb::get && target == "/stat") {
             handle_stat();
         }
         else {
-            send_json_response(http::status::not_found,
+            response_status = http::status::not_found;
+            send_json_response(response_status,
                 json::value({{"error", "Not found"}}));
         }
     } catch (const std::exception& e) {
         MLOG_E("HTTP exception: %s", e.what());
-        send_json_response(http::status::internal_server_error,
+        response_status = http::status::internal_server_error;
+        send_json_response(response_status,
             json::value({{"error", "Internal server error"}}));
     }
 
     const auto end_time = std::chrono::steady_clock::now();
     const double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         end_time - start_time).count();
-    MLOG_D("HTTP %s %s -> %ld (%.0fms)", method.c_str(), target.c_str(),
-           static_cast<long>(request_.result()), elapsed);
+    MLOG_D("HTTP %s %.*s -> %d (%.0fms)",
+        std::string(request_.method_string()).c_str(),
+        static_cast<int>(target.size()), target.data(),
+        static_cast<int>(response_status), elapsed);
 }
 
 void Session::send_response(http::status status, const std::string& content_type,
@@ -158,8 +161,9 @@ void Session::handle_push()
 
     // Extract "type" field (required)
     std::string event_type;
-    if (obj.contains("type") && obj.at("type").is_string()) {
-        event_type = obj.at("type").as_string().c_str();
+    auto type_it = obj.find("type");
+    if (type_it != obj.end() && type_it->value().is_string()) {
+        event_type = json::value_to<std::string>(type_it->value());
     } else {
         send_json_response(http::status::bad_request,
             json::value({{"error", "Missing required field: type"}}));
@@ -168,14 +172,16 @@ void Session::handle_push()
 
     // Extract "source" field (optional)
     std::optional<std::string> source;
-    if (obj.contains("source") && obj.at("source").is_string()) {
-        source = obj.at("source").as_string().c_str();
+    auto source_it = obj.find("source");
+    if (source_it != obj.end() && source_it->value().is_string()) {
+        source = json::value_to<std::string>(source_it->value());
     }
 
     // Extract "affected" field (optional)
     json::array affected_arr;
-    if (obj.contains("affected")) {
-        const auto& affected_val = obj.at("affected");
+    auto affected_it = obj.find("affected");
+    if (affected_it != obj.end()) {
+        const auto& affected_val = affected_it->value();
         if (affected_val.is_array()) {
             for (const auto& elem : affected_val.as_array()) {
                 if (elem.is_string()) {
@@ -195,12 +201,13 @@ void Session::handle_push()
 
     // Extract "tags" field (optional)
     std::vector<std::string> tags;
-    if (obj.contains("tags")) {
-        const auto& tags_val = obj.at("tags");
+    auto tags_it = obj.find("tags");
+    if (tags_it != obj.end()) {
+        const auto& tags_val = tags_it->value();
         if (tags_val.is_array()) {
             for (const auto& elem : tags_val.as_array()) {
                 if (elem.is_string()) {
-                    tags.push_back(elem.as_string().c_str());
+                    tags.push_back(json::value_to<std::string>(elem));
                 }
             }
         }
@@ -208,14 +215,15 @@ void Session::handle_push()
 
     // Extract "payload" field (optional, defaults to the whole data)
     json::value payload;
-    if (obj.contains("payload")) {
-        payload = obj.at("payload");
+    auto payload_it = obj.find("payload");
+    if (payload_it != obj.end()) {
+        payload = payload_it->value();
     } else {
         // Use the whole object as payload (minus "type")
         boost::json::object payload_obj;
         for (const auto& field : obj) {
-            if (field.name() != "type") {
-                payload_obj[field.name()] = field.value();
+            if (std::string(field.key()) != "type") {
+                payload_obj[field.key()] = field.value();
             }
         }
         payload = std::move(payload_obj);
