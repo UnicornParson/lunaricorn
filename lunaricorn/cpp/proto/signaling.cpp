@@ -204,29 +204,56 @@ bool SignalingEvent::fromDict(const boost::json::object& data)
             return true;
         };
 
-        if (!getString("event_type", type))
-            return false;
+        // Support both formats:
+        // Push format (from server sendEventToClient): type, source, payload, timestamp
+        //   where type="push" is a marker, event_type has real type, client_id has source
+        // Original format: event_type, client_id, message, timestamp
+        //
+        // Priority for push format: event_type > type, client_id > source, payload (not message)
+        // Priority for original: event_type, client_id, message
 
-        if (!getString("client_id", source))
-            return false;
-
-        auto msgIt = data.find("message");
-
-        if (msgIt == data.end())
+        // type: prefer event_type (original), then type (push format marker)
+        auto getType = [&data]() -> std::string
         {
-            MLOG_E("SignalingEvent::fromDict missing required key 'message'");
+            auto it = data.find("event_type");
+            if (it != data.end() && it->value().is_string()) return it->value().as_string().c_str();
+            it = data.find("type");
+            if (it != data.end() && it->value().is_string()) return it->value().as_string().c_str();
+            return "";
+        };
+
+        type = getType();
+        if (type.empty())
+        {
+            MLOG_E("SignalingEvent::fromDict missing required key 'event_type' or 'type'");
             return false;
         }
 
-        if (!msgIt->value().is_object())
+        // source: prefer client_id (push format), then client_id (original), then source
+        auto getSource = [&data]() -> std::string
         {
-            MLOG_E("SignalingEvent::fromDict key 'message' expected object but got type '{}' value '{}'",
-                boost::json::to_string(msgIt->value().kind()),
-                boost::json::serialize(msgIt->value()));
-            return false;
-        }
+            auto it = data.find("client_id");
+            if (it != data.end() && it->value().is_string()) return it->value().as_string().c_str();
+            it = data.find("source");
+            if (it != data.end() && it->value().is_string()) return it->value().as_string().c_str();
+            return "unknown";
+        };
 
-        payload = msgIt->value().as_object();
+        source = getSource();
+
+        // Get payload: for push format, 'payload' is the actual event data
+        // For original format, 'message' is the actual event data
+        // Priority: payload (push) > message (original)
+        auto getPayload = [&data]() -> boost::json::object
+        {
+            auto it = data.find("payload");
+            if (it != data.end() && it->value().is_object()) return it->value().as_object();
+            it = data.find("message");
+            if (it != data.end() && it->value().is_object()) return it->value().as_object();
+            return boost::json::object{};
+        };
+
+        payload = getPayload();
 
         auto tsIt = data.find("timestamp");
 
@@ -316,21 +343,20 @@ boost::json::object SignalingEvent::toDict() const
     {
         boost::json::object data;
 
-        data["type"] = "push";
-        data["client_id"] = source;
-        data["event_type"] = type;
-        data["message"] = payload;
+        // Push format (for sendEventToClient): type, source, payload, timestamp, tags
+        data["type"] = type;
+        data["source"] = source;
+        data["payload"] = payload;
 
+        // timestamp in seconds (double)
+        const double ts = static_cast<double>(timestamp.timestamp().epochMicroseconds()) / 1000000.0;
+        data["timestamp"] = ts;
+
+        // tags
         boost::json::array tagsArray;
-
         for (const auto& tag : tags)
             tagsArray.emplace_back(tag);
-
         data["tags"] = std::move(tagsArray);
-
-        const double ts = static_cast<double>(timestamp.timestamp().epochMicroseconds()) / 1000000.0;
-
-        data["timestamp"] = ts;
 
         MLOG_D("SignalingEvent::toDict serialized type='{}' source='{}' tags={} payload_keys={} timestamp={}",
             type,
