@@ -1,4 +1,5 @@
 #include "raw_endpoint.h"
+#include "telemetry.h"
 #include <iostream>
 #include <Poco/Net/NetException.h>
 #include <Poco/Timespan.h>
@@ -126,6 +127,7 @@ RawEndpoint::RawEndpoint(const std::string& ip, Poco::UInt16 port, SignalingEngi
     _serverSocket.setReuseAddress(true);
     _serverSocket.setReusePort(true);
     _proto = std::make_shared<lunaricorn::internal::SignalingProto>();
+    Telemetry::instance().setActiveClients(0);
 }
 
 RawEndpoint::~RawEndpoint()
@@ -233,6 +235,7 @@ void RawEndpoint::acceptLoop()
             {
                 std::lock_guard<std::mutex> lock(_clientsMutex);
                 _clients.emplace(id, client);
+                Telemetry::instance().setActiveClients(_clients.size());
                 MLOG_D("acceptLoop: client {} added to _clients map, total connected: {}", 
                        id, _clients.size());
             }
@@ -297,13 +300,15 @@ void RawEndpoint::handleClients()
             if (_stopping) break;
 
             RE_Client_ptr client;
-            {
-                std::lock_guard<std::mutex> lock(_clientsMutex);
-                auto it = _clients.find(id);
-                if (it == _clients.end())
-                    continue;
-                client = it->second;
-            }
+        {
+            std::lock_guard<std::mutex> lock(_clientsMutex);
+            auto it = _clients.find(id);
+            if (it == _clients.end())
+                continue;
+            client = it->second;
+        }
+        // Update active telemetry count for each iteration
+        Telemetry::instance().setActiveClients(clientIds.size());
             if (!client)
             {
                 MBUG("id {} not found", id);
@@ -410,22 +415,23 @@ void RawEndpoint::on_client_closed(uint64_t clientId)
     MLOG_D("on_client_closed[{}]: client closing, current connected: {}", 
            clientId, _clients.size());
 
-    {
-        std::lock_guard<std::mutex> lock(_clientsMutex);
-        auto it = _clients.find(clientId);
-        if (it != _clients.end())
         {
-            auto client = it->second;
-            _clients.erase(it);
-            if(!client){MBUG("null client data for {}", clientId); return;}
-            try { client->socket().close();} catch (...) {}
-            const auto s = std::chrono::duration_cast<std::chrono::seconds>(client->client_hb_delay()).count();
-            MLOG_D("on_client_closed[{}]: client disconnected. session_duration={}s, total connected: {}", 
-                   clientId, s, _clients.size());
-        } else {
-            MLOG_D("on_client_closed[{}]: client not found in map (already removed)", clientId);
+            std::lock_guard<std::mutex> lock(_clientsMutex);
+            auto it = _clients.find(clientId);
+            if (it != _clients.end())
+            {
+                auto client = it->second;
+                _clients.erase(it);
+                if(!client){MBUG("null client data for {}", clientId); return;}
+                try { client->socket().close();} catch (...) {}
+                Telemetry::instance().setActiveClients(_clients.size());
+                const auto s = std::chrono::duration_cast<std::chrono::seconds>(client->client_hb_delay()).count();
+                MLOG_D("on_client_closed[{}]: client disconnected. session_duration={}s, total connected: {}", 
+                       clientId, s, _clients.size());
+            } else {
+                MLOG_D("on_client_closed[{}]: client not found in map (already removed)", clientId);
+            }
         }
-    }
 
     // Auto-unsubscribe from events when client disconnects
     if (_engine) {
@@ -510,12 +516,14 @@ void RawEndpoint::processPushRequest(uint64_t clientId, const lunaricorn::intern
             long long eid = _engine->createEvent(event_data);
             _engine->dispatchEvent(event_data);
             
+            Telemetry::instance().recordPushSuccess();
             MLOG_D("processPushRequest[{}]: event created id={} type={} broadcast to subscribers", 
                    clientId, eid, event_data.event_type);
             
             sendResponse(clientId, msg.header.seq, true, 
                 {{"event_id", (long long)eid}, {"published", true}});
         } catch (const std::exception& e) {
+            Telemetry::instance().recordError();
             MLOG_E("processPushRequest[{}]: failed: {}", clientId, e.what());
             sendResponse(clientId, msg.header.seq, false, 
                 {{"error", boost::json::value(e.what())}});

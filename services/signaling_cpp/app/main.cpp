@@ -7,6 +7,7 @@
 #include "signaling_engine_test.h"
 #include "signal_waiter.h"
 #include "raw_endpoint.h"
+#include "telemetry.h"
 
 constexpr std::string app_name { "signaling" };
 constexpr std::string app_ver { "0.2" };
@@ -54,7 +55,20 @@ int main() {
 
     MLOG_D("create objects - ok");
     endpoint->start();
-    signals.wait();
+
+    // Periodic telemetry report every 60 seconds
+    auto last_report = std::chrono::steady_clock::now();
+    while (!signals.stopped())
+    {
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_report >= std::chrono::seconds(60))
+        {
+            Telemetry::instance().printReport();
+            last_report = now;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
     endpoint->stop();
 
     MLOG_D("NORMAL EXIT {} {}, selftest_ok:{}", app_name, app_token, selftest_ok);

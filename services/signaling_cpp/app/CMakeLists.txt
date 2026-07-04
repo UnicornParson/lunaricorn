@@ -100,6 +100,7 @@ add_executable(signaling
     signaling_engine.cpp
     signaling_engine_test.cpp
     signal_waiter.cpp
+    telemetry.cpp
 )
 
 # Include directories
