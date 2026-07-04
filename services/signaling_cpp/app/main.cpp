@@ -54,22 +54,15 @@ int main() {
     endpoint->connectEngine(engine);
 
     MLOG_D("create objects - ok");
+
+    // Start periodic telemetry reporting (every 60 s via internal Poco::Timer)
+    Telemetry::instance().start();
+
     endpoint->start();
-
-    // Periodic telemetry report every 60 seconds
-    auto last_report = std::chrono::steady_clock::now();
-    while (!signals.stopped())
-    {
-        auto now = std::chrono::steady_clock::now();
-        if (now - last_report >= std::chrono::seconds(60))
-        {
-            Telemetry::instance().printReport();
-            last_report = now;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
+    signals.wait();
     endpoint->stop();
+
+    Telemetry::instance().stop();
 
     MLOG_D("NORMAL EXIT {} {}, selftest_ok:{}", app_name, app_token, selftest_ok);
     return 0;

@@ -6,13 +6,10 @@
 #include <chrono>
 #include <boost/json.hpp>
 
+#include <Poco/Timer.h>
+
 namespace lunaricorn
 {
-
-// Forward declarations for json serialization
-namespace internal {
-    class TelemetryData;
-}
 
 /**
  * @brief Global telemetry singleton for collecting service-wide statistics.
@@ -25,6 +22,9 @@ namespace internal {
  *
  * Provides periodic logging via MLOG_D and JSON snapshot via to_json().
  * Not coupled to any specific endpoint — can be used from all parts of the service.
+ *
+ * Call start() once at service startup to begin periodic reports (every 60 s).
+ * Call stop() before shutdown to cancel the report timer.
  */
 class Telemetry
 {
@@ -37,6 +37,14 @@ public:
     Telemetry& operator=(const Telemetry&) = delete;
     Telemetry(Telemetry&&) = delete;
     Telemetry& operator=(Telemetry&&) = delete;
+
+    // ---- Lifecycle ----
+
+    /// Start periodic report timer (prints via MLOG_D every 60 s).
+    void start();
+
+    /// Stop periodic report timer.
+    void stop();
 
     // ---- Metric recording methods ----
 
@@ -66,7 +74,7 @@ public:
     /// Return a JSON object containing all current metrics.
     boost::json::object toJson() const;
 
-    /// Print a one-line report via MLOG_D (periodically called from main loop).
+    /// Print a one-line report via MLOG_D.
     void printReport();
 
 private:
@@ -76,15 +84,23 @@ private:
     /// Evict entries older than 60 seconds from a sliding window deque.
     static void evictOld(std::deque<std::chrono::steady_clock::time_point>& dq);
 
+    /// Timer callback — calls printReport().
+    void onTimer(Poco::Timer& timer);
+
     // ---- State ----
     std::atomic<uint64_t> _totalPushOk{ 0 };
     std::atomic<size_t>   _activeClients{ 0 };
+    std::atomic<bool>     _running{ false };
 
     mutable std::mutex _mutex;
     std::deque<std::chrono::steady_clock::time_point> _pushTimestamps;
     std::deque<std::chrono::steady_clock::time_point> _errorTimestamps;
 
+    Poco::Timer _timer;
+
     static constexpr auto WINDOW_DURATION = std::chrono::seconds(60);
+    static constexpr long REPORT_INTERVAL_MS = 60 * 1000; // 60 seconds
+    static constexpr long START_DELAY_MS     = 60 * 1000; // first report after 60 s
 }; // class Telemetry
 
 } // namespace lunaricorn

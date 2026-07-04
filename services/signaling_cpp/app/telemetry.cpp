@@ -1,6 +1,8 @@
 #include "telemetry.h"
 #include <iostream>
 
+#include <Poco/TimerCallback.h>
+
 namespace lunaricorn
 {
 
@@ -8,6 +10,39 @@ Telemetry& Telemetry::instance()
 {
     static Telemetry inst;
     return inst;
+}
+
+void Telemetry::start()
+{
+    bool expected = false;
+    if (!_running.compare_exchange_strong(expected, true))
+    {
+        MLOG_D("Telemetry: already running, ignoring start()");
+        return;
+    }
+
+    // TimerCallback adapter: calls Telemetry::onTimer
+    _timer.start(Poco::TimerCallback<Telemetry>(*this, &Telemetry::onTimer),
+                 START_DELAY_MS, REPORT_INTERVAL_MS);
+    MLOG_D("Telemetry: started, report interval={}ms", REPORT_INTERVAL_MS);
+}
+
+void Telemetry::stop()
+{
+    bool expected = true;
+    if (!_running.compare_exchange_strong(expected, false))
+    {
+        MLOG_D("Telemetry: not running, ignoring stop()");
+        return;
+    }
+
+    _timer.stop();
+    MLOG_D("Telemetry: stopped");
+}
+
+void Telemetry::onTimer(Poco::Timer& /*timer*/)
+{
+    printReport();
 }
 
 void Telemetry::evictOld(std::deque<std::chrono::steady_clock::time_point>& dq)
