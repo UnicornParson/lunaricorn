@@ -16,14 +16,16 @@
 | SignalingEngine (CRUD, подписки, фильтрация) | ✅ Работает | createEvent, findEvents, subscribe, dispatch |
 | MessageStorage (PostgreSQL через soci) | ✅ Работает | Таблица signaling_events |
 | Telemetry (сбор статистики) | ✅ Работает | Singleton, push/error/active метрики, toJson |
-| HTTP endpoint (Boost.Beast) | ✅ Работает | Маршруты: / /health /push /pull /stat |
-| CLI клиент + HttpTest | ✅ Работает | cli/main.cpp, TestSender, HttpTest |
+| HTTP endpoint (Boost.Beast) | ✅ Работает | Маршруты: / /health /v1/list/* /v1/stat/clients /push /pull /stat |
+| CLI клиент + HttpTest | ✅ Работает | cli/main.cpp, TestSender, HttpTest с ✅/❌ выводом |
 | main.cpp (запуск + graceful shutdown) | ✅ Работает | RawEndpoint + HttpServer + SignalWaiter |
 | Docker (образы + compose) | ✅ Есть | Dockerfile.*, docker-compose.yaml |
 | processSubscription (подписки) | ✅ Работает | Парсинг фильтров + engine->subscribe() |
 | processPushRequest (публикация) | ✅ Работает | createEvent + dispatchEvent + sendEventToClient |
 | processQueryRequest (запрос событий) | ✅ Работает | Парсит параметры, вызывает engine->findEvents(), отправляет результаты |
 | Reconnect (автопереподключение) | ✅ Реализовано | Exponential backoff (1s–60s) + jitter + restore subscriptions |
+| GET /v1/list/* (совместимое API) | ✅ Реализовано | tags, types, affected, owners — engine->getUniqueValues() |
+| GET /v1/stat/clients | ✅ Реализовано | Телеметрия + активные клиенты |
 
 ---
 
@@ -57,13 +59,13 @@
 1. **Порт**: Python использует `5557`, C++ использует `8081` — нужно синхронизировать
 2. **Префикс API**: Python использует `/v1/*`, C++ использует без префикса — клиенты orb уже используют `/push`/`/pull` без префикса
 3. **Отсутствующие эндпоинты в C++**:
-   - `GET /v1/list/tags` — уникальные теги
-   - `GET /v1/list/types` — уникальные типы событий
-   - `GET /v1/list/affected` — уникальные affected значения
-   - `GET /v1/list/owners` — уникальные источники
-   - `GET /v1/stat/clients` — список активных клиентов
+   - ~~`GET /v1/list/tags` — уникальные теги~~ ✅ Реализовано
+   - ~~`GET /v1/list/types` — уникальные типы событий~~ ✅ Реализовано
+   - ~~`GET /v1/list/affected` — уникальные affected значения~~ ✅ Реализовано
+   - ~~`GET /v1/list/owners` — уникальные источники~~ ✅ Реализовано
+   - ~~`GET /v1/stat/clients` — список активных клиентов~~ ✅ Реализовано
    - `POST /v1/browse` — поиск событий с фильтрами
-4. **Формат POST /push**:
+4. **Формат POST /push**:  - больше не будет поддерживаться.
    - Python: `{"type": "push", "event_type": "...", "message": {...}}` (через ZMQ)
    - C++ HTTP: `{"type": "...", "source": "...", "affected": [...], "tags": [...], "payload": {...}}`
    - C++ формат совместим с orb (использует тот же формат)
@@ -84,16 +86,16 @@
   - Добавить `wait_for_ready()` при старте
   - Файл: `app/main.cpp`, `lunaricorn/cpp/leader_api.h`
 
-- [ ] **Добавить отсутствующие HTTP эндпоинты**
-  - `GET /v1/list/tags` → engine->getUniqueValues("tags")
-  - `GET /v1/list/types` → engine->getUniqueValues("type")
-  - `GET /v1/list/affected` → engine->getUniqueValues("affected")
-  - `GET /v1/list/owners` → engine->getUniqueValues("owner")
-  - `GET /v1/stat/clients` → Telemetry::instance().activeClients()
+- [x] **Добавить отсутствующие HTTP эндпоинты**
+  - ~~`GET /v1/list/tags` → engine->getUniqueValues("tags")~~ ✅
+  - ~~`GET /v1/list/types` → engine->getUniqueValues("type")~~ ✅
+  - ~~`GET /v1/list/affected` → engine->getUniqueValues("affected")~~ ✅
+  - ~~`GET /v1/list/owners` → engine->getUniqueValues("owner")~~ ✅
+  - ~~`GET /v1/stat/clients` → Telemetry::instance().activeClients()~~ ✅
   - `POST /v1/browse` → engine->findEvents() с парсингом BrowseRequest body
   - Файл: `app/http_endpoint.cpp`
 
-- [ ] **Синхронизировать порт HTTP API**
+- [x] **Синхронизировать порт HTTP API** - порт определяется в композ файле. внутренний порт не важен
   - Изменить порт с `8081` на `5557` (совместимость с Python API)
   - Или добавить переменную окружения `SIGNALING_API_PORT`
   - Файл: `app/main.cpp`
@@ -186,12 +188,12 @@
 3. ✅ Подписки работают: client → subscribe → push → dispatch → subscriber получает событие
 4. ✅ processQueryRequest реализован (парсит параметры, вызывает findEvents, отправляет результаты)
 5. ✅ Reconnect реализован (exponential backoff, auto-reconnect, restore subscriptions)
-6. ❌ **LeaderConnector интеграция** — сервис регистрируется в leader
-7. ❌ **Все эндпоинты Python API доступны** — /v1/list/*, /v1/stat/clients, /v1/browse
+6. ✅ **Совместимое REST API** — /v1/list/*, /v1/stat/clients реализованы
+7. ❌ **LeaderConnector интеграция** — сервис регистрируется в leader
 8. ❌ **Порт HTTP API синхронизирован** — 5557
 9. ❌ **Docker healthcheck** — сервис проверяется Docker
 10. ❌ **docker-compose.yaml обновлён** — signaling_cpp работает как основной сервис
-11. ❌ **GET /pull с фильтрами** — полная совместимость с /v1/browse
+11. ❌ **POST /v1/browse** — полная совместимость с BrowseRequest
 
 ---
 
@@ -224,6 +226,14 @@
 ---
 
 ## История обновлений
+
+### 2026-07-06
+- ✅ Реализовано совместимое REST API: GET /v1/list/* (tags, types, affected, owners)
+- ✅ Реализован GET /v1/stat/clients — статистика клиентов и телеметрия
+- ✅ Исправлен маппинг полей: `event_type` → `type`, `source` → `owner`
+- ✅ Добавлена поддержка полей `type` и `owner` в `message_storage.cpp::get_unique_values()`
+- ✅ Добавлены тесты в HttpTest с выводом ✅/❌
+- ✅ Актуализирован статус компонентов и критериев готовности
 
 ### 2026-07-05
 - Актуализирован статус компонентов
