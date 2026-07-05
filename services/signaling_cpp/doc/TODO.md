@@ -1,9 +1,8 @@
-# TODO: Чеклист готовности Signaling C++ сервиса
-
+# TODO: Чеклист готовности Signaling C++ сервиса для кластера Lunaricorn
 
 ## Цель
 
-Список задач, выполнение которых означает, что сервис **готов к использованию** как надёжная основа для разработки других сервисов. После завершения всего списка можно переходить к следующему микросервису.
+Список задач для подготовки signaling_cpp к использованию как **основной сервис signaling** в кластере Lunaricorn, вместо текущего Python-реализования.
 
 ---
 
@@ -23,53 +22,132 @@
 | Docker (образы + compose) | ✅ Есть | Dockerfile.*, docker-compose.yaml |
 | processSubscription (подписки) | ✅ Работает | Парсинг фильтров + engine->subscribe() |
 | processPushRequest (публикация) | ✅ Работает | createEvent + dispatchEvent + sendEventToClient |
-| processQueryRequest (запрос событий) | ⚠️ Заглушка | Отправляет ACK, не использует engine->findEvents() |
+| processQueryRequest (запрос событий) | ✅ Работает | Парсит параметры, вызывает engine->findEvents(), отправляет результаты |
 | Reconnect (автопереподключение) | ✅ Реализовано | Exponential backoff (1s–60s) + jitter + restore subscriptions |
 
 ---
 
-## Чеклист готовности к продакшену
+## Анализ совместимости с Python signaling API
 
-### 🔴 Критическое (блокирует переход к следующему сервису)
+### Текущий Python API (port 5557)
 
-- [ ] **Реализовать processQueryRequest**
-  - Связать с `SignalingEngine::findEvents()` / `findEventsByType()`
-  - Парсить query-параметры из payload (offset, limit, type, source)
-  - Отправлять результаты клиенту
-  - Файл: `app/raw_endpoint.cpp::processQueryRequest()`
+| Endpoint | Метод | Назначение |
+|----------|-------|------------|
+| `/` | GET | Статус сервиса |
+| `/health` | GET | Health check |
+| `/v1/list/tags` | GET | Уникальные теги |
+| `/v1/list/types` | GET | Уникальные типы событий |
+| `/v1/list/affected` | GET | Уникальные affected значения |
+| `/v1/list/owners` | GET | Уникальные источники |
+| `/v1/stat/clients` | GET | Список активных клиентов |
+| `/v1/browse` | POST | Поиск событий (BrowseRequest) |
 
-- [x] **Добавить reconnect логику для клиентов**
-  - Exponential backoff (1s–60s) + full jitter (ReconnectStrategy)
-  - Автоматическое переподключение SignalingConnector при разрыве
-  - Восстановление подписок после переподключения (SubscriptionCache)
-  - Файлы: `lunaricorn/cpp/signaling_reconnect.h`, `lunaricorn/cpp/signaling_api.h/cpp`
-  - CLI: `cli/main.cpp` — `connector.set_auto_reconnect(true)`
+### Текущий C++ HTTP API (port 8081)
 
+| Endpoint | Метод | Назначение |
+|----------|-------|------------|
+| `/` | GET | Статус сервиса |
+| `/health` | GET | Health check |
+| `/push` | POST | Публикация события |
+| `/pull?offset=N` | GET | Запрос событий |
+| `/stat` | GET | Телеметрия |
+
+### Различия, требующие устранения
+
+1. **Порт**: Python использует `5557`, C++ использует `8081` — нужно синхронизировать
+2. **Префикс API**: Python использует `/v1/*`, C++ использует без префикса — клиенты orb уже используют `/push`/`/pull` без префикса
+3. **Отсутствующие эндпоинты в C++**:
+   - `GET /v1/list/tags` — уникальные теги
+   - `GET /v1/list/types` — уникальные типы событий
+   - `GET /v1/list/affected` — уникальные affected значения
+   - `GET /v1/list/owners` — уникальные источники
+   - `GET /v1/stat/clients` — список активных клиентов
+   - `POST /v1/browse` — поиск событий с фильтрами
+4. **Формат POST /push**:
+   - Python: `{"type": "push", "event_type": "...", "message": {...}}` (через ZMQ)
+   - C++ HTTP: `{"type": "...", "source": "...", "affected": [...], "tags": [...], "payload": {...}}`
+   - C++ формат совместим с orb (использует тот же формат)
+5. **POST /pull vs POST /v1/browse**:
+   - Python: `POST /v1/browse` с BrowseRequest body
+   - C++: `GET /pull?offset=N` — только offset, без фильтров
+
+---
+
+## Задачи по включению в кластер
+
+### 🔴 Критическое (блокирует замену Python signaling)
+
+- [ ] **Добавить LeaderConnector интеграцию**
+  - Подключить LeaderConnector из `lunaricorn/cpp/leader_api.h` в main.cpp
+  - Добавить регистрацию сервиса через `register_service()` с node_type = "signaling"
+  - Добавить поддержку переменной окружения `CLUSTER_LEADER_URL`
+  - Добавить `wait_for_ready()` при старте
+  - Файл: `app/main.cpp`, `lunaricorn/cpp/leader_api.h`
+
+- [ ] **Добавить отсутствующие HTTP эндпоинты**
+  - `GET /v1/list/tags` → engine->getUniqueValues("tags")
+  - `GET /v1/list/types` → engine->getUniqueValues("type")
+  - `GET /v1/list/affected` → engine->getUniqueValues("affected")
+  - `GET /v1/list/owners` → engine->getUniqueValues("owner")
+  - `GET /v1/stat/clients` → Telemetry::instance().activeClients()
+  - `POST /v1/browse` → engine->findEvents() с парсингом BrowseRequest body
+  - Файл: `app/http_endpoint.cpp`
+
+- [ ] **Синхронизировать порт HTTP API**
+  - Изменить порт с `8081` на `5557` (совместимость с Python API)
+  - Или добавить переменную окружения `SIGNALING_API_PORT`
+  - Файл: `app/main.cpp`
+
+- [ ] **Добавить cluster-aware конфигурацию**
+  - Добавить переменные окружения: `CLUSTER_LEADER_URL`, `SIGNALING_API_PORT`, `SIGNALING_HTTP_PORT`
+  - Считать host из discovery (через LeaderConnector) для передачи в лидер
+  - Файл: `app/main.cpp`
 
 ### 🟡 Высокое (значительно повышает надёжность)
 
 - [ ] **Docker healthcheck**
-  - Добавить `HEALTHCHECK` в Dockerfile через curl к `GET /health` (порт 8081)
-  - Обновить `docker-compose.yaml` с healthcheck
+  - Добавить `HEALTHCHECK` в Dockerfile через curl к `GET /health`
+  - Обновить `docker-compose.yaml` с healthcheck для signaling_cpp
+  - Файл: `services/signaling_cpp/Dockerfile`, `services/docker-compose.yaml`
 
 - [ ] **Создать README.md**
   - Prerequisites (C++20, CMake, Boost, Poco, soci, PostgreSQL)
   - Build (cmake, make)
-  - Configuration (переменные окружения: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
+  - Configuration (переменные окружения)
   - Run (локально, docker)
   - Testing (CLI клиент, HTTP endpoint)
+  - Cluster integration (CLUSTER_LEADER_URL, регистрация в лидере)
+  - Файл: `services/signaling_cpp/README.md`
+
+- [ ] **Заменить Python signaling в docker-compose.yaml**
+  - Создать сервис `signaling_cpp` с портами 5555, 5556, 5557
+  - Добавить зависимости: pg, leader, maintenance
+  - Настроить environment: CLUSTER_LEADER_URL, DB_*
+  - Обновить сервис `orb` для использования нового SIGNALING_API
+  - Файл: `services/docker-compose.yaml`
+
+- [ ] **Реализовать GET /pull с фильтрами (аналог /v1/browse)**
+  - Парсить query parameters: types, sources, affected, tags, timestamp, limit
+  - Вызывать engine->findEvents() с фильтрами
+  - Отправлять результаты клиенту
+  - Файл: `app/http_endpoint.cpp::handle_pull()`
 
 ### 🟢 Среднее (желательно, но не блокирует)
 
 - [ ] **Обновить STATUS.md**
   - Актуализировать раздел по signaling_cpp в корневом `doc/STATUS.md`
 
+- [ ] **Миграция клиентов с ZMQ на HTTP**
+  - orb использует SIGNALING_REQ/SIGNALING_PUB (ZMQ) — проверить возможность HTTP
+  - Обновить все сервисы, использующие старый ZMQ signaling
+
 - [ ] **Telemetry: опциональное логирование в файл**
-  - Добавить конфигурацию для записи метрик в файл в дополнение к MLOG_D
+  - Добавить конфигурацию для записи метрик в файл
 
 ### 🔵 Низкое (можно отложить)
 
 - [ ] **Удаление мёртвого кода**
+  - Проверить и удалить неиспользуемые файлы/классы
 
 ---
 
@@ -77,33 +155,43 @@
 
 ```
 Критическое (блокирует переход)
-└── [ ] processQueryRequest — 2-3ч
+├── [ ] LeaderConnector интеграция — 2ч
+├── [ ] Добавить отсутствующие HTTP эндпоинты — 3ч
+├── [ ] Синхронизировать порт HTTP API — 0.5ч
+└── [ ] Cluster-aware конфигурация — 1ч
 
 Высокое
 ├── [ ] Docker healthcheck — 1ч
-└── [ ] README.md — 1ч
+├── [ ] README.md — 1ч
+├── [ ] Замена в docker-compose.yaml — 2ч
+└── [ ] GET /pull с фильтрами — 1.5ч
 
 Среднее
 ├── [ ] STATUS.md обновление — 0.5ч
+├── [ ] Миграция клиентов с ZMQ — TBD
 └── [ ] Telemetry file logging — 1ч
 
 Низкое
 └── [ ] Удаление мёртвого кода — 0.5ч
 
-Оценка: ~5-6 часов до полной готовности
+Оценка: ~13-15 часов до полной готовности
 ```
 
 ---
 
-## Критерии готовности "можно положиться на сервис"
+## Критерии готовности "можно заменить Python signaling"
 
 1. ✅ RawEndpoint стабильно принимает соединения и обрабатывает heartbeat
 2. ✅ HTTP endpoint отвечает на /health, /push, /stat
 3. ✅ Подписки работают: client → subscribe → push → dispatch → subscriber получает событие
-4. ⚠️ **processQueryRequest должен быть реализован** (заглушка)
-5. ✅ **Reconnect реализован** (exponential backoff, auto-reconnect, restore subscriptions)
-
-Пункт 4 — минимальный набор для перехода к разработке следующего сервиса.
+4. ✅ processQueryRequest реализован (парсит параметры, вызывает findEvents, отправляет результаты)
+5. ✅ Reconnect реализован (exponential backoff, auto-reconnect, restore subscriptions)
+6. ❌ **LeaderConnector интеграция** — сервис регистрируется в leader
+7. ❌ **Все эндпоинты Python API доступны** — /v1/list/*, /v1/stat/clients, /v1/browse
+8. ❌ **Порт HTTP API синхронизирован** — 5557
+9. ❌ **Docker healthcheck** — сервис проверяется Docker
+10. ❌ **docker-compose.yaml обновлён** — signaling_cpp работает как основной сервис
+11. ❌ **GET /pull с фильтрами** — полная совместимость с /v1/browse
 
 ---
 
@@ -135,5 +223,17 @@
 
 ---
 
+## История обновлений
+
+### 2026-07-05
+- Актуализирован статус компонентов
+- Добавлен анализ совместимости с Python signaling API
+- Добавлены задачи по cluster integration
+- Добавлен LeaderConnector анализ
+- Обновлено количество критических/высоких/средних задач
+- Обновлено время оценки
+
+---
+
 *Создано: 28.06.2026*
-*Обновлено: 04.07.2026 — убраны пункты об автотестах, сервис тестируется через CLI*
+*Обновлено: 05.07.2026 — актуализация для кластерной интеграции*
