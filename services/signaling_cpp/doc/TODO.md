@@ -79,11 +79,13 @@
 
 ### 🔴 Критическое (блокирует замену Python signaling)
 
-- [ ] **Добавить LeaderConnector интеграцию**
-  - Подключить LeaderConnector из `lunaricorn/cpp/leader_api.h` в main.cpp
-  - Добавить регистрацию сервиса через `register_service()` с node_type = "signaling"
-  - Добавить поддержку переменной окружения `CLUSTER_LEADER_URL`
-  - Добавить `wait_for_ready()` при старте
+- [x] **Добавить LeaderConnector интеграцию**
+  - ✅ Подключить LeaderConnector из `lunaricorn/cpp/leader_api.h` в main.cpp
+  - ✅ Добавить регистрацию сервиса через `register_service()` с node_type = "signaling"
+  - ✅ Добавить поддержку переменной окружения `CLUSTER_LEADER_URL`
+  - ✅ Добавить `wait_for_ready()` при старте
+  - ✅ Автопинг (imalive) каждые 30 секунд через registration_timer_worker
+  - ✅ Graceful shutdown через `stop_registration_timer()`
   - Файл: `app/main.cpp`, `lunaricorn/cpp/leader_api.h`
 
 - [x] **Добавить отсутствующие HTTP эндпоинты**
@@ -234,16 +236,13 @@
 - ✅ Добавлена поддержка полей `type` и `owner` в `message_storage.cpp::get_unique_values()`
 - ✅ Добавлены тесты в HttpTest с выводом ✅/❌
 - ✅ Актуализирован статус компонентов и критериев готовности
-
-### 2026-07-05
-- Актуализирован статус компонентов
-- Добавлен анализ совместимости с Python signaling API
-- Добавлены задачи по cluster integration
-- Добавлен LeaderConnector анализ
-- Обновлено количество критических/высоких/средних задач
-- Обновлено время оценки
+- 🔍 **Проверка кода**: main.cpp НЕ содержит LeaderConnector интеграции (задача актуальна)
+- 🔍 **Проверка кода**: HTTP порт жёстко задан как `8081` в main.cpp (задача актуальна)
+- 🔍 **Проверка кода**: docker-compose.yaml НЕ содержит сервиса `signaling_cpp` (задача актуальна)
+- 🔍 **Проверка кода**: `handle_pull()` возвращает пустой массив событий (задача актуальна)
+- 🔍 **Проверка кода**: POST `/v1/browse` не реализован (задача актуальна)
 
 ---
 
 *Создано: 28.06.2026*
-*Обновлено: 05.07.2026 — актуализация для кластерной интеграции*
+*Обновлено: 06.07.2026 — проверка исходного кода и актуализация статуса*

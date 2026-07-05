@@ -9,6 +9,7 @@
 #include "raw_endpoint.h"
 #include "http_endpoint.h"
 #include "telemetry.h"
+#include "leader_api.h"
 
 constexpr std::string app_name { "signaling" };
 constexpr std::string app_ver { "0.2" };
@@ -51,7 +52,60 @@ int main() {
         MLOG_E("engine selftest failed");
         return -1;
     }
-    auto endpoint = std::make_shared<RawEndpoint>(raw_host, raw_port, engine);
+
+    // LeaderConnector integration: discover leader URL from environment
+    std::string leader_url = std::getenv("CLUSTER_LEADER_URL");
+    if (leader_url.empty()) {
+        leader_url = "http://localhost:8001";
+    }
+    MLOG_D("Leader URL: {}", leader_url);
+
+    // Create LeaderConnector and wait for leader readiness
+    auto leader = ConnectorUtils::create_leader_connector(leader_url);
+
+    // Optional: wait for leader to be ready
+    bool leader_ready = false;
+    try {
+        leader_ready = leader->wait_for_ready(30, 3);
+        if (leader_ready) {
+            MLOG_D("Leader is ready");
+        } else {
+            MLOG_W("Leader did not become ready within timeout, continuing without registration");
+        }
+    } catch (const std::exception& e) {
+        MLOG_W("Failed to connect to leader: {}, continuing without registration", e.what());
+    }
+
+    // Register signaling service with the leader if available
+    std::shared_ptr<RawEndpoint> endpoint;
+    if (leader_ready) {
+        try {
+            // Build additional info with internal service details
+            Poco::JSON::Object::Ptr additional = new Poco::JSON::Object();
+            additional->set("raw_port", raw_port);
+            additional->set("http_port", http_port);
+            additional->set("api_endpoint", std::format("http://{}:{}", http_host, http_port));
+
+            // Register with the leader - this starts automatic periodic ping (imalive)
+            auto reg_response = leader->register_service(
+                app_name,           // node_name
+                "signaling",        // node_type
+                app_token,          // instance_key
+                http_host,          // host
+                http_port,          // port
+                additional          // additional info
+            );
+
+            MLOG_D("Registered with leader: status={}",
+                   reg_response->optValue<std::string>("status", "unknown"));
+        } catch (const std::exception& e) {
+            MLOG_W("Failed to register with leader: {}", e.what());
+        }
+    } else {
+        MLOG_W("Skipping leader registration - leader not available");
+    }
+
+    endpoint = std::make_shared<RawEndpoint>(raw_host, raw_port, engine);
 
     // Connect engine to endpoint for subscriber event delivery
     endpoint->connectEngine(engine);
@@ -78,5 +132,15 @@ int main() {
     Telemetry::instance().stop();
 
     MLOG_D("NORMAL EXIT {} {}, selftest_ok:{}", app_name, app_token, selftest_ok);
+
+    // Stop periodic registration on shutdown
+    if (leader_ready && leader) {
+        try {
+            leader->stop_registration_timer();
+        } catch (...) {
+            // ignore on shutdown
+        }
+    }
+
     return 0;
 }
