@@ -7,7 +7,7 @@
 #include <cstdint>
 
 /// Periodically tests the HTTP REST endpoints of the signaling service
-/// (GET /health, GET /stat, POST /push) and prints results.
+/// (GET /health, GET /v1/stat, POST /v1/push) and prints results.
 class HttpTest
 {
 public:

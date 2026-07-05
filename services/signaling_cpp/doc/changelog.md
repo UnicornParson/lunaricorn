@@ -39,24 +39,14 @@
 - Полноценная обработка `processPushRequest()`: создание StoredEventData, createEvent + dispatchEvent
 - Автоматическая отписка клиента при disconnect (`on_client_closed` → `engine->unsubscribe`)
 
-### Added
-- `HttpServer` — HTTP сервер на Boost.Beast для REST API
-  - `Session` — обработка HTTP подключений (async read/write)
-  - Маршруты:
-    - `GET /` — статус сервиса
-    - `GET /health` — health check
-    - `POST /push` — публикация события (аналог RawEndpoint::processPushRequest)
-    - `GET /pull?offset=N` — запрос событий (аналог RawEndpoint::processQueryRequest)
-    - `GET /stat` — JSON с текущей телеметрией (Telemetry + stats)
-  - `HttpServerConfig` — конфигурация (address, port, num_threads)
-  - `set_engine()` — связывание с SignalingEngine
-- `StoredEventData` — структура для передачи событий через HTTP
-- CMake: добавлен компонент `beast` в find_package и target_link_libraries
-
 ### Changed
-- `main.cpp`: добавлена инициализация и запуск HttpServer alongside RawEndpoint
-- `main.cpp`: порядок запуска/остановки: httpEndpoint → endpoint → stop order reverse
-- CMakeLists.txt: `find_package(Boost REQUIRED COMPONENTS system filesystem json beast)`
+- HTTP API endpoints migrated to `/v1/` prefix for versioning and compatibility with Python signaling API:
+  - `POST /push` → `POST /v1/push`
+  - `GET /pull?offset=N` → `GET /v1/pull?offset=N`
+  - `GET /stat` → `GET /v1/stat`
+  - `GET /` и `GET /health` остались без изменений
+- `HttpTest` client updated to use new `/v1/` prefixed endpoints
+- Documentation updated to reflect new endpoint paths
 
 ### Added
 - `ReconnectStrategy` — новый класс в `lunaricorn/cpp/signaling_reconnect.h` для exponential backoff с full jitter (1s–60s)

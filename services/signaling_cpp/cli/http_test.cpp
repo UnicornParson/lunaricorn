@@ -163,7 +163,7 @@ void HttpTest::test_stat()
         Poco::Net::HTTPClientSession session(addr);
         session.setTimeout(Poco::Timespan(5, 0));
 
-        Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_GET, "/stat");
+        Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_GET, "/v1/stat");
         session.sendRequest(request);
 
         Poco::Net::HTTPResponse response;
@@ -175,16 +175,16 @@ void HttpTest::test_stat()
         int status = response.getStatus();
         if (status == 200) {
             m_stat_ok.fetch_add(1);
-            std::cout << "[" << now_ts() << "] [HttpTest] GET /stat -> 200 OK"
+            std::cout << "[" << now_ts() << "] [HttpTest] GET /v1/stat -> 200 OK"
                       << " body=" << body << std::endl;
         } else {
             m_error_count.fetch_add(1);
-            std::cerr << "[" << now_ts() << "] [HttpTest] GET /stat -> " << status
+            std::cerr << "[" << now_ts() << "] [HttpTest] GET /v1/stat -> " << status
                       << " body=" << body << std::endl;
         }
     } catch (const Poco::Exception& e) {
         m_error_count.fetch_add(1);
-        std::cerr << "[" << now_ts() << "] [HttpTest] GET /stat FAILED: "
+        std::cerr << "[" << now_ts() << "] [HttpTest] GET /v1/stat FAILED: "
                   << e.displayText() << std::endl;
     }
 }
@@ -209,7 +209,7 @@ void HttpTest::test_push()
         Poco::Net::HTTPClientSession session(addr);
         session.setTimeout(Poco::Timespan(5, 0));
 
-        Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, "/push");
+        Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, "/v1/push");
         request.setContentType("application/json");
         request.setContentLength(static_cast<int>(body.size()));
         request.setKeepAlive(false);
@@ -225,16 +225,16 @@ void HttpTest::test_push()
         int status = response.getStatus();
         if (status == 200) {
             m_push_ok.fetch_add(1);
-            std::cout << "[" << now_ts() << "] [HttpTest] POST /push -> 200 OK"
+            std::cout << "[" << now_ts() << "] [HttpTest] POST /v1/push -> 200 OK"
                       << " body=" << respBody << std::endl;
         } else {
             m_error_count.fetch_add(1);
-            std::cerr << "[" << now_ts() << "] [HttpTest] POST /push -> " << status
+            std::cerr << "[" << now_ts() << "] [HttpTest] POST /v1/push -> " << status
                       << " body=" << respBody << std::endl;
         }
     } catch (const Poco::Exception& e) {
         m_error_count.fetch_add(1);
-        std::cerr << "[" << now_ts() << "] [HttpTest] POST /push FAILED: "
+        std::cerr << "[" << now_ts() << "] [HttpTest] POST /v1/push FAILED: "
                   << e.displayText() << std::endl;
     }
 }

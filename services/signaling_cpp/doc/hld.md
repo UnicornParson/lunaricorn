@@ -175,9 +175,9 @@ HttpServer (Endpoint impl)
     └── routing:
         ├── handle_root() → GET /
         ├── handle_health() → GET /health
-        ├── handle_push() → POST /push
-        ├── handle_pull() → GET /pull
-        └── handle_stat() → GET /stat
+        ├── handle_push() → POST /v1/push
+        ├── handle_pull() → GET /v1/pull
+        └── handle_stat() → GET /v1/stat
 ```
 
 **Конфигурация:**
@@ -220,7 +220,7 @@ Health check endpoint.
 }
 ```
 
-#### POST /push
+#### POST /v1/push
 Публикация события (аналог RawEndpoint::processPushRequest).
 
 **Request Body (application/json):**
@@ -256,7 +256,7 @@ Health check endpoint.
 }
 ```
 
-#### GET /pull?offset=N
+#### GET /v1/pull?offset=N
 Запрос событий (аналог RawEndpoint::processQueryRequest).
 
 **Query Parameters:**
@@ -275,7 +275,7 @@ Health check endpoint.
 
 > **Примечание:** Ретrieve events через HTTP пока не реализован. В future — добавить метод `pullEvents()` в SignalingEngine.
 
-#### GET /stat
+#### GET /v1/stat
 Возвращает JSON с текущей телеметрией.
 
 **Response (200 OK):**

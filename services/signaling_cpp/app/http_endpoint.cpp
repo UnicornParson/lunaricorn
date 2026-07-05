@@ -65,16 +65,16 @@ void Session::process_request()
         else if (method == http::verb::get && target == "/health") {
             handle_health();
         }
-        // Route: POST /push
-        else if (method == http::verb::post && target == "/push") {
+        // Route: POST /v1/push
+        else if (method == http::verb::post && target == "/v1/push") {
             handle_push();
         }
-        // Route: GET /pull
-        else if (method == http::verb::get && target.starts_with("/pull")) {
+        // Route: GET /v1/pull
+        else if (method == http::verb::get && target.starts_with("/v1/pull")) {
             handle_pull();
         }
-        // Route: GET /stat
-        else if (method == http::verb::get && target == "/stat") {
+        // Route: GET /v1/stat
+        else if (method == http::verb::get && target == "/v1/stat") {
             handle_stat();
         }
         else {
