@@ -3,6 +3,24 @@
 ## [Unreleased]
 
 ### Added
+- Совместимое REST API для запроса уникальных значений и статистики:
+  - `GET /` — статус сервиса (уже существовал)
+  - `GET /health` — health check (уже существовал)
+  - `GET /v1/list/tags` — список уникальных тегов
+  - `GET /v1/list/types` — список уникальных типов событий
+  - `GET /v1/list/affected` — список уникальных affected значений
+  - `GET /v1/list/owners` — список уникальных источников (owners)
+  - `GET /v1/stat/clients` — список активных клиентов
+- `Session::handle_list()` — общий хендлер для `/v1/list/*` с вызовом `engine->getUniqueValues()`
+- `Session::handle_clients()` — хендлер для `/v1/stat/clients` с телеметрией
+- `HttpTest::test_root()` — тест GET `/` с выводом ✅/❌
+- `HttpTest::test_list_tags()` — тест GET `/v1/list/tags`
+- `HttpTest::test_list_types()` — тест GET `/v1/list/types`
+- `HttpTest::test_list_affected()` — тест GET `/v1/list/affected`
+- `HttpTest::test_list_owners()` — тест GET `/v1/list/owners`
+- `HttpTest::test_clients()` — тест GET `/v1/stat/clients`
+- `HttpTest::do_get()` — вспомогательный метод для generic GET запросов
+- Статистика `root_ok`, `list_ok`, `clients_ok` в HttpTest
 - `SignalingConnector::query()` — новый метод для отправки query-запросов (MT_QueryReq) с фильтрацией
 - `TestSender::send_and_verify()` — после каждого push отправляется query на тот же тип события и проверяется, что событие найдено
   - Вывод `Query OK: found N events, matched type=...` при успехе

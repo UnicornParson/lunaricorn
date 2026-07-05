@@ -52,6 +52,8 @@ private:
     void handle_push();
     void handle_pull();
     void handle_stat();
+    void handle_list(const std::string& field_name);
+    void handle_clients();
 
     tcp::socket socket_;
     boost::beast::flat_buffer buffer_;

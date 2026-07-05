@@ -173,12 +173,29 @@ HttpServer (Endpoint impl)
     ├── http::request (request_)
     ├── tcp::socket (socket_)
     └── routing:
-        ├── handle_root() → GET /
-        ├── handle_health() → GET /health
-        ├── handle_push() → POST /v1/push
-        ├── handle_pull() → GET /v1/pull
-        └── handle_stat() → GET /v1/stat
+        ├── handle_root()       → GET /
+        ├── handle_health()     → GET /health
+        ├── handle_list()       → GET /v1/list/*
+        ├── handle_push()       → POST /v1/push
+        ├── handle_pull()       → GET /v1/pull
+        ├── handle_clients()    → GET /v1/stat/clients
+        └── handle_stat()       → GET /v1/stat
 ```
+
+**Таблица маршрутизации:**
+
+| Метод | Путь | Назначение | Хендлер |
+|-------|------|------------|---------|
+| GET | `/` | Статус сервиса | `handle_root()` |
+| GET | `/health` | Health check | `handle_health()` |
+| GET | `/v1/list/tags` | Уникальные теги | `handle_list("tags")` |
+| GET | `/v1/list/types` | Уникальные типы событий | `handle_list("event_type")` |
+| GET | `/v1/list/affected` | Уникальные affected значения | `handle_list("affected")` |
+| GET | `/v1/list/owners` | Уникальные источники | `handle_list("source")` |
+| GET | `/v1/stat/clients` | Статистика клиентов | `handle_clients()` |
+| POST | `/v1/push` | Публикация события | `handle_push()` |
+| GET | `/v1/pull?offset=N` | Запрос событий | `handle_pull()` |
+| GET | `/v1/stat` | Телеметрия | `handle_stat()` |
 
 **Конфигурация:**
 | Параметр | Значение по умолчанию | Описание |
@@ -200,6 +217,7 @@ HttpServer (Endpoint impl)
 ### REST API
 
 #### GET /
+
 Возвращает статус сервиса.
 
 **Response (200 OK):**
@@ -211,12 +229,57 @@ HttpServer (Endpoint impl)
 ```
 
 #### GET /health
+
 Health check endpoint.
 
 **Response (200 OK):**
 ```json
 {
   "status": "online"
+}
+```
+
+#### GET /v1/list/{field}
+
+Возвращает список уникальных значений указанного поля из хранилища.
+
+**Query Parameters:**
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| `field` | string | Имя поля: `tags`, `event_type`, `affected`, `source` |
+
+**Response (200 OK):**
+```json
+{
+  "field": "tags",
+  "count": 3,
+  "values": ["tag1", "tag2", "tag3"]
+}
+```
+
+**Response (503 Service Unavailable):**
+```json
+{
+  "error": "Engine not available"
+}
+```
+
+#### GET /v1/stat/clients
+
+Возвращает статистику активных клиентов и телеметрию.
+
+**Response (200 OK):**
+```json
+{
+  "telemetry": {
+    "total_push_ok": 100,
+    "active_clients": 5,
+    "pushes_per_minute": 10,
+    "errors_per_minute": 2
+  },
+  "stats": {
+    "active_requests": 3
+  }
 }
 ```
 

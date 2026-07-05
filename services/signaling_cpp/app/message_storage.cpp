@@ -190,6 +190,30 @@ std::vector<std::string> MessageStorage::get_unique_values(const std::string& fi
         );
         for(auto& r: rows)
             result.push_back(r);
+    } else if(field=="type") {
+        soci::rowset<std::string> rows = (
+            sql.prepare <<
+            R"(
+            SELECT DISTINCT type
+            FROM signaling_events
+            WHERE type IS NOT NULL
+            ORDER BY 1
+            )"
+        );
+        for(auto& r: rows)
+            result.push_back(r);
+    } else if(field=="owner") {
+        soci::rowset<std::string> rows = (
+            sql.prepare <<
+            R"(
+            SELECT DISTINCT owner
+            FROM signaling_events
+            WHERE owner IS NOT NULL
+            ORDER BY 1
+            )"
+        );
+        for(auto& r: rows)
+            result.push_back(r);
     } else {
         soci::rowset<std::string> rows = (
             sql.prepare <<

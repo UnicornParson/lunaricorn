@@ -73,6 +73,26 @@ void Session::process_request()
         else if (method == http::verb::get && target.starts_with("/v1/pull")) {
             handle_pull();
         }
+        // Route: GET /v1/list/tags
+        else if (method == http::verb::get && target == "/v1/list/tags") {
+            handle_list("tags");
+        }
+        // Route: GET /v1/list/types
+        else if (method == http::verb::get && target == "/v1/list/types") {
+            handle_list("type");
+        }
+        // Route: GET /v1/list/affected
+        else if (method == http::verb::get && target == "/v1/list/affected") {
+            handle_list("affected");
+        }
+        // Route: GET /v1/list/owners
+        else if (method == http::verb::get && target == "/v1/list/owners") {
+            handle_list("owner");
+        }
+        // Route: GET /v1/stat/clients
+        else if (method == http::verb::get && target == "/v1/stat/clients") {
+            handle_clients();
+        }
         // Route: GET /v1/stat
         else if (method == http::verb::get && target == "/v1/stat") {
             handle_stat();
@@ -421,6 +441,59 @@ int HttpServer::active_requests() const
 json::object HttpServer::get_telemetry_snapshot()
 {
     return Telemetry::instance().toJson();
+}
+
+// ---- Additional route handlers ----
+
+void Session::handle_list(const std::string& field_name)
+{
+    if (!engine_) {
+        send_json_response(http::status::service_unavailable,
+            json::value({{"error", "Engine not available"}}));
+        return;
+    }
+
+    try {
+        std::vector<std::string> values = engine_->getUniqueValues(field_name);
+
+        json::array arr;
+        for (const auto& v : values) {
+            arr.push_back(json::value(v));
+        }
+
+        json::object resp;
+        resp["field"] = json::value(field_name);
+        resp["count"] = json::value(static_cast<int64_t>(values.size()));
+        resp["values"] = std::move(arr);
+
+        send_json_response(http::status::ok, resp);
+    } catch (const std::exception& e) {
+        MLOG_E("handle_list('{}') exception: {}", field_name, e.what());
+        send_json_response(http::status::internal_server_error,
+            json::value({{"error", std::string("Internal error: ") + e.what()}}));
+    }
+}
+
+void Session::handle_clients()
+{
+    json::object resp;
+
+    if (engine_) {
+        // Get telemetry for subscriber stats
+        json::object telemetry = Telemetry::instance().toJson();
+        resp["telemetry"] = telemetry;
+
+        // Add server-level stats
+        json::object stats;
+        stats["active_requests"] = json::value(static_cast<int64_t>(server_.active_requests()));
+        resp["stats"] = std::move(stats);
+    } else {
+        json::object stats;
+        stats["active_requests"] = json::value(static_cast<int64_t>(server_.active_requests()));
+        resp["stats"] = std::move(stats);
+    }
+
+    send_json_response(http::status::ok, resp);
 }
 
 } // namespace lunaricorn

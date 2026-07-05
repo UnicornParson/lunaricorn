@@ -74,9 +74,12 @@ void HttpTest::stop()
     }
 
     std::cout << "[" << now_ts() << "] [HttpTest] Stopped. "
-              << "health_ok=" << m_health_ok.load()
+              << "root_ok=" << m_root_ok.load()
+              << " health_ok=" << m_health_ok.load()
               << " stat_ok=" << m_stat_ok.load()
               << " push_ok=" << m_push_ok.load()
+              << " list_ok=" << m_list_ok.load()
+              << " clients_ok=" << m_clients_ok.load()
               << " errors=" << m_error_count.load()
               << std::endl;
 }
@@ -86,9 +89,12 @@ bool HttpTest::is_running() const
     return m_running.load();
 }
 
-uint64_t HttpTest::get_health_ok() const  { return m_health_ok.load(); }
-uint64_t HttpTest::get_stat_ok() const    { return m_stat_ok.load(); }
-uint64_t HttpTest::get_push_ok() const    { return m_push_ok.load(); }
+uint64_t HttpTest::get_health_ok() const   { return m_health_ok.load(); }
+uint64_t HttpTest::get_stat_ok() const     { return m_stat_ok.load(); }
+uint64_t HttpTest::get_push_ok() const     { return m_push_ok.load(); }
+uint64_t HttpTest::get_list_ok() const     { return m_list_ok.load(); }
+uint64_t HttpTest::get_clients_ok() const  { return m_clients_ok.load(); }
+uint64_t HttpTest::get_root_ok() const     { return m_root_ok.load(); }
 uint64_t HttpTest::get_error_count() const { return m_error_count.load(); }
 
 // ---- private ----
@@ -102,17 +108,23 @@ void HttpTest::runner(std::stop_token /*stopToken*/)
 {
     std::cout << "[" << now_ts() << "] [HttpTest] Runner thread started" << std::endl;
 
-    // Cycle through endpoints: health, stat, push
+    // Cycle through endpoints: root, health, list/tags, list/types, list/affected, list/owners, stat/clients, stat, push
     int phase = 0;
     const int interval_ms = 2000; // 2 seconds between tests
 
     while (m_running.load()) {
         switch (phase) {
-            case 0: test_health(); break;
-            case 1: test_stat();   break;
-            case 2: test_push();   break;
+            case 0: test_root();      break;
+            case 1: test_health();    break;
+            case 2: test_list_tags(); break;
+            case 3: test_list_types(); break;
+            case 4: test_list_affected(); break;
+            case 5: test_list_owners(); break;
+            case 6: test_clients();   break;
+            case 7: test_stat();      break;
+            case 8: test_push();      break;
         }
-        phase = (phase + 1) % 3;
+        phase = (phase + 1) % 9;
 
         // Sleep in small increments so we can detect stop quickly
         for (int i = 0; i < 40 && m_running.load(); ++i) {
@@ -236,5 +248,101 @@ void HttpTest::test_push()
         m_error_count.fetch_add(1);
         std::cerr << "[" << now_ts() << "] [HttpTest] POST /v1/push FAILED: "
                   << e.displayText() << std::endl;
+    }
+}
+
+// ---- New compatibility API tests ----
+
+std::pair<int, std::string> HttpTest::do_get(const std::string& path)
+{
+    try {
+        Poco::Net::SocketAddress addr(m_host, m_port);
+        Poco::Net::HTTPClientSession session(addr);
+        session.setTimeout(Poco::Timespan(5, 0));
+
+        Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_GET, path);
+        session.sendRequest(request);
+
+        Poco::Net::HTTPResponse response;
+        std::istream& bodyStream = session.receiveResponse(response);
+
+        std::string body;
+        Poco::StreamCopier::copyToString(bodyStream, body);
+
+        return {response.getStatus(), std::move(body)};
+    } catch (const Poco::Exception&) {
+        return {-1, ""};
+    }
+}
+
+void HttpTest::test_root()
+{
+    auto [status, body] = do_get("/");
+    if (status == 200) {
+        m_root_ok.fetch_add(1);
+        std::cout << "[" << now_ts() << "] [HttpTest] GET / -> 200 ✅ body=" << body << std::endl;
+    } else {
+        m_error_count.fetch_add(1);
+        std::cerr << "[" << now_ts() << "] [HttpTest] GET / -> " << status << " ❌" << std::endl;
+    }
+}
+
+void HttpTest::test_list_tags()
+{
+    auto [status, body] = do_get("/v1/list/tags");
+    if (status == 200) {
+        m_list_ok.fetch_add(1);
+        std::cout << "[" << now_ts() << "] [HttpTest] GET /v1/list/tags -> 200 ✅ body=" << body << std::endl;
+    } else {
+        m_error_count.fetch_add(1);
+        std::cerr << "[" << now_ts() << "] [HttpTest] GET /v1/list/tags -> " << status << " ❌" << std::endl;
+    }
+}
+
+void HttpTest::test_list_types()
+{
+    auto [status, body] = do_get("/v1/list/types");
+    if (status == 200) {
+        m_list_ok.fetch_add(1);
+        std::cout << "[" << now_ts() << "] [HttpTest] GET /v1/list/types -> 200 ✅ body=" << body << std::endl;
+    } else {
+        m_error_count.fetch_add(1);
+        std::cerr << "[" << now_ts() << "] [HttpTest] GET /v1/list/types -> " << status << " ❌" << std::endl;
+    }
+}
+
+void HttpTest::test_list_affected()
+{
+    auto [status, body] = do_get("/v1/list/affected");
+    if (status == 200) {
+        m_list_ok.fetch_add(1);
+        std::cout << "[" << now_ts() << "] [HttpTest] GET /v1/list/affected -> 200 ✅ body=" << body << std::endl;
+    } else {
+        m_error_count.fetch_add(1);
+        std::cerr << "[" << now_ts() << "] [HttpTest] GET /v1/list/affected -> " << status << " ❌" << std::endl;
+    }
+}
+
+void HttpTest::test_list_owners()
+{
+    auto [status, body] = do_get("/v1/list/owners");
+    if (status == 200) {
+        m_list_ok.fetch_add(1);
+        std::cout << "[" << now_ts() << "] [HttpTest] GET /v1/list/owners -> 200 ✅ body=" << body << std::endl;
+    } else {
+        m_error_count.fetch_add(1);
+        std::cerr << "[" << now_ts() << "] [HttpTest] GET /v1/list/owners -> " << status << " ❌" << std::endl;
+    }
+}
+
+void HttpTest::test_clients()
+{
+    auto [status, body] = do_get("/v1/stat/clients");
+    if (status == 200) {
+        m_clients_ok.fetch_add(1);
+        std::cout << "[" << now_ts() << "] [HttpTest] GET /v1/stat/clients -> 200 ✅ body=" << body << std::endl;
+    } else {
+        m_error_count.fetch_add(1);
+        std::cerr << "[" << now_ts() << "] [HttpTest] GET /v1/stat/clients -> " << status << " ❌" << std::endl;
     }
 }
