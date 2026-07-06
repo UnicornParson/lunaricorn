@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added
+- LeaderConnector интеграция для signaling сервиса:
+  - Регистрация в лидере через `register_service()` с node_type="signaling"
+  - Автопинг (imalive) каждые 30 секунд через registration_timer_worker
+  - Поддержка TEST_MODE=1 для тестового режима (отключение leader)
+  - CLUSTER_LEADER_URL обязателен в обычном режиме
+  - Ждущий цикл с сообщением раз в минуту (прерываемо через сигналы)
+  - Graceful shutdown через `stop_registration_timer()`
+- Конструктор `LeaderConnector(base_url, timeout)` в leader_api.cpp
+- Обновлен it.sh для поддержки TEST_MODE
 - Совместимое REST API для запроса уникальных значений и статистики:
   - `GET /` — статус сервиса (уже существовал)
   - `GET /health` — health check (уже существовал)

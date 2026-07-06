@@ -15,6 +15,13 @@
 namespace lunaricorn
 {
 
+LeaderConnector::LeaderConnector(const std::string& base_url, int timeout_seconds)
+    : base_url_(base_url)
+    , timeout_seconds_(timeout_seconds)
+{
+    MLOG_D("LeaderConnector created for {}", base_url);
+}
+
 LeaderConnector::~LeaderConnector() {
     close();
 }

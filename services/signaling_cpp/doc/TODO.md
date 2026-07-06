@@ -191,7 +191,7 @@
 4. ✅ processQueryRequest реализован (парсит параметры, вызывает findEvents, отправляет результаты)
 5. ✅ Reconnect реализован (exponential backoff, auto-reconnect, restore subscriptions)
 6. ✅ **Совместимое REST API** — /v1/list/*, /v1/stat/clients реализованы
-7. ❌ **LeaderConnector интеграция** — сервис регистрируется в leader
+7. ✅ **LeaderConnector интеграция** — сервис регистрируется в leader
 8. ❌ **Порт HTTP API синхронизирован** — 5557
 9. ❌ **Docker healthcheck** — сервис проверяется Docker
 10. ❌ **docker-compose.yaml обновлён** — signaling_cpp работает как основной сервис
@@ -230,6 +230,12 @@
 ## История обновлений
 
 ### 2026-07-06
+- ✅ Реализована LeaderConnector интеграция: регистрация в лидере + автопинг (imalive)
+- ✅ Добавлен конструктор LeaderConnector(base_url, timeout) в leader_api.cpp
+- ✅ Поддержка TEST_MODE=1 для тестового режима (отключение leader)
+- ✅ CLUSTER_LEADER_URL обязателен в обычном режиме
+- ✅ Ждущий цикл с сообщением раз в минуту (прерываемо через сигналы)
+- ✅ Обновлен it.sh для поддержки TEST_MODE
 - ✅ Реализовано совместимое REST API: GET /v1/list/* (tags, types, affected, owners)
 - ✅ Реализован GET /v1/stat/clients — статистика клиентов и телеметрия
 - ✅ Исправлен маппинг полей: `event_type` → `type`, `source` → `owner`

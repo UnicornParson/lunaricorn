@@ -53,32 +53,68 @@ int main() {
         return -1;
     }
 
-    // LeaderConnector integration: discover leader URL from environment
-    std::string leader_url = std::getenv("CLUSTER_LEADER_URL");
-    if (leader_url.empty()) {
-        leader_url = "http://localhost:8001";
+    // Check TEST_MODE environment variable for testing
+    const char* test_mode_env = std::getenv("TEST_MODE");
+    bool test_mode = (test_mode_env != nullptr && test_mode_env[0] != '\0');
+
+    std::string leader_url;
+    bool leader_enabled = true;
+
+    if (test_mode) {
+        // Test mode: skip leader connection entirely
+        MLOG_W("TEST_MODE is set, leader connection disabled");
+        leader_enabled = false;
+    } else {
+        // Normal mode: CLUSTER_LEADER_URL is required
+        leader_url = std::getenv("CLUSTER_LEADER_URL");
+        if (leader_url.empty()) {
+            MLOG_E("CLUSTER_LEADER_URL is required in normal mode (set TEST_MODE=1 to disable leader)");
+            return -1;
+        }
+        MLOG_D("Leader URL: {}", leader_url);
     }
-    MLOG_D("Leader URL: {}", leader_url);
 
     // Create LeaderConnector and wait for leader readiness
-    auto leader = ConnectorUtils::create_leader_connector(leader_url);
-
-    // Optional: wait for leader to be ready
+    std::unique_ptr<LeaderConnector> leader;
     bool leader_ready = false;
-    try {
-        leader_ready = leader->wait_for_ready(30, 3);
-        if (leader_ready) {
-            MLOG_D("Leader is ready");
-        } else {
-            MLOG_W("Leader did not become ready within timeout, continuing without registration");
+
+    if (leader_enabled) {
+        leader = ConnectorUtils::create_leader_connector(leader_url);
+
+        // Wait for leader with periodic logging (every 60s) - interruptible by signals
+        MLOG_D("Waiting for leader at {}...", leader_url);
+        int wait_count = 0;
+        while (!leader_ready) {
+            try {
+                // Use short timeout wait so we can check for shutdown signals
+                leader_ready = leader->wait_for_ready(5, 1);
+                if (leader_ready) {
+                    MLOG_D("Leader is ready");
+                    break;
+                }
+            } catch (const std::exception& e) {
+                MLOG_W("Failed to connect to leader: {}", e.what());
+                // Continue retrying
+            }
+
+            wait_count++;
+            // Log message every 60 seconds (assuming 1s check interval)
+            if (wait_count % 60 == 0) {
+                MLOG_W("Still waiting for leader at {}... ({}s elapsed)", leader_url, wait_count);
+            }
+
+            // Short sleep to avoid busy-waiting (1s interval between checks)
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
-    } catch (const std::exception& e) {
-        MLOG_W("Failed to connect to leader: {}, continuing without registration", e.what());
+
+        if (leader_ready) {
+            MLOG_D("Leader connection established");
+        }
     }
 
     // Register signaling service with the leader if available
     std::shared_ptr<RawEndpoint> endpoint;
-    if (leader_ready) {
+    if (leader_enabled && leader_ready) {
         try {
             // Build additional info with internal service details
             Poco::JSON::Object::Ptr additional = new Poco::JSON::Object();
@@ -101,8 +137,8 @@ int main() {
         } catch (const std::exception& e) {
             MLOG_W("Failed to register with leader: {}", e.what());
         }
-    } else {
-        MLOG_W("Skipping leader registration - leader not available");
+    } else if (leader_enabled && !leader_ready) {
+        MLOG_E("Leader not ready after extended wait, service running without cluster registration");
     }
 
     endpoint = std::make_shared<RawEndpoint>(raw_host, raw_port, engine);
@@ -134,9 +170,10 @@ int main() {
     MLOG_D("NORMAL EXIT {} {}, selftest_ok:{}", app_name, app_token, selftest_ok);
 
     // Stop periodic registration on shutdown
-    if (leader_ready && leader) {
+    if (leader_enabled && leader_ready && leader) {
         try {
             leader->stop_registration_timer();
+            MLOG_D("Leader registration timer stopped");
         } catch (...) {
             // ignore on shutdown
         }

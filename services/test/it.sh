@@ -3,6 +3,11 @@
 set -e
 mkdir -p tmp
 
-docker rm -f lunaricorn_test
+docker rm -f lunaricorn_test 2>/dev/null || true
 
-docker run -it --rm --name lunaricorn_test lunaricorn_test
+
+echo "Running in TEST_MODE (leader connection disabled)"
+docker run -it --rm \
+    --name lunaricorn_test \
+    -e TEST_MODE=1 \
+    lunaricorn_test
