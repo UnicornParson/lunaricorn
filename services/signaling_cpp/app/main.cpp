@@ -66,11 +66,12 @@ int main() {
         leader_enabled = false;
     } else {
         // Normal mode: CLUSTER_LEADER_URL is required
-        leader_url = std::getenv("CLUSTER_LEADER_URL");
-        if (leader_url.empty()) {
+        const char* leader_url_env = std::getenv("CLUSTER_LEADER_URL");
+        if (leader_url_env == nullptr) {
             MLOG_E("CLUSTER_LEADER_URL is required in normal mode (set TEST_MODE=1 to disable leader)");
             return -1;
         }
+        leader_url = leader_url_env;
         MLOG_D("Leader URL: {}", leader_url);
     }
 

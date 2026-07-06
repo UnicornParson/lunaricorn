@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `main.cpp`: SIGSEGV при отсутствии переменной окружения `CLUSTER_LEADER_URL` — `std::getenv()` возвращает `nullptr`, а прямое присваивание `std::string = nullptr` вызывает UB (вызов `strlen(nullptr)`). Добавлена проверка на `nullptr` до присваивания.
+
 ### Added
 - `Session::handle_browse()` — реализация POST `/v1/browse` (совместимо с Python API BrowseRequest):
   - Парсинг JSON body: `event_types`, `sources`, `affected`, `tags`, `timestamp`, `limit`

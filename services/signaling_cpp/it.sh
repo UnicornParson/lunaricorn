@@ -36,6 +36,7 @@ docker run -it --rm \
     -e MAINTENANCE_HOST=192.168.0.18 \
     -e MAINTENANCE_PORT=${MAINTENANCE_API_PORT} \
     -e PYTHONUNBUFFERED=1 \
+    -e TEST_MODE=1 \
     -e db_type=postgresql \
     -e db_host=lunaricorn-pg \
     -e db_port=5432 \
