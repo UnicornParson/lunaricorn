@@ -52,6 +52,7 @@ private:
     void handle_push();
     void handle_pull();
     void handle_stat();
+    void handle_browse();
     void handle_list(const std::string& field_name);
     void handle_clients();
 

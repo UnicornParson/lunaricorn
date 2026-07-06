@@ -108,7 +108,7 @@ void HttpTest::runner(std::stop_token /*stopToken*/)
 {
     std::cout << "[" << now_ts() << "] [HttpTest] Runner thread started" << std::endl;
 
-    // Cycle through endpoints: root, health, list/tags, list/types, list/affected, list/owners, stat/clients, stat, push
+    // Cycle through endpoints: root, health, list/tags, list/types, list/affected, list/owners, stat/clients, stat, push, browse
     int phase = 0;
     const int interval_ms = 2000; // 2 seconds between tests
 
@@ -123,8 +123,9 @@ void HttpTest::runner(std::stop_token /*stopToken*/)
             case 6: test_clients();   break;
             case 7: test_stat();      break;
             case 8: test_push();      break;
+            case 9: test_browse();    break;
         }
-        phase = (phase + 1) % 9;
+        phase = (phase + 1) % 10;
 
         // Sleep in small increments so we can detect stop quickly
         for (int i = 0; i < 40 && m_running.load(); ++i) {
@@ -344,5 +345,78 @@ void HttpTest::test_clients()
     } else {
         m_error_count.fetch_add(1);
         std::cerr << "[" << now_ts() << "] [HttpTest] GET /v1/stat/clients -> " << status << " ❌" << std::endl;
+    }
+}
+
+void HttpTest::test_browse()
+{
+    try {
+        // First push a test event so we have something to browse
+        std::uniform_int_distribution<> dist_val(1, 9999);
+        int64_t testVal = dist_val(g_http_rng);
+
+        boost::json::object pushPayload;
+        pushPayload["type"]    = boost::json::value("test.browse");
+        pushPayload["source"]  = boost::json::value("http_test");
+        pushPayload["value"]   = boost::json::value(static_cast<int64_t>(testVal));
+
+        boost::json::array affected;
+        affected.push_back(boost::json::value("entity:system"));
+        pushPayload["affected"] = std::move(affected);
+
+        std::string pushBody = boost::json::serialize(pushPayload);
+
+        Poco::Net::SocketAddress addr(m_host, m_port);
+        Poco::Net::HTTPClientSession session(addr);
+        session.setTimeout(Poco::Timespan(5, 0));
+
+        Poco::Net::HTTPRequest pushRequest(Poco::Net::HTTPRequest::HTTP_POST, "/v1/push");
+        pushRequest.setContentType("application/json");
+        pushRequest.setContentLength(static_cast<int>(pushBody.size()));
+        pushRequest.setKeepAlive(false);
+
+        session.sendRequest(pushRequest) << pushBody;
+
+        Poco::Net::HTTPResponse pushResponse;
+        std::istream& pushRespStream = session.receiveResponse(pushResponse);
+        std::string pushRespBody;
+        Poco::StreamCopier::copyToString(pushRespStream, pushRespBody);
+
+        // Now browse for events matching our test event
+        boost::json::object browsePayload;
+        browsePayload["event_types"] = boost::json::array{boost::json::value("test.browse")};
+        browsePayload["sources"] = boost::json::array{boost::json::value("http_test")};
+        browsePayload["limit"] = boost::json::value(static_cast<int64_t>(10));
+
+        std::string browseBody = boost::json::serialize(browsePayload);
+
+        Poco::Net::HTTPRequest browseRequest(Poco::Net::HTTPRequest::HTTP_POST, "/v1/browse");
+        browseRequest.setContentType("application/json");
+        browseRequest.setContentLength(static_cast<int>(browseBody.size()));
+        browseRequest.setKeepAlive(false);
+
+        session.sendRequest(browseRequest) << browseBody;
+
+        Poco::Net::HTTPResponse browseResponse;
+        std::istream& browseRespStream = session.receiveResponse(browseResponse);
+
+        std::string browseRespBody;
+        Poco::StreamCopier::copyToString(browseRespStream, browseRespBody);
+
+        int browseStatus = browseResponse.getStatus();
+        if (browseStatus == 200) {
+            m_push_ok.fetch_add(1);
+            std::cout << "[" << now_ts() << "] [HttpTest] POST /v1/browse -> 200 OK"
+                      << " push_resp=" << pushRespBody
+                      << " browse_body=" << browseRespBody << std::endl;
+        } else {
+            m_error_count.fetch_add(1);
+            std::cerr << "[" << now_ts() << "] [HttpTest] POST /v1/browse -> " << browseStatus
+                      << " body=" << browseRespBody << std::endl;
+        }
+    } catch (const Poco::Exception& e) {
+        m_error_count.fetch_add(1);
+        std::cerr << "[" << now_ts() << "] [HttpTest] POST /v1/browse FAILED: "
+                  << e.displayText() << std::endl;
     }
 }

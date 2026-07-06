@@ -4,9 +4,50 @@
 
 ## 1. Реализовать POST /v1/browse (совместимо с Python API)
 
-**Статус:** ❌ Не реализовано
+**Статус:** ✅ Реализовано
 
-**Проблема:** Python signaling поддерживает `POST /v1/browse` с `BrowseRequest` body:
+**Реализация:**
+- `Session::handle_browse()` — парсинг BrowseRequest JSON, вызов `engine->findEvents()`, возврат событий
+- `HttpTest::test_browse()` — тест CLI: push + browse с фильтрами
+- Routing: `POST /v1/browse` в `process_request()`
+
+**Формат запроса:**
+```json
+{
+  "event_types": ["type1", "type2"],
+  "sources": ["src1"],
+  "affected": ["item1"],
+  "tags": ["tag1"],
+  "timestamp": 1234567890,
+  "limit": 100
+}
+```
+
+**Формат ответа:**
+```json
+{
+  "events": [
+    {
+      "eid": 1,
+      "type": "event_type",
+      "payload": {},
+      "affected": [],
+      "tags": [],
+      "source": "src",
+      "timestamp": 1234567890
+    }
+  ],
+  "count": 1
+}
+```
+
+**Файлы:** `app/http_endpoint.cpp`, `app/http_endpoint.h`, `cli/http_test.cpp`, `cli/http_test.h`, `doc/changelog.md`
+
+---
+
+## 2. Добавить переменные окружения для портов
+
+**Статив:** ❌ Порт HTTP жёстко задан как `8081`
 ```json
 {
   "event_types": ["type1", "type2"],

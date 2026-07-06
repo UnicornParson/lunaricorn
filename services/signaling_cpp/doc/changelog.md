@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Added
+- `Session::handle_browse()` — реализация POST `/v1/browse` (совместимо с Python API BrowseRequest):
+  - Парсинг JSON body: `event_types`, `sources`, `affected`, `tags`, `timestamp`, `limit`
+  - Вызов `engine->findEvents()` с фильтрами
+  - Возврат массива событий в формате: `{"events": [...], "count": N}`
+  - Поддержка фильтрации по event_types (array), sources (array), affected (array), tags (array), timestamp (number), limit (number)
+- `HttpTest::test_browse()` — тест POST `/v1/browse` в CLI:
+  - Сначала отправляет тестовое событие через `POST /v1/push`
+  - Затем запрашивает события через `POST /v1/browse` с фильтрами event_types и sources
+  - Выводит результат вместе с push-ответом в одну строку
+- Обновлён runner cycle `HttpTest::runner()` — добавлен phase 9 для test_browse (10 фаз вместо 9)
 - LeaderConnector интеграция для signaling сервиса:
   - Регистрация в лидере через `register_service()` с node_type="signaling"
   - Автопинг (imalive) каждые 30 секунд через registration_timer_worker

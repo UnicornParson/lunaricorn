@@ -93,6 +93,10 @@ void Session::process_request()
         else if (method == http::verb::get && target == "/v1/stat/clients") {
             handle_clients();
         }
+        // Route: POST /v1/browse
+        else if (method == http::verb::post && target == "/v1/browse") {
+            handle_browse();
+        }
         // Route: GET /v1/stat
         else if (method == http::verb::get && target == "/v1/stat") {
             handle_stat();
@@ -331,6 +335,160 @@ void Session::handle_stat()
     stats["endpoint_errors"] = json::value(static_cast<int64_t>(server_.stats().errors.load()));
     resp["stats"] = std::move(stats);
 
+    send_json_response(http::status::ok, resp);
+}
+
+void Session::handle_browse()
+{
+    // Parse JSON body
+    boost::system::error_code ec;
+    json::value j = json::parse(request_.body(), ec);
+    if (ec) {
+        send_json_response(http::status::bad_request,
+            json::value({{"error", "Invalid JSON"}}));
+        return;
+    }
+
+    if (!j.is_object()) {
+        send_json_response(http::status::bad_request,
+            json::value({{"error", "Expected a JSON object"}}));
+        return;
+    }
+
+    const auto& obj = j.as_object();
+
+    // Parse optional filters from BrowseRequest
+    // event_types: array of strings
+    std::vector<std::string> event_types;
+    auto et_it = obj.find("event_types");
+    if (et_it != obj.end() && et_it->value().is_array()) {
+        for (const auto& elem : et_it->value().as_array()) {
+            if (elem.is_string()) {
+                event_types.push_back(json::value_to<std::string>(elem));
+            }
+        }
+    }
+
+    // sources: array of strings
+    std::vector<std::string> sources;
+    auto src_it = obj.find("sources");
+    if (src_it != obj.end() && src_it->value().is_array()) {
+        for (const auto& elem : src_it->value().as_array()) {
+            if (elem.is_string()) {
+                sources.push_back(json::value_to<std::string>(elem));
+            }
+        }
+    }
+
+    // affected: array (strings or numbers)
+    std::vector<std::string> affected;
+    auto aff_it = obj.find("affected");
+    if (aff_it != obj.end() && aff_it->value().is_array()) {
+        for (const auto& elem : aff_it->value().as_array()) {
+            if (elem.is_string()) {
+                affected.push_back(json::value_to<std::string>(elem));
+            } else if (elem.is_int64()) {
+                affected.push_back(std::to_string(elem.as_int64()));
+            } else if (elem.is_double()) {
+                affected.push_back(std::to_string(static_cast<int64_t>(elem.as_double())));
+            }
+        }
+    }
+
+    // tags: array of strings
+    std::vector<std::string> tags;
+    auto tag_it = obj.find("tags");
+    if (tag_it != obj.end() && tag_it->value().is_array()) {
+        for (const auto& elem : tag_it->value().as_array()) {
+            if (elem.is_string()) {
+                tags.push_back(json::value_to<std::string>(elem));
+            }
+        }
+    }
+
+    // timestamp: number (filter events after this timestamp)
+    std::optional<double> timestamp;
+    auto ts_it = obj.find("timestamp");
+    if (ts_it != obj.end()) {
+        const auto& ts_val = ts_it->value();
+        if (ts_val.is_int64()) {
+            timestamp = static_cast<double>(ts_val.as_int64());
+        } else if (ts_val.is_double()) {
+            timestamp = ts_val.as_double();
+        }
+    }
+
+    // limit: number (max events to return, 0 = no limit)
+    int limit = 0;
+    auto lim_it = obj.find("limit");
+    if (lim_it != obj.end()) {
+        const auto& lim_val = lim_it->value();
+        if (lim_val.is_int64()) {
+            limit = static_cast<int>(lim_val.as_int64());
+        } else if (lim_val.is_double()) {
+            limit = static_cast<int>(lim_val.as_double());
+        }
+    }
+
+    // Call engine->findEvents() with filters
+    if (!engine_) {
+        send_json_response(http::status::service_unavailable,
+            json::value({{"error", "Engine not available"}}));
+        return;
+    }
+
+    std::vector<StoredEventDataExtended> events =
+        engine_->findEvents(timestamp.value_or(0.0),
+                            event_types, sources, affected, tags, limit);
+
+    // Build response array
+    json::array events_arr;
+    for (const auto& ev : events) {
+        json::object ev_obj;
+        ev_obj["eid"] = json::value(static_cast<int64_t>(ev.eid));
+        ev_obj["type"] = json::value(ev.event_type);
+
+        // payload as raw json::value
+        ev_obj["payload"] = ev.payload;
+
+        // affected as array
+        json::array aff_arr;
+        if (ev.affected.is_array()) {
+            for (const auto& a : ev.affected.as_array()) {
+                aff_arr.push_back(a);
+            }
+        } else if (ev.affected.is_string()) {
+            aff_arr.push_back(ev.affected);
+        } else if (ev.affected.is_int64()) {
+            aff_arr.push_back(ev.affected.as_int64());
+        } else if (ev.affected.is_double()) {
+            aff_arr.push_back(ev.affected.as_double());
+        }
+        ev_obj["affected"] = std::move(aff_arr);
+
+        // tags as array
+        json::array tags_arr;
+        for (const auto& t : ev.tags) {
+            tags_arr.push_back(json::value(t));
+        }
+        ev_obj["tags"] = std::move(tags_arr);
+
+        // source
+        if (ev.source.has_value()) {
+            ev_obj["source"] = json::value(ev.source.value());
+        } else {
+            ev_obj["source"] = json::value(std::string(""));
+        }
+
+        // timestamp
+        ev_obj["timestamp"] = json::value(static_cast<int64_t>(ev.timestamp));
+
+        events_arr.push_back(std::move(ev_obj));
+    }
+
+    json::object resp;
+    resp["events"] = std::move(events_arr);
+    resp["count"] = json::value(static_cast<int64_t>(events.size()));
     send_json_response(http::status::ok, resp);
 }
 

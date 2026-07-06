@@ -65,6 +65,9 @@ private:
     /// Perform GET /v1/stat/clients and print result.
     void test_clients();
 
+    /// Perform POST /v1/browse and print result.
+    void test_browse();
+
     /// Build base URL string.
     std::string base_url() const;
 
