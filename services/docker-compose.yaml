@@ -108,6 +108,43 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+
+
+  signaling:
+    build:
+      context: ./signaling_cpp
+      dockerfile: Dockerfile
+    container_name: lunaricorn-signaling
+    ports:
+      - "5555:8080" # Raw (binary protocol) port
+      - "5557:8081" # HTTP API port
+    volumes:
+      - ${LUNARICORN_HOME}/signaling_data:/opt/lunaricorn/signaling_data
+    environment:
+      - CLUSTER_LEADER_URL=http://192.168.0.18:8001/
+      - db_type=postgresql
+      - db_host=lunaricorn-pg
+      - db_port=5432
+      - db_user=lunaricorn
+      - db_password=${LUNARICORN_PASSWORD}
+      - db_name=lunaricorn
+      - db_schema=lunaricorn
+      - MAINTENANCE_HOST=192.168.0.18
+      - MAINTENANCE_PORT=${MAINTENANCE_API_PORT}
+    networks:
+      - lunaricorn-network
+    restart: unless-stopped
+    depends_on:
+      pg:
+        condition: service_healthy
+      leader:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
   orb:
     build:
       context: ./orb
@@ -125,7 +162,6 @@ services:
       - SIGNALING_HOST=signaling
       - ORB_API_PORT=8080
       - SIGNALING_REQ=5555
-      - SIGNALING_PUB=5556
       - SIGNALING_API=5557
       - db_type=postgresql
       - db_host=lunaricorn-pg
@@ -145,37 +181,6 @@ services:
       leader:
         condition: service_healthy
 
-  signaling:
-    build:
-      context: ./signaling
-      dockerfile: Dockerfile
-    container_name: lunaricorn-signaling
-    ports:
-      - "5555:5555" # REQ-REP port
-      - "5556:5556" # PUB-SUB port
-      - "5557:5557" # HTTP api port
-    volumes:
-      - ${LUNARICORN_HOME}/signaling_data:/opt/lunaricorn/signaling_data
-    environment:
-      - PYTHONUNBUFFERED=1
-      - CLUSTER_LEADER_URL=http://leader:8000/
-      - db_type=postgresql
-      - db_host=lunaricorn-pg
-      - db_port=5432
-      - db_user=lunaricorn
-      - db_password=${LUNARICORN_PASSWORD}
-      - db_name=lunaricorn
-      - db_schema=lunaricorn
-      - MAINTENANCE_HOST=192.168.0.18
-      - MAINTENANCE_PORT=${MAINTENANCE_API_PORT}
-    networks:
-      - lunaricorn-network
-    restart: unless-stopped
-    depends_on:
-      pg:
-        condition: service_healthy
-      leader:
-        condition: service_healthy
 
 networks:
   lunaricorn-network:

@@ -34,9 +34,9 @@ docker run -it --rm \
     --name "$CONTAINER_NAME" \
     --network "$NETWORK_NAME" \
     -e MAINTENANCE_HOST=192.168.0.18 \
-    -e MAINTENANCE_PORT=${MAINTENANCE_API_PORT} \
+    -e MAINTENANCE_PORT=8007 \
+    -e CLUSTER_LEADER_URL=http://192.168.0.18:8001/ \
     -e PYTHONUNBUFFERED=1 \
-    -e TEST_MODE=1 \
     -e db_type=postgresql \
     -e db_host=lunaricorn-pg \
     -e db_port=5432 \
@@ -45,7 +45,8 @@ docker run -it --rm \
     -e db_name=lunaricorn \
     -e db_schema=lunaricorn \
     -e WORKERS=4 \
-    -p "8001:8000" \
+    -p "5555:8080" \
+    -p "5557:8081" \
     -v "$(pwd)/example_data:/opt/lunaricorn/signaling_data:rw" \
     "$IMAGE_NAME"
 

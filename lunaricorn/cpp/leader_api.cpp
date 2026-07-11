@@ -12,6 +12,7 @@
 #include <sstream>
 #include <iostream>
 #include "maintenance.h"
+
 namespace lunaricorn
 {
 
@@ -27,7 +28,7 @@ LeaderConnector::~LeaderConnector() {
 }
 
 void LeaderConnector::ensure_session() {
-    std::lock_guard<std::mutex> lock(session_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(session_mutex_);
     if (!session_) {
         Poco::URI uri(base_url_);
         session_ = std::make_unique<Poco::Net::HTTPClientSession>(uri.getHost(), uri.getPort());
@@ -37,15 +38,19 @@ void LeaderConnector::ensure_session() {
 
 Poco::JSON::Object::Ptr LeaderConnector::make_request(const std::string& method,
                                                       const std::string& endpoint,
-                                                      const Poco::JSON::Object::Ptr& data)
+                                                      const Poco::JSON::Object::Ptr& data,
+                                                      bool verbose)
 {
-    std::lock_guard<std::mutex> lock(session_mutex_);
+    if (verbose) MLOG_D("LeaderConnector::make_request entry");
+    std::lock_guard<std::recursive_mutex> lock(session_mutex_);
+    if (verbose) MLOG_D("LeaderConnector::make_request session lock - ok");
     ensure_session();
 
     std::string uri_path = endpoint;
     if (!uri_path.empty() && uri_path[0] != '/')
         uri_path = "/" + uri_path;
 
+    MLOG_D("make_request {}", uri_path);
     Poco::Net::HTTPRequest request(method, uri_path, Poco::Net::HTTPMessage::HTTP_1_1);
     request.setContentType("application/json");
     request.set("Accept", "application/json");
@@ -73,6 +78,7 @@ Poco::JSON::Object::Ptr LeaderConnector::make_request(const std::string& method,
                 endpoint, 
                 static_cast<int>(response.getStatus()),
                 response.getReasonForStatus(response.getStatus()));
+            session_->reset();
             throw Poco::Exception("HTTP error: " + std::to_string(response.getStatus()));
         }
 
@@ -89,10 +95,12 @@ Poco::JSON::Object::Ptr LeaderConnector::make_request(const std::string& method,
     }
     catch (const Poco::Exception& e) {
         MLOG_E("Request failed for {} {}: {}", method, endpoint, e.displayText());
+        session_->reset();
         throw;
     }
     catch (const std::exception& e) {
         MLOG_E("Request failed for {} {}: {}", method, endpoint, e.what());
+        session_->reset();
         throw;
     }
 }
@@ -157,12 +165,16 @@ Poco::JSON::Object::Ptr LeaderConnector::register_service(const std::string& nod
                                                           const std::string& instance_key,
                                                           const std::optional<std::string>& host,
                                                           const std::optional<int>& port,
-                                                          const std::optional<Poco::JSON::Object::Ptr>& additional)
+                                                          const std::optional<Poco::JSON::Object::Ptr>& additional,
+                                                          bool verbose)
 {
+    if (verbose) MLOG_D("register_service entry");
     stop_registration_timer();
-
+    if (verbose) MLOG_D("reg timer stopped");
     {
+        if (verbose) MLOG_D("wait registered_service_mutex_");
         std::lock_guard<std::mutex> lock(registered_service_mutex_);
+        if (verbose) MLOG_D("wait registered_service_mutex_ - ok");
         registered_service_ = RegisteredService{
             node_name,
             node_type,
@@ -186,8 +198,8 @@ Poco::JSON::Object::Ptr LeaderConnector::register_service(const std::string& nod
         data->set("additional", additional.value());
 
     MLOG_D("Registering service: {} ({})", node_name, node_type);
-    auto response = make_request(Poco::Net::HTTPRequest::HTTP_POST, "/v1/imalive", data);
-
+    auto response = make_request(Poco::Net::HTTPRequest::HTTP_POST, "/v1/imalive", data, verbose);
+    if (verbose) MLOG_D("request make_request - done");
     registration_stop_flag_ = false;
     registration_thread_ = std::jthread([this](std::stop_token st) {
         registration_timer_worker(st);
@@ -253,25 +265,55 @@ Poco::JSON::Object::Ptr LeaderConnector::get_cluster_info() {
 }
 
 bool LeaderConnector::is_ready() {
+    // Use a short-lived session with a small timeout for health checks,
+    // so we don't block the caller for the full session timeout (30s)
+    // when the leader is unreachable.
     try {
-        auto health = health_check();
-        if (health->has("status")) {
-            return health->getValue<std::string>("status") == "healthy";
-        }
+        Poco::URI uri(base_url_);
+        Poco::Net::HTTPClientSession session(uri.getHost(), uri.getPort());
+        // Short timeout for health-check (2 seconds) to avoid hanging
+        session.setTimeout(Poco::Timespan(2, 0));
+
+        Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_GET, "/health",
+                                       Poco::Net::HTTPMessage::HTTP_1_1);
+        request.set("Accept", "application/json");
+        session.sendRequest(request);
+
+        Poco::Net::HTTPResponse response;
+        std::istream& is = session.receiveResponse(response);
+
+        if (response.getStatus() != Poco::Net::HTTPResponse::HTTP_OK)
+            return false;
+
+        std::string body;
+        Poco::StreamCopier::copyToString(is, body);
+        if (body.empty())
+            return false;
+
+        Poco::JSON::Parser parser;
+        Poco::Dynamic::Var result = parser.parse(body);
+        auto health = result.extract<Poco::JSON::Object::Ptr>();
+        return health->optValue<std::string>("status", "") == "healthy";
+    }
+    catch (const Poco::Exception& e) {
+        MLOG_D("Health check failed (expected if leader not ready): {}", e.displayText());
         return false;
     }
-    catch (...) {
+    catch (const std::exception& e) {
+        MLOG_D("Health check failed (expected if leader not ready): {}", e.what());
         return false;
     }
 }
 
 bool LeaderConnector::wait_for_ready(int timeout_seconds, int check_interval_seconds) {
+    MLOG_D("LeaderConnector::wait_for_ready entry");
     using namespace std::chrono;
     auto start = steady_clock::now();
     auto timeout = seconds(timeout_seconds);
     auto interval = seconds(check_interval_seconds);
-
+    
     while (steady_clock::now() - start < timeout) {
+        MLOG_D("@@ TRY READY!");
         if (is_ready()) {
             MLOG_D("Leader service is ready");
             return true;
@@ -336,7 +378,7 @@ bool LeaderConnector::ping_service(const std::string& node_name, const std::stri
 
 void LeaderConnector::close() {
     stop_registration_timer();
-    std::lock_guard<std::mutex> lock(session_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(session_mutex_);
     if (session_) {
         session_->reset();
         session_.reset();

@@ -27,7 +27,8 @@ public:
                                              const std::string& instance_key,
                                              const std::optional<std::string>& host = std::nullopt,
                                              const std::optional<int>& port = std::nullopt,
-                                             const std::optional<Poco::JSON::Object::Ptr>& additional = std::nullopt);
+                                             const std::optional<Poco::JSON::Object::Ptr>& additional = std::nullopt,
+                                             bool verbose = false);
     void stop_registration_timer();
     Poco::JSON::Object::Ptr list_services();
     Poco::JSON::Object::Ptr discover_services(const std::string& query);
@@ -55,7 +56,7 @@ private:
     std::string base_url_;
     int timeout_seconds_;
     std::unique_ptr<Poco::Net::HTTPClientSession> session_;
-    std::mutex session_mutex_;
+    std::recursive_mutex session_mutex_;
 
     std::jthread registration_thread_;
     std::atomic<bool> registration_stop_flag_{false};
@@ -65,7 +66,8 @@ private:
 
     Poco::JSON::Object::Ptr make_request(const std::string& method,
                                          const std::string& endpoint,
-                                         const Poco::JSON::Object::Ptr& data = nullptr);
+                                         const Poco::JSON::Object::Ptr& data = nullptr,
+                                         bool verbose = false);
     bool send_registration_request();
     void registration_timer_worker(std::stop_token stop_token);
     void ensure_session();

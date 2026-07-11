@@ -420,7 +420,12 @@ Health check endpoint.
 
 ### docker-compose.yaml
 
-Содержит сервис для signaling_cpp (порт 8080).
+Сервис `signaling` собирается из `signaling_cpp/`:
+- Внутренние порты: `8080` (raw), `8081` (HTTP)
+- Внешние порты: `5555:8080` (raw), `5557:8081` (HTTP)
+- Healthcheck: `GET /health` через HTTP (curl localhost:8081/health)
+- `depends_on`: pg (healthy) + leader (healthy)
+- Переменные окружения: `CLUSTER_LEADER_URL`, `db_*`, `MAINTENANCE_*`
 
 ---
 

@@ -113,9 +113,10 @@ bool Leader::update_node(const std::string& node_name,
 }
 
 json::array Leader::get_list() {
-    if (!ready()) {
-        throw NotReadyException("Leader is not ready to start");
-    }
+    // Note: get_list() always works regardless of ready() state.
+    // Services must be able to register and report aliveness even when
+    // the leader is not yet fully ready. The ready() state is only used
+    // for endpoints that require all required nodes to be available.
     std::lock_guard<std::mutex> lock(mutex_);
     int alive_timeout = parse_alive_timeout(config_);
 

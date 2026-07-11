@@ -36,7 +36,7 @@ echo "Starting services using docker-compose.yaml..."
 
 # Run docker-compose up in detached mode
 docker compose -f docker-compose.yaml up -d --build --force-recreate \
-  $(docker compose -f docker-compose.yaml ps --services | grep -v '^pg$')
+  $(docker compose -f docker-compose.yaml config --services | grep -v '^pg$')
 
 # Print status of the containers
 echo "Current status of containers:"

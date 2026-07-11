@@ -56,3 +56,4 @@ RUN echo "/opt/3rd/boost/bin/lib" >> /etc/ld.so.conf.d/boost.conf && \
 
 #ENTRYPOINT ["gdb", "--args", "/opt/app/bin/signaling"]
 ENTRYPOINT ["/opt/app/bin/signaling"]
+#ENTRYPOINT ["/usr/bin/bh"]

@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Fixed
+- `leader_api.cpp::is_ready()`: исправлено зависание при недоступном лидере. Раньше `is_ready()` использовал кэшированную сессию с таймаутом 30 сек, из-за чего `wait_for_ready(5, 1)` фактически висел 30 сек за цикл. Теперь `is_ready()` создаёт отдельную сессию с таймаутом 2 сек, не блокируя основную сессию `make_request`.
+- `leader_api.cpp::make_request()`: добавлен `session_->reset()` при любом исключении или HTTP-ошибке. Без этого Poco HTTPClientSession остаётся в битом состоянии после таймаута, и все последующие запросы по той же сессии тоже падают.
+- `main.cpp::wait_for_ready` цикл: убран дублирующий `sleep_for(1)` — `wait_for_ready(5, 1)` уже ждёт внутри, лишний сон замедлял повторные попытки в 6 раз. Логгеринг переведён на ~60 сек (каждые 12 попыток по ~5 сек).
+
+### Changed
+- `docker-compose.yaml`: сервис signaling переключен на сборку из `signaling_cpp` (C++). Порты: `5555:8080` (raw), `5557:8081` (HTTP). Убран порт `5556`. Добавлен healthcheck `GET /health` с интервалом 30s. Удалена переменная `SIGNALING_PUB=5556` из orb.
+- Обновлён `signaling_up.sh` — сборка теперь использует `signaling_cpp` вместо `signaling`.
+
+### Fixed
 - `main.cpp`: SIGSEGV при отсутствии переменной окружения `CLUSTER_LEADER_URL` — `std::getenv()` возвращает `nullptr`, а прямое присваивание `std::string = nullptr` вызывает UB (вызов `strlen(nullptr)`). Добавлена проверка на `nullptr` до присваивания.
 
 ### Added

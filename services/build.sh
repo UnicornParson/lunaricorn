@@ -31,7 +31,7 @@ pushd portal > /dev/null
 popd > /dev/null
 
 echo "Building signaling service..."
-pushd signaling > /dev/null
+pushd signaling_cpp > /dev/null
 ./make_app.sh
 popd > /dev/null
 
