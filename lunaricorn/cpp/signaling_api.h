@@ -193,38 +193,3 @@ struct IncomingPacketState
 
 }; // class SignalingConnector
 } // namespace lunaricorn
-
-
-
-
-/*
-    def push_event(self, event_type: str, payload: Dict[str, Any], 
-        source: Optional[str] = None, tags: Optional[List] = None) -> Dict[str, Any]:
-"""
-Send a push event to the server.
-
-:param event_type: Type of the event
-:param payload: Event payload data
-:param source: Source of the event (optional)
-:param tags: Event tags (optional)
-:return: Server response dictionary
-"""
-if not self.connected:
-  raise ConnectionError("Client is not connected to server")
-  
-message = {
-  "type": "push",
-  "client_id": self.client_id,
-  "event_type": event_type,
-  "message": payload,
-  "timestamp": time.time()
-}
-
-if source:
-  message["source"] = source
-  
-if tags:
-  message["tags"] = tags
-  
-return self._send_request(message)
-*/

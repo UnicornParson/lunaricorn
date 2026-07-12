@@ -28,33 +28,6 @@ set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost REQUIRED COMPONENTS system filesystem json beast)
 include(FetchContent)
 
-
-FetchContent_Declare(
-  yaml-cpp
-  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
-  GIT_TAG yaml-cpp-0.9.0   # Can be a tag (yaml-cpp-x.x.x), a commit hash, or a branch name (master)
-)
-FetchContent_MakeAvailable(yaml-cpp)
-
-# --- libzmq (базовая C-библиотека) ---
-#set(BUILD_TESTS OFF CACHE BOOL "Disable libzmq tests" FORCE)
-#set(WITH_PERF_TOOL OFF CACHE BOOL "Disable performance tools" FORCE)
-#set(WITH_DOCS OFF CACHE BOOL "Disable docs" FORCE)
-#set(CPPZMQ_BUILD_TESTS OFF CACHE BOOL "Disable cppzmq tests" FORCE)
-#FetchContent_Declare(libzmq
-#    GIT_REPOSITORY https://github.com/zeromq/libzmq.git
-#    GIT_TAG v4.3.5
-#)
-#FetchContent_MakeAvailable(libzmq)
-
-# --- cppzmq (C++ библиотека-обёртка) ---
-#FetchContent_Declare(cppzmq
-#    GIT_REPOSITORY https://github.com/zeromq/cppzmq.git
-#    GIT_TAG v4.10.0
-#)
-#FetchContent_MakeAvailable(cppzmq)
-
-
 find_package(SOCI REQUIRED COMPONENTS Core PostgreSQL)
 
 # ------------------------------------------------------------------
@@ -95,16 +68,8 @@ add_subdirectory(apilib)
 
 add_executable(orb
     main.cpp
-    http_endpoint.cpp
-    raw_endpoint.cpp
-    raw_endpoint_client.cpp
-    message_storage.cpp
-    orb_engine.cpp
-    orb_engine_test.cpp
-    signal_waiter.cpp
-    telemetry.cpp
+    oid.cpp
 )
-
 # Include directories
 target_include_directories(orb PRIVATE
     ${Boost_INCLUDE_DIRS}
@@ -120,9 +85,6 @@ target_link_libraries(orb
     Boost::beast
     ${POCO_LIBRARIES}
     lunaricorn_api
-    yaml-cpp::yaml-cpp
-    #cppzmq
-    #libzmq-static
     SOCI::Core
     SOCI::PostgreSQL
 )

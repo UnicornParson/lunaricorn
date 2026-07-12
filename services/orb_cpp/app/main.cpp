@@ -1,15 +1,15 @@
 #include <iostream>
 #include <lunaricorn.h>
 #include <config.h>
-#include "stdafx.h"
+#include <thread>
+#include <chrono>
 
-#include "orb_engine.h"
-#include "orb_engine_test.h"
-#include "signal_waiter.h"
-#include "raw_endpoint.h"
-#include "http_endpoint.h"
-#include "telemetry.h"
-#include "leader_api.h"
+#include <csignal>
+#include <pthread.h>
+#include <atomic>
+#include <stdexcept>
+#include <random>
+#include <leader_api.h>
 
 constexpr std::string app_name { "orb" };
 constexpr std::string app_ver { "0.2" };
@@ -18,8 +18,46 @@ constexpr Poco::UInt16 raw_port = 8080;
 constexpr std::string http_host { "0.0.0.0" };
 constexpr Poco::UInt16 http_port = 8081;
 
-
 using namespace lunaricorn;
+using namespace std::chrono_literals; 
+
+
+class SignalWaiter
+ {
+public:
+    SignalWaiter()
+    {
+       sigemptyset(&set_);
+       sigaddset(&set_, SIGTERM);
+       sigaddset(&set_, SIGINT);
+       sigaddset(&set_, SIGQUIT);
+    
+       if (pthread_sigmask(SIG_BLOCK, &set_, nullptr))
+           throw std::runtime_error("signal block failed");
+    
+       MLOG_D("Signal waiter initialized");
+    }
+    
+
+    int wait()
+    {
+        int sig{};
+        if (sigwait(&set_, &sig))
+            throw std::runtime_error("sigwait failed");
+     
+        stopped_ = true;
+        MLOG_W("Shutdown signal received: {}", sig);
+     
+        return sig;
+    }
+     
+    inline bool stopped() const { return stopped_; }
+
+private:
+    sigset_t set_{};
+    std::atomic_bool stopped_{false};
+};
+
 
 std::string get_instance_identifier()
 {
@@ -35,6 +73,13 @@ std::string get_instance_identifier()
     return std::format("#{}_{}_{}_{:06d}", app_ver, ns, pid, random6);
 }
 
+// Temporary engine stub — will be replaced with actual implementation
+std::shared_ptr<void> make_engine(const DbConfig& cfg)
+{
+    MLOG_D("make_engine stub called with config: {}", cfg.toStr());
+    return nullptr;
+}
+
 int main() {
     const std::string app_token = get_instance_identifier();
     MLog::owner = app_name;
@@ -46,15 +91,6 @@ int main() {
     DbConfig dbcfg = loadConfigFromEnvironment();
     auto engine = make_engine(dbcfg);
 
-    /*
-    auto engine_test = std::make_shared<orbEngineTest>(engine);
-    selftest_ok = engine_test->run();
-    if (!selftest_ok)
-    {
-        MLOG_E("engine selftest failed");
-        return -1;
-    }
-*/
 
     // Check TEST_MODE environment variable for testing
     const char* test_mode_env = std::getenv("TEST_MODE");
@@ -115,69 +151,9 @@ int main() {
         }
     }
 
-    // Register orb service with the leader if available
-    std::shared_ptr<RawEndpoint> endpoint;
 
-    if (leader_enabled && leader_ready) {
-        MLOG_D(">>> leader ready try ti register node");
-        try {
-            // Build additional info with internal service details
-            Poco::JSON::Object::Ptr additional = new Poco::JSON::Object();
-            additional->set("raw_port", raw_port);
-            additional->set("http_port", http_port);
-            additional->set("api_endpoint", std::format("http://{}:{}", http_host, http_port));
 
-            // Register with the leader - this starts automatic periodic ping (imalive)
-            auto reg_response = leader->register_service(
-                app_name,           // node_name
-                "orb",        // node_type
-                app_token,          // instance_key
-                http_host,          // host
-                http_port,          // port
-                additional          // additional info
-            );
 
-            MLOG_D("Registered with leader: status={}",
-                   reg_response->optValue<std::string>("status", "unknown"));
-        } catch (const std::exception& e) {
-            MLOG_W("Failed to register with leader: {}", e.what());
-        }
-    } else if (leader_enabled && !leader_ready) {
-        MLOG_E("Leader not ready after extended wait, service running without cluster registration");
-    }
-    MLOG_D(">>> node ready. start endpoints");
-    endpoint = std::make_shared<RawEndpoint>(raw_host, raw_port, engine);
-
-    // Connect engine to endpoint for subscriber event delivery
-    endpoint->connectEngine(engine);
-
-    // Create and start HTTP endpoint
-    HttpServerConfig httpCfg;
-    httpCfg.address = http_host;
-    httpCfg.port = http_port;
-    httpCfg.num_threads = 1;
-    auto httpEndpoint = std::make_shared<HttpServer>(httpCfg);
-    httpEndpoint->set_engine(engine);
-
-    MLOG_D("create objects - ok");
-
-    // Start periodic telemetry reporting (every 60 s via internal Poco::Timer)
-    Telemetry::instance().start();
-    MLOG_D(">>> start http endpoint");
-    httpEndpoint->start();
-    MLOG_D(">>> start http endpoint - done");
-    MLOG_D(">>> start raw endpoint");
-    endpoint->start();
-    MLOG_D(">>> start raw endpoint - done");
-    MLOG_D(">>> wait for exit signal");
-    signals.wait();
-    MLOG_D(">>> stop raw endpoint");
-    endpoint->stop();
-    MLOG_D(">>> stop http endpoint");
-    httpEndpoint->stop();
-
-    Telemetry::instance().stop();
-    MLOG_D(">>> normal exit");
 
 
     // Stop periodic registration on shutdown
