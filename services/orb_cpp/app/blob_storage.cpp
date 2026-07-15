@@ -2,7 +2,7 @@
 
 #include <sstream>
 
-BlobStorage::BlobStorage(const DbConfig& cfg)
+BlobStorage::BlobStorage(const lunaricorn::DbConfig& cfg)
 {
     if(!cfg.valid()) {
         throw std::invalid_argument("invalid db config");

@@ -16,7 +16,7 @@ namespace json = boost::json;
 class BlobStorage
 {
 public:
-    explicit BlobStorage(const DbConfig& cfg);
+    explicit BlobStorage(const lunaricorn::DbConfig& cfg);
 
     bool contains(const std::string& id);
     bool store(const std::string& id, const json::object& data);

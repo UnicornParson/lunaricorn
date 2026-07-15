@@ -16,7 +16,7 @@
 class MetaStorage
 {
 public:
-    explicit MetaStorage(const DbConfig& cfg);
+    explicit MetaStorage(const lunaricorn::DbConfig& cfg);
 
     bool contains(const std::string& id);
     bool store(const std::string& id, const InternalMetaObject& data);
