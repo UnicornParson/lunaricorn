@@ -12,6 +12,8 @@
 #include <leader_api.h>
 
 #include "types.h"
+#include "engine.h"
+#include "http_endpoint.h"
 
 constexpr std::string app_name { "orb" };
 constexpr std::string app_ver { "0.2" };
@@ -75,13 +77,6 @@ std::string get_instance_identifier()
     return std::format("#{}_{}_{}_{:06d}", app_ver, ns, pid, random6);
 }
 
-// Temporary engine stub — will be replaced with actual implementation
-std::shared_ptr<void> make_engine(const DbConfig& cfg)
-{
-    MLOG_D("make_engine stub called with config: {}", cfg.toStr());
-    return nullptr;
-}
-
 int main() {
     const std::string app_token = get_instance_identifier();
     MLog::owner = app_name;
@@ -91,8 +86,21 @@ int main() {
     MLOG_D("run {} {}", app_name, app_token);
     SignalWaiter signals;
     DbConfig dbcfg = loadConfigFromEnvironment();
-    auto engine = make_engine(dbcfg);
 
+    // Initialize Engine
+    Engine engine(dbcfg);
+
+    // Initialize and start HTTP endpoint
+    asio::io_context ioc{1};
+    auto http_endpoint = std::make_shared<HttpEndpoint>(
+        ioc, http_host, http_port, engine);
+    http_endpoint->start();
+    MLOG_D("HTTP endpoint started on {}:{}", http_host, http_port);
+
+    // Run io_context in a separate thread
+    std::thread io_thread([&ioc]() {
+        ioc.run();
+    });
 
     // Check TEST_MODE environment variable for testing
     const char* test_mode_env = std::getenv("TEST_MODE");
@@ -127,6 +135,8 @@ int main() {
         MLOG_D("Waiting for leader at {}...", leader_url);
         int wait_count = 0;
         while (!leader_ready) {
+            if(signals.stopped()) break;
+
             try {
                 // Use short timeout wait so we can check for shutdown signals.
                 // wait_for_ready(5, 1) polls every 1 second internally
@@ -153,10 +163,18 @@ int main() {
         }
     }
 
+    // Wait for shutdown signal
+    if(!signals.stopped()) {
+        signals.wait();
+    }
 
-
-
-
+    // Graceful shutdown
+    MLOG_D("Shutting down...");
+    http_endpoint->stop();
+    ioc.stop();
+    if(io_thread.joinable()) {
+        io_thread.join();
+    }
 
     // Stop periodic registration on shutdown
     if (leader_enabled && leader_ready && leader) {
@@ -168,5 +186,6 @@ int main() {
         }
     }
 
+    MLOG_D("Shutdown complete");
     return 0;
 }

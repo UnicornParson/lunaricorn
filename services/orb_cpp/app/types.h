@@ -5,7 +5,7 @@
 #include <boost/json.hpp>
 
 namespace json = boost::json;
-struct OrbMeta
+struct InternalMetaObject
 {
     oid id;
     std::optional<oid> parent;
@@ -20,6 +20,8 @@ struct OrbData
 {
     oid id;
     json::object data;
-}
+};
+
+using OrbMeta = InternalMetaObject;
 
 

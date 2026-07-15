@@ -70,6 +70,10 @@ add_executable(orb
     main.cpp
     oid.cpp
     types.cpp
+    blob_storage.cpp
+    meta_storage.cpp
+    engine.cpp
+    http_endpoint.cpp
 )
 # Include directories
 target_include_directories(orb PRIVATE
