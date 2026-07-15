@@ -69,6 +69,7 @@ add_subdirectory(apilib)
 add_executable(orb
     main.cpp
     oid.cpp
+    types.cpp
 )
 # Include directories
 target_include_directories(orb PRIVATE

@@ -11,6 +11,8 @@
 #include <random>
 #include <leader_api.h>
 
+#include "types.h"
+
 constexpr std::string app_name { "orb" };
 constexpr std::string app_ver { "0.2" };
 constexpr std::string raw_host { "127.0.0.1" };
