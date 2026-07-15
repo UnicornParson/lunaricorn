@@ -182,7 +182,7 @@ void HttpEndpoint::handle_get_meta(
     if(data->next)   obj["next"] = *data->next;
     json::array tags;
     for(const auto& t : data->tags)
-        tags.push_back(t);
+        tags.push_back(boost::json::value(t));
     obj["tags"] = tags;
     obj["description"] = data->description;
     obj["has_content"] = data->has_content;

@@ -10,7 +10,7 @@
 class Engine
 {
 public:
-    explicit Engine(const DbConfig& cfg);
+    explicit Engine(const lunaricorn::DbConfig& cfg);
 
     // Blob operations
     bool store_blob(const std::string& id, const json::object& data);

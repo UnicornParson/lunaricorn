@@ -1,6 +1,6 @@
 #include "engine.h"
 
-Engine::Engine(const DbConfig& cfg)
+Engine::Engine(const lunaricorn::DbConfig& cfg)
     : blobs_(cfg)
     , metas_(cfg)
 {

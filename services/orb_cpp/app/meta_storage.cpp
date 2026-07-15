@@ -126,6 +126,7 @@ bool MetaStorage::store(const std::string& id, const InternalMetaObject& data)
         std::string parent = data.parent.value_or("");
         std::string prev = data.prev.value_or("");
         std::string next = data.next.value_or("");
+        int has_content_int = data.has_content ? 1 : 0;
 
         sql << R"(
             INSERT INTO orb_meta (id, parent, prev, next, tags, description, has_content)
@@ -142,9 +143,9 @@ bool MetaStorage::store(const std::string& id, const InternalMetaObject& data)
         )",
             soci::use(id),
             soci::use(parent), soci::use(prev), soci::use(next),
-            soci::use(tags), soci::use(data.description), soci::use(data.has_content),
+            soci::use(tags), soci::use(data.description), soci::use(has_content_int),
             soci::use(parent), soci::use(prev), soci::use(next),
-            soci::use(tags), soci::use(data.description), soci::use(data.has_content);
+            soci::use(tags), soci::use(data.description), soci::use(has_content_int);
 
         return true;
     } catch(const std::exception&) {
@@ -159,6 +160,7 @@ std::optional<InternalMetaObject> MetaStorage::load(const std::string& id)
     try {
         InternalMetaObject obj;
         std::string parent, prev, next, tags_str;
+        int has_content_int = 0;
 
         soci::indicator parent_ind = soci::i_null;
         soci::indicator prev_ind = soci::i_null;
@@ -174,8 +176,10 @@ std::optional<InternalMetaObject> MetaStorage::load(const std::string& id)
             soci::into(next, next_ind),
             soci::into(tags_str),
             soci::into(obj.description),
-            soci::into(obj.has_content),
+            soci::into(has_content_int),
             soci::use(id);
+
+        obj.has_content = has_content_int != 0;
 
         if(obj.id.empty())
             return std::nullopt;
