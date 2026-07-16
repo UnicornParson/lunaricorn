@@ -34,3 +34,5 @@
 ### Fixed
 
 - Leader-коннектор теперь корректно прерывается по сигналу при ожидании.
+- `MetaStorage`: исправлена ошибка "column 'parent' of relation 'orb_meta' does not exist" — добавлен `DROP TABLE IF EXISTS orb_meta CASCADE` перед `CREATE TABLE`, чтобы таблица пересоздавалась с корректной схемой при каждом запуске (разработка).
+- `meta_storage.cpp`, `blob_storage.cpp`, `http_endpoint.cpp`: добавлено отладочное логирование (MLOG_D/MLOG_E) для диагностики исключений и потока запросов.
