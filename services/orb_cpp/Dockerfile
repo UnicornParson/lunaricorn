@@ -17,6 +17,9 @@ FROM lunaricorn_orb_cpp_builder AS cli_builder
 ENV CMAKE_PREFIX_PATH=/opt/3rd/soci/bin:$CMAKE_PREFIX_PATH
 COPY cli/ /opt/cli/
 COPY app/ /opt/app/
+RUN mkdir -p /opt/tmp && mkdir -p /opt/app/apilib
+ADD tmp/lunaricorn.tgz /opt/tmp
+RUN cp -rvf /opt/tmp/lunaricorn/cpp/* /opt/app/apilib
 WORKDIR /opt/cli/
 RUN chmod +x /opt/cli/build.sh 
 ENV BUILD_TYPE=Debug

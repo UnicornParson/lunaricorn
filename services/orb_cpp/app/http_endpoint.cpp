@@ -47,7 +47,7 @@ void HttpEndpoint::stop()
     running_ = false;
     beast::error_code ec;
     acceptor_.close(ec);
-    stats_timer_.cancel(ec);
+    stats_timer_.cancel();
 }
 
 void HttpEndpoint::do_accept()
@@ -158,7 +158,7 @@ void HttpEndpoint::on_stats_timer(beast::error_code /*ec*/)
         << " | bytes_in=" << stats_.bytes_in.load()
         << " bytes_out=" << stats_.bytes_out.load();
 
-    MLOG_I("{}", oss.str());
+    MLOG_D("{}", oss.str());
     std::cout << oss.str() << std::endl;
 
     stats_.reset();

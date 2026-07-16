@@ -119,7 +119,12 @@ OrbClient::HttpResponse OrbClient::do_request(
         // Build request
         http::request<http::string_body> req;
         req.version(11);
-        req.method(method);
+
+        // Convert string method to Boost.Beast verb
+        http::verb verb = http::string_to_verb(method);
+        if(verb == http::verb::unknown)
+            verb = http::verb::get;
+        req.method(verb);
         req.target(full_path);
         req.set(http::field::host, host_);
         req.set(http::field::user_agent, "orb_client/1.0");
@@ -347,8 +352,7 @@ void OrbClient::start_health_check()
 
 void OrbClient::stop_health_check()
 {
-    beast::error_code ec;
-    health_timer_.cancel(ec);
+    health_timer_.cancel();
 }
 
 void OrbClient::on_health_timer(beast::error_code ec)
@@ -358,7 +362,7 @@ void OrbClient::on_health_timer(beast::error_code ec)
     bool alive = health();
     if(alive != server_alive_) {
         server_alive_ = alive;
-        MLOG_I("OrbClient: server status changed to {}", alive ? "ALIVE" : "DEAD");
+        MLOG_D("OrbClient: server status changed to {}", alive ? "ALIVE" : "DEAD");
         if(status_cb_) {
             status_cb_(alive);
         }

@@ -14,6 +14,8 @@
 #include <ctime>
 #include <zlib.h>
 
+namespace json = boost::json;
+
 static std::string now_ts()
 {
     auto now = std::chrono::system_clock::now();
@@ -481,12 +483,13 @@ void OrbHttpTest::test_has_blob_auto()
     auto [get1_status, get1_body] = do_get("/meta/" + id);
     bool has_content_initially = false;
     if(get1_status == 200) {
+        json::value parsed;
         try {
-            json::value parsed = json::parse(get1_body);
-            if(parsed.is_object() && parsed.as_object().contains("has_content")) {
-                has_content_initially = parsed.as_object().at("has_content").as_bool();
-            }
+            parsed = json::parse(get1_body);
         } catch(...) {}
+        if(parsed.is_object() && parsed.as_object().contains("has_content")) {
+            has_content_initially = parsed.as_object().at("has_content").as_bool();
+        }
     }
 
     // Store blob
@@ -498,12 +501,13 @@ void OrbHttpTest::test_has_blob_auto()
     auto [get2_status, get2_body] = do_get("/meta/" + id);
     bool has_content_after_blob = false;
     if(get2_status == 200) {
+        json::value parsed;
         try {
-            json::value parsed = json::parse(get2_body);
-            if(parsed.is_object() && parsed.as_object().contains("has_content")) {
-                has_content_after_blob = parsed.as_object().at("has_content").as_bool();
-            }
+            parsed = json::parse(get2_body);
         } catch(...) {}
+        if(parsed.is_object() && parsed.as_object().contains("has_content")) {
+            has_content_after_blob = parsed.as_object().at("has_content").as_bool();
+        }
     }
 
     if(!has_content_initially && has_content_after_blob) {
