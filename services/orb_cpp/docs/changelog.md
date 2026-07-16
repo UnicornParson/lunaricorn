@@ -8,6 +8,12 @@
 
 ### Added
 
+- Создан подпроект `cli` — консольное приложение `orb_cli` для интеграционного тестирования сервиса через HTTP API:
+  - `OrbHttpTest` — фоновый поток, циклически тестирующий все эндпоинты: GET /health, PUT/GET /blob/{id}, PUT/GET /meta/{id}.
+  - `main.cpp` — точка входа с поддержкой аргументов командной строки (host, port), переменных окружения `ORB_HOST`/`ORB_PORT`, graceful shutdown, проверкой доступности сервера при старте.
+  - `build.sh` — скрипт сборки (аналогичен signaling_cpp/cli/build.sh).
+  - `CMakeLists.txt` — сборка с Boost.Beast, Boost.JSON, Poco (Net, Foundation, Util).
+
 - Реализован Phase 1 сервиса orb_cpp:
   - `BlobStorage` — управление K/V таблицей `orb_blob` (key VARCHAR(128), value JSONB) через SOCI/PostgreSQL.
   - `MetaStorage` — управление таблицей `orb_meta` с колонками под `InternalMetaObject`.

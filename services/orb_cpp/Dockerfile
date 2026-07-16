@@ -13,9 +13,22 @@ RUN /opt/app/build.sh
 
 
 
+FROM lunaricorn_orb_cpp_builder AS cli_builder
+ENV CMAKE_PREFIX_PATH=/opt/3rd/soci/bin:$CMAKE_PREFIX_PATH
+COPY cli/ /opt/cli/
+COPY app/ /opt/app/
+WORKDIR /opt/cli/
+RUN chmod +x /opt/cli/build.sh 
+ENV BUILD_TYPE=Debug
+#ENV BUILD_TYPE=Release
+RUN /opt/cli/build.sh
+
+
+
 FROM lunaricorn_orb_cpp_base
 ENV CMAKE_PREFIX_PATH=/opt/3rd/soci/bin:${CMAKE_PREFIX_PATH:-}
 COPY --from=builder /opt/app/__build/orb /opt/app/bin/orb
+COPY --from=cli_builder /opt/cli/__build/orb_cli /opt/app/bin/cli
 
 COPY --from=builder /opt/3rd/boost/bin/lib /opt/3rd/boost/bin/lib
 COPY --from=builder /opt/3rd/poco/bin/lib /opt/3rd/poco/bin/lib

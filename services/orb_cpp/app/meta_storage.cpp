@@ -30,8 +30,10 @@ MetaStorage::MetaStorage(const lunaricorn::DbConfig& cfg)
         )";
 
         ok_ = true;
+        MLOG_D("MetaStorage: connected, table orb_meta ready");
     } catch(const std::exception& e) {
         ok_ = false;
+        MLOG_E("MetaStorage: connection failed: {}", e.what());
         throw;
     }
 }
@@ -104,22 +106,30 @@ std::vector<std::string> MetaStorage::pg_array_to_tags(const std::string& tags_s
 
 bool MetaStorage::contains(const std::string& id)
 {
-    if(!ok_) return false;
+    if(!ok_) {
+        MLOG_E("MetaStorage::contains({}): not ok", id);
+        return false;
+    }
 
     try {
         int exists = 0;
         sql << "SELECT 1 FROM orb_meta WHERE id = :id",
             soci::into(exists),
             soci::use(id);
+        MLOG_D("MetaStorage::contains({}): {}", id, exists == 1 ? "found" : "not found");
         return exists == 1;
-    } catch(const std::exception&) {
+    } catch(const std::exception& e) {
+        MLOG_E("MetaStorage::contains({}): exception: {}", id, e.what());
         return false;
     }
 }
 
 bool MetaStorage::store(const std::string& id, const InternalMetaObject& data)
 {
-    if(!ok_) return false;
+    if(!ok_) {
+        MLOG_E("MetaStorage::store({}): not ok, skipping", id);
+        return false;
+    }
 
     try {
         std::string tags = tags_to_pg_array(data.tags);
@@ -127,6 +137,9 @@ bool MetaStorage::store(const std::string& id, const InternalMetaObject& data)
         std::string prev = data.prev.value_or("");
         std::string next = data.next.value_or("");
         int has_content_int = data.has_content ? 1 : 0;
+
+        MLOG_D("MetaStorage::store({}): desc='{}', tags={}, parent='{}', has_content={}",
+               id, data.description, tags, parent, has_content_int);
 
         sql << R"(
             INSERT INTO orb_meta (id, parent, prev, next, tags, description, has_content)
@@ -147,15 +160,20 @@ bool MetaStorage::store(const std::string& id, const InternalMetaObject& data)
             soci::use(parent), soci::use(prev), soci::use(next),
             soci::use(tags), soci::use(data.description), soci::use(has_content_int);
 
+        MLOG_D("MetaStorage::store({}): success", id);
         return true;
-    } catch(const std::exception&) {
+    } catch(const std::exception& e) {
+        MLOG_E("MetaStorage::store({}): exception: {}", id, e.what());
         return false;
     }
 }
 
 std::optional<InternalMetaObject> MetaStorage::load(const std::string& id)
 {
-    if(!ok_) return std::nullopt;
+    if(!ok_) {
+        MLOG_E("MetaStorage::load({}): not ok", id);
+        return std::nullopt;
+    }
 
     try {
         InternalMetaObject obj;
@@ -193,8 +211,10 @@ std::optional<InternalMetaObject> MetaStorage::load(const std::string& id)
 
         obj.tags = pg_array_to_tags(tags_str);
 
+        MLOG_D("MetaStorage::load({}): found desc='{}' tags_count={}", id, obj.description, obj.tags.size());
         return obj;
-    } catch(const std::exception&) {
+    } catch(const std::exception& e) {
+        MLOG_E("MetaStorage::load({}): exception: {}", id, e.what());
         return std::nullopt;
     }
 }

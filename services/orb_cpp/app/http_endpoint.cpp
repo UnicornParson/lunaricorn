@@ -120,6 +120,7 @@ void HttpEndpoint::handle_request(
         res.result(http::status::not_found);
         res.body() = R"({"error":"not found"})";
     } catch(const std::exception& e) {
+        MLOG_E("handle_request exception: {}", e.what());
         res.result(http::status::internal_server_error);
         res.body() = R"({"error":")" + std::string(e.what()) + R"("})";
     }
@@ -133,11 +134,13 @@ void HttpEndpoint::handle_get_blob(
 {
     auto data = engine_.load_blob(id);
     if(!data) {
+        MLOG_D("GET /blob/{}: not found", id);
         res.result(http::status::not_found);
         res.body() = R"({"error":"blob not found"})";
         return;
     }
 
+    MLOG_D("GET /blob/{}: found", id);
     res.result(http::status::ok);
     res.body() = json::serialize(json::value(*data));
 }
@@ -149,15 +152,18 @@ void HttpEndpoint::handle_put_blob(
 {
     json::value parsed = json::parse(body);
     if(!parsed.is_object()) {
+        MLOG_E("PUT /blob/{}: invalid json, expected object", id);
         res.result(http::status::bad_request);
         res.body() = R"({"error":"invalid json, expected object"})";
         return;
     }
 
     if(engine_.store_blob(id, parsed.as_object())) {
+        MLOG_D("PUT /blob/{}: stored", id);
         res.result(http::status::ok);
         res.body() = R"({"status":"stored"})";
     } else {
+        MLOG_E("PUT /blob/{}: store failed", id);
         res.result(http::status::internal_server_error);
         res.body() = R"({"error":"store failed"})";
     }
@@ -169,6 +175,7 @@ void HttpEndpoint::handle_get_meta(
 {
     auto data = engine_.load_meta(id);
     if(!data) {
+        MLOG_D("GET /meta/{}: not found", id);
         res.result(http::status::not_found);
         res.body() = R"({"error":"meta not found"})";
         return;
@@ -187,6 +194,7 @@ void HttpEndpoint::handle_get_meta(
     obj["description"] = data->description;
     obj["has_content"] = data->has_content;
 
+    MLOG_D("GET /meta/{}: found desc='{}'", id, data->description);
     res.result(http::status::ok);
     res.body() = json::serialize(json::value(obj));
 }
@@ -198,6 +206,7 @@ void HttpEndpoint::handle_put_meta(
 {
     json::value parsed = json::parse(body);
     if(!parsed.is_object()) {
+        MLOG_E("PUT /meta/{}: invalid json, expected object", id);
         res.result(http::status::bad_request);
         res.body() = R"({"error":"invalid json, expected object"})";
         return;
@@ -225,10 +234,16 @@ void HttpEndpoint::handle_put_meta(
     if(obj.contains("has_content") && obj.at("has_content").is_bool())
         meta.has_content = obj.at("has_content").as_bool();
 
+    MLOG_D("PUT /meta/{}: desc='{}', has_content={}, tags_count={}, parent='{}'",
+           id, meta.description, meta.has_content, meta.tags.size(),
+           meta.parent.value_or(""));
+
     if(engine_.store_meta(id, meta)) {
+        MLOG_D("PUT /meta/{}: stored", id);
         res.result(http::status::ok);
         res.body() = R"({"status":"stored"})";
     } else {
+        MLOG_E("PUT /meta/{}: store failed", id);
         res.result(http::status::internal_server_error);
         res.body() = R"({"error":"store failed"})";
     }
@@ -240,6 +255,7 @@ void HttpEndpoint::handle_health(http::response<http::string_body>& res)
         res.result(http::status::ok);
         res.body() = R"({"status":"ok"})";
     } else {
+        MLOG_E("GET /health: engine not ok");
         res.result(http::status::service_unavailable);
         res.body() = R"({"status":"unavailable"})";
     }
