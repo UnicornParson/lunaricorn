@@ -4,6 +4,9 @@
 
 #include <regex>
 #include <sstream>
+#include <iomanip>
+#include <ctime>
+#include <zlib.h>
 
 // -------------------------------------------------------------------
 // HttpEndpoint
@@ -13,6 +16,7 @@ HttpEndpoint::HttpEndpoint(asio::io_context& ioc, const std::string& host, unsig
     : ioc_(ioc)
     , acceptor_(ioc)
     , engine_(engine)
+    , stats_timer_(ioc, std::chrono::seconds(60))
 {
     beast::error_code ec;
 
@@ -35,6 +39,7 @@ void HttpEndpoint::start()
 {
     running_ = true;
     do_accept();
+    start_stats_timer();
 }
 
 void HttpEndpoint::stop()
@@ -42,6 +47,7 @@ void HttpEndpoint::stop()
     running_ = false;
     beast::error_code ec;
     acceptor_.close(ec);
+    stats_timer_.cancel(ec);
 }
 
 void HttpEndpoint::do_accept()
@@ -58,6 +64,111 @@ void HttpEndpoint::do_accept()
         });
 }
 
+// -------------------------------------------------------------------
+// Gzip helpers
+// -------------------------------------------------------------------
+
+bool HttpEndpoint::client_accepts_gzip(const http::request<http::string_body>& req)
+{
+    auto it = req.find(http::field::accept_encoding);
+    if(it == req.end())
+        return false;
+    const std::string& val = it->value();
+    return val.find("gzip") != std::string::npos;
+}
+
+std::string HttpEndpoint::compress_gzip(const std::string& data)
+{
+    z_stream strm = {};
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+
+    int ret = deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
+                           15 + 16, 8, Z_DEFAULT_STRATEGY);
+    if(ret != Z_OK)
+        throw std::runtime_error("deflateInit2 failed");
+
+    strm.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(data.data()));
+    strm.avail_in = static_cast<uInt>(data.size());
+
+    std::string compressed;
+    compressed.resize(deflateBound(&strm, data.size()));
+
+    strm.next_out = reinterpret_cast<Bytef*>(&compressed[0]);
+    strm.avail_out = static_cast<uInt>(compressed.size());
+
+    ret = deflate(&strm, Z_FINISH);
+    if(ret != Z_STREAM_END) {
+        deflateEnd(&strm);
+        throw std::runtime_error("deflate failed");
+    }
+
+    compressed.resize(strm.total_out);
+    deflateEnd(&strm);
+    return compressed;
+}
+
+void HttpEndpoint::apply_gzip_if_needed(
+    const http::request<http::string_body>& req,
+    http::response<http::string_body>& res)
+{
+    if(!client_accepts_gzip(req))
+        return;
+    if(res.body().empty())
+        return;
+
+    std::string compressed = compress_gzip(res.body());
+    res.body() = compressed;
+    res.set(http::field::content_encoding, "gzip");
+}
+
+// -------------------------------------------------------------------
+// Stats timer
+// -------------------------------------------------------------------
+
+void HttpEndpoint::start_stats_timer()
+{
+    if(!running_) return;
+
+    stats_timer_.expires_after(std::chrono::seconds(60));
+    stats_timer_.async_wait(
+        [self = shared_from_this()](beast::error_code ec) {
+            if(!ec)
+                self->on_stats_timer(ec);
+        });
+}
+
+void HttpEndpoint::on_stats_timer(beast::error_code /*ec*/)
+{
+    auto now = std::chrono::system_clock::now();
+    auto t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+    gmtime_r(&t, &tm);
+
+    std::ostringstream oss;
+    oss << "[" << std::put_time(&tm, "%Y-%m-%dT%H:%M:%SZ") << "] "
+        << "[STATS] health=" << stats_.health_count.load()
+        << " get_meta=" << stats_.get_meta_count.load()
+        << " put_meta=" << stats_.put_meta_count.load()
+        << " get_blob=" << stats_.get_blob_count.load()
+        << " put_blob=" << stats_.put_blob_count.load()
+        << " gen_id=" << stats_.gen_id_count.load()
+        << " search=" << stats_.search_count.load()
+        << " | bytes_in=" << stats_.bytes_in.load()
+        << " bytes_out=" << stats_.bytes_out.load();
+
+    MLOG_I("{}", oss.str());
+    std::cout << oss.str() << std::endl;
+
+    stats_.reset();
+    start_stats_timer();
+}
+
+// -------------------------------------------------------------------
+// Request routing
+// -------------------------------------------------------------------
+
 void HttpEndpoint::handle_request(
     http::request<http::string_body>& req,
     http::response<http::string_body>& res)
@@ -69,10 +180,29 @@ void HttpEndpoint::handle_request(
     const std::string method = req.method_string();
     const std::string target = req.target();
 
+    // Track bytes in
+    stats_.bytes_in.fetch_add(req.body().size());
+
     try {
         // GET /health
         if(method == "GET" && target == "/health") {
             handle_health(res);
+            return;
+        }
+
+        // GET /gen_id
+        if(method == "GET" && target == "/gen_id") {
+            handle_gen_id(res);
+            return;
+        }
+
+        // GET /search?tags=...
+        if(method == "GET" && target.find("/search") == 0) {
+            std::string query;
+            auto pos = target.find('?');
+            if(pos != std::string::npos)
+                query = target.substr(pos + 1);
+            handle_search(query, res);
             return;
         }
 
@@ -125,6 +255,9 @@ void HttpEndpoint::handle_request(
         res.body() = R"({"error":")" + std::string(e.what()) + R"("})";
     }
 
+    // Track bytes out and apply gzip
+    stats_.bytes_out.fetch_add(res.body().size());
+    apply_gzip_if_needed(req, res);
     res.prepare_payload();
 }
 
@@ -143,6 +276,7 @@ void HttpEndpoint::handle_get_blob(
     MLOG_D("GET /blob/{}: found", id);
     res.result(http::status::ok);
     res.body() = json::serialize(json::value(*data));
+    stats_.get_blob_count.fetch_add(1);
 }
 
 void HttpEndpoint::handle_put_blob(
@@ -162,6 +296,7 @@ void HttpEndpoint::handle_put_blob(
         MLOG_D("PUT /blob/{}: stored", id);
         res.result(http::status::ok);
         res.body() = R"({"status":"stored"})";
+        stats_.put_blob_count.fetch_add(1);
     } else {
         MLOG_E("PUT /blob/{}: store failed", id);
         res.result(http::status::internal_server_error);
@@ -197,6 +332,7 @@ void HttpEndpoint::handle_get_meta(
     MLOG_D("GET /meta/{}: found desc='{}'", id, data->description);
     res.result(http::status::ok);
     res.body() = json::serialize(json::value(obj));
+    stats_.get_meta_count.fetch_add(1);
 }
 
 void HttpEndpoint::handle_put_meta(
@@ -231,17 +367,17 @@ void HttpEndpoint::handle_put_meta(
     }
     if(obj.contains("description") && obj.at("description").is_string())
         meta.description = obj.at("description").as_string().c_str();
-    if(obj.contains("has_content") && obj.at("has_content").is_bool())
-        meta.has_content = obj.at("has_content").as_bool();
+    // has_content is managed automatically by Engine, ignore client value
 
-    MLOG_D("PUT /meta/{}: desc='{}', has_content={}, tags_count={}, parent='{}'",
-           id, meta.description, meta.has_content, meta.tags.size(),
+    MLOG_D("PUT /meta/{}: desc='{}', tags_count={}, parent='{}'",
+           id, meta.description, meta.tags.size(),
            meta.parent.value_or(""));
 
     if(engine_.store_meta(id, meta)) {
         MLOG_D("PUT /meta/{}: stored", id);
         res.result(http::status::ok);
         res.body() = R"({"status":"stored"})";
+        stats_.put_meta_count.fetch_add(1);
     } else {
         MLOG_E("PUT /meta/{}: store failed", id);
         res.result(http::status::internal_server_error);
@@ -259,6 +395,70 @@ void HttpEndpoint::handle_health(http::response<http::string_body>& res)
         res.result(http::status::service_unavailable);
         res.body() = R"({"status":"unavailable"})";
     }
+    stats_.health_count.fetch_add(1);
+}
+
+void HttpEndpoint::handle_gen_id(http::response<http::string_body>& res)
+{
+    std::string id = engine_.generate_id();
+    MLOG_D("GET /gen_id: generated id='{}'", id);
+    res.result(http::status::ok);
+    res.body() = R"({"id":")" + id + R"("})";
+    stats_.gen_id_count.fetch_add(1);
+}
+
+void HttpEndpoint::handle_search(const std::string& query_string, http::response<http::string_body>& res)
+{
+    // Parse tags from query string: tags=tag1,tag2
+    std::vector<std::string> tags;
+
+    // Simple query string parser
+    std::string tag_param;
+    auto pos = query_string.find("tags=");
+    if(pos != std::string::npos) {
+        tag_param = query_string.substr(pos + 5);
+        // Remove any trailing &...
+        auto amp_pos = tag_param.find('&');
+        if(amp_pos != std::string::npos)
+            tag_param = tag_param.substr(0, amp_pos);
+    }
+
+    if(tag_param.empty()) {
+        res.result(http::status::bad_request);
+        res.body() = R"({"error":"missing tags parameter"})";
+        return;
+    }
+
+    // Split by comma
+    std::stringstream ss(tag_param);
+    std::string tag;
+    while(std::getline(ss, tag, ',')) {
+        if(!tag.empty())
+            tags.push_back(tag);
+    }
+
+    auto results = engine_.search_by_tags(tags);
+
+    json::array arr;
+    for(const auto& obj : results) {
+        json::object item;
+        item["id"] = obj.id;
+        if(obj.parent) item["parent"] = *obj.parent;
+        if(obj.prev)   item["prev"] = *obj.prev;
+        if(obj.next)   item["next"] = *obj.next;
+        json::array tgs;
+        for(const auto& t : obj.tags)
+            tgs.push_back(json::value(t));
+        item["tags"] = tgs;
+        item["description"] = obj.description;
+        item["has_content"] = obj.has_content;
+        arr.push_back(item);
+    }
+
+    MLOG_D("GET /search?tags={}: found {} results", tag_param, results.size());
+    res.result(http::status::ok);
+    res.body() = json::serialize(json::value(arr));
+    stats_.search_count.fetch_add(1);
 }
 
 // -------------------------------------------------------------------

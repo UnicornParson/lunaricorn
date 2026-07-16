@@ -5,6 +5,7 @@
 #include <boost/json.hpp>
 
 namespace json = boost::json;
+
 struct InternalMetaObject
 {
     oid id;
@@ -13,7 +14,7 @@ struct InternalMetaObject
     std::optional<oid> next;
     std::vector<std::string> tags;
     std::string description;
-    bool has_content;
+    bool has_content; // managed automatically by Engine based on blob presence
 };
 
 struct OrbData
@@ -23,5 +24,3 @@ struct OrbData
 };
 
 using OrbMeta = InternalMetaObject;
-
-

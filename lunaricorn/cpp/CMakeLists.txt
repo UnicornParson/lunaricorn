@@ -10,7 +10,7 @@ if(NOT BOOST_ROOT)
     set(BOOST_ROOT "/opt/3rd/boost/bin" CACHE PATH "Boost installation root")
 endif()
 set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost REQUIRED COMPONENTS system filesystem json)
+find_package(Boost REQUIRED COMPONENTS system filesystem json beast)
 
 if(NOT POCO_ROOT)
     set(POCO_ROOT "/opt/3rd/poco/bin" CACHE PATH "POCO installation root")
@@ -38,6 +38,10 @@ foreach(LIB ${POCO_LIBS})
     list(APPEND POCO_LIBRARIES ${POCO_${LIB}_LIB})
 endforeach()
 
+# Find zlib
+find_package(ZLIB REQUIRED)
+
+# Main API library
 add_library(lunaricorn_api STATIC
     internal/thread_control.cpp
     proto/signaling.cpp
@@ -77,3 +81,39 @@ if(UNIX)
 endif()
 
 target_compile_features(lunaricorn_api PUBLIC cxx_std_20)
+
+# Orb client library
+add_library(orb_client STATIC
+    orb_client.cpp
+    orb_object.cpp
+)
+
+target_include_directories(orb_client
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${Boost_INCLUDE_DIRS}
+        ${POCO_INCLUDE_DIR}
+        ${ZLIB_INCLUDE_DIRS}
+)
+
+target_link_libraries(orb_client
+    PUBLIC
+        lunaricorn_api
+        Boost::json
+        Boost::system
+        Boost::filesystem
+        Boost::beast
+        ${ZLIB_LIBRARIES}
+)
+
+if(UNIX)
+    target_link_libraries(orb_client
+        PUBLIC
+            pthread
+            dl
+    )
+endif()
+
+target_compile_features(orb_client PUBLIC cxx_std_20)

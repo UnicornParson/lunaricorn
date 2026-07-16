@@ -2,6 +2,9 @@
 #include "stdafx.h"
 #include "config.h"
 #include "maintenance.h"
+#include "orb_controller.h"
+#include "orb_client.h"
+#include "orb_object.h"
 
 namespace lunaricorn
 {

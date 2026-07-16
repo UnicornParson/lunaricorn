@@ -48,6 +48,11 @@ foreach(LIB ${POCO_LIBS})
     list(APPEND POCO_LIBRARIES ${POCO_${LIB}_LIB})
 endforeach()
 
+# ------------------------------------------------------------------
+# zlib
+# ------------------------------------------------------------------
+find_package(ZLIB REQUIRED)
+
 add_executable(orb_cli
     main.cpp
     http_test.cpp
@@ -57,14 +62,19 @@ target_include_directories(orb_cli PRIVATE
     ${Boost_INCLUDE_DIRS}
     ${POCO_INCLUDE_DIR}
     /opt/app/
+    /opt/app/apilib
+    ${ZLIB_INCLUDE_DIRS}
 )
 
 target_link_libraries(orb_cli
+    orb_client
+    lunaricorn_api
     Boost::json
     Boost::system
     Boost::filesystem
     Boost::beast
     ${POCO_LIBRARIES}
+    ${ZLIB_LIBRARIES}
 )
 
 if(UNIX)

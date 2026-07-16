@@ -21,6 +21,7 @@ public:
     bool contains(const std::string& id);
     bool store(const std::string& id, const InternalMetaObject& data);
     std::optional<InternalMetaObject> load(const std::string& id);
+    std::vector<InternalMetaObject> search_by_tags(const std::vector<std::string>& tags);
     size_t count();
     bool ok();
 

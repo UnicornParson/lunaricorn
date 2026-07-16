@@ -219,6 +219,59 @@ std::optional<InternalMetaObject> MetaStorage::load(const std::string& id)
     }
 }
 
+std::vector<InternalMetaObject> MetaStorage::search_by_tags(const std::vector<std::string>& tags)
+{
+    std::vector<InternalMetaObject> results;
+    if(!ok_ || tags.empty()) {
+        MLOG_D("MetaStorage::search_by_tags: not ok or empty tags");
+        return results;
+    }
+
+    try {
+        // Build SQL: find meta objects whose tags array contains ALL specified tags
+        // Use && (overlap) operator: tags @> ARRAY['tag1','tag2']::text[]
+        std::string tags_arr = tags_to_pg_array(tags);
+        std::string query = R"(
+            SELECT id, parent, prev, next, tags::text, description, has_content
+            FROM orb_meta
+            WHERE tags @> :tags::text[]
+        )";
+
+        soci::rowset<soci::row> rs = (sql.prepare << query, soci::use(tags_arr));
+
+        for(auto it = rs.begin(); it != rs.end(); ++it) {
+            InternalMetaObject obj;
+            const soci::row& row = *it;
+
+            obj.id = row.get<std::string>("id", "");
+            if(obj.id.empty())
+                continue;
+
+            if(row.get_indicator("parent") != soci::i_null)
+                obj.parent = row.get<std::string>("parent", "");
+            if(row.get_indicator("prev") != soci::i_null)
+                obj.prev = row.get<std::string>("prev", "");
+            if(row.get_indicator("next") != soci::i_null)
+                obj.next = row.get<std::string>("next", "");
+
+            obj.description = row.get<std::string>("description", "");
+            obj.has_content = row.get<int>("has_content", 0) != 0;
+
+            std::string tags_str = row.get<std::string>("tags", "{}");
+            obj.tags = pg_array_to_tags(tags_str);
+
+            results.push_back(std::move(obj));
+        }
+
+        MLOG_D("MetaStorage::search_by_tags: found {} results for {} tags",
+               results.size(), tags.size());
+    } catch(const std::exception& e) {
+        MLOG_E("MetaStorage::search_by_tags: exception: {}", e.what());
+    }
+
+    return results;
+}
+
 size_t MetaStorage::count()
 {
     if(!ok_) return 0;

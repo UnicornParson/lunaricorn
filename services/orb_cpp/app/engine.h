@@ -2,6 +2,7 @@
 
 #include <string>
 #include <optional>
+#include <vector>
 
 #include <lunaricorn.h>
 #include "blob_storage.h"
@@ -21,6 +22,10 @@ public:
     bool store_meta(const std::string& id, const InternalMetaObject& meta);
     std::optional<InternalMetaObject> load_meta(const std::string& id);
     bool contains_meta(const std::string& id);
+    std::vector<InternalMetaObject> search_by_tags(const std::vector<std::string>& tags);
+
+    // ID generation
+    std::string generate_id();
 
     // Status
     bool ok();
@@ -28,4 +33,6 @@ public:
 private:
     BlobStorage blobs_;
     MetaStorage metas_;
+
+    void update_has_blob(const std::string& id);
 };
