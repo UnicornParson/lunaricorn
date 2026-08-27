@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "signal_connector.h"
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
@@ -23,6 +24,8 @@ bool Engine::store_blob(const std::string& id, const json::object& data)
     bool result = blobs_.store(id, data);
     if(result) {
         update_has_blob(id);
+        // Notify signaling about blob update
+        notify_signaling(lunaricorn::internal::SignalingEventType::FileOp_update, id, id);
     }
     return result;
 }
@@ -42,7 +45,19 @@ bool Engine::store_meta(const std::string& id, const InternalMetaObject& meta)
     // Auto-detect has_content based on blob existence
     InternalMetaObject updated_meta = meta;
     updated_meta.has_content = contains_blob(id);
-    return metas_.store(id, updated_meta);
+    
+    // Determine if this is a new or update operation BEFORE storing
+    bool is_new = !contains_meta(id);
+    
+    bool result = metas_.store(id, updated_meta);
+    if(result) {
+        // Signal based on whether this was a new or existing object
+        const auto& event_type = is_new 
+            ? lunaricorn::internal::SignalingEventType::FileOp_new 
+            : lunaricorn::internal::SignalingEventType::FileOp_update;
+        notify_signaling(event_type, id, id);
+    }
+    return result;
 }
 
 std::optional<InternalMetaObject> Engine::load_meta(const std::string& id)
@@ -70,6 +85,18 @@ std::string Engine::generate_id()
 bool Engine::ok()
 {
     return blobs_.ok() && metas_.ok();
+}
+
+void Engine::set_signal_connector(SignalConnector* sc)
+{
+    _signal_connector = sc;
+}
+
+void Engine::notify_signaling(const std::string& event_type, const std::string& id, const std::string& uuid)
+{
+    if(_signal_connector && _signal_connector->ready()) {
+        _signal_connector->push_event(event_type, id, uuid);
+    }
 }
 
 void Engine::update_has_blob(const std::string& id)

@@ -74,6 +74,7 @@ add_executable(orb
     meta_storage.cpp
     engine.cpp
     http_endpoint.cpp
+    signal_connector.cpp
 )
 # Include directories
 target_include_directories(orb PRIVATE

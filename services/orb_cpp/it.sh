@@ -29,6 +29,10 @@ docker run -it --rm \
     --name "$CONTAINER_NAME" \
     -e MAINTENANCE_HOST=${CLUSTER_HOST} \
     -e MAINTENANCE_PORT=8007 \
+    -e SIGNALING_HOST=${CLUSTER_HOST} \
+    -e SIGNALING_REQ=5555 \
+    -e SIGNALING_API=5557 \
+    -e SIGNALING_AGENT_ID=orb \
     -e CLUSTER_LEADER_URL=http://${CLUSTER_HOST}:8001/ \
     -e PYTHONUNBUFFERED=1 \
     -e db_type=postgresql \

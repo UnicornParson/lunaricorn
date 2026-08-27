@@ -14,6 +14,7 @@
 #include "types.h"
 #include "engine.h"
 #include "http_endpoint.h"
+#include "signal_connector.h"
 
 constexpr std::string app_name { "orb" };
 constexpr std::string app_ver { "0.2" };
@@ -87,8 +88,52 @@ int main() {
     SignalWaiter signals;
     DbConfig dbcfg = loadConfigFromEnvironment();
 
+    // Initialize SignalConnector
+    SignalConnector sig_connector;
+    SignalConnector::Config sig_cfg;
+    
+    // Get signaling configuration from environment
+    const char* signaling_host_env = std::getenv("SIGNALING_HOST");
+    if(signaling_host_env) sig_cfg.host = signaling_host_env;
+    else sig_cfg.host = "127.0.0.1";  // default
+    
+    const char* signaling_req_env = std::getenv("SIGNALING_REQ");
+    if(signaling_req_env) {
+        try {
+            sig_cfg.req_port = static_cast<uint16_t>(std::stoul(signaling_req_env));
+        } catch(...) {
+            sig_cfg.req_port = 8001;  // default
+        }
+    } else {
+        sig_cfg.req_port = 8001;  // default
+    }
+    
+    const char* signaling_agent_env = std::getenv("SIGNALING_AGENT_ID");
+    if(signaling_agent_env) sig_cfg.agent_id = signaling_agent_env;
+    else sig_cfg.agent_id = "orb_cpp";
+    
+    MLOG_D("Signaling config: host={}, port={}, agent={}", sig_cfg.host, sig_cfg.req_port, sig_cfg.agent_id);
+    
+    // Try to connect to signaling (non-fatal if unavailable)
+    bool signaling_ready = false;
+    try {
+        signaling_ready = sig_connector.initialize(sig_cfg);
+        if(signaling_ready) {
+            MLOG_I("Signaling connector initialized successfully");
+        } else {
+            MLOG_W("Signaling connector failed to initialize, continuing without signaling");
+        }
+    } catch(const std::exception& e) {
+        MLOG_W("Signaling connector exception: {}, continuing without signaling", e.what());
+    }
+
     // Initialize Engine
     Engine engine(dbcfg);
+    
+    // Connect signaling to engine
+    if(signaling_ready) {
+        engine.set_signal_connector(&sig_connector);
+    }
 
     // Initialize and start HTTP endpoint
     asio::io_context ioc{1};

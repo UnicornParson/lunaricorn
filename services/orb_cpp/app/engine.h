@@ -8,6 +8,9 @@
 #include "blob_storage.h"
 #include "meta_storage.h"
 
+// Forward declaration
+class SignalConnector;
+
 class Engine
 {
 public:
@@ -30,9 +33,14 @@ public:
     // Status
     bool ok();
 
+    // Signaling integration
+    void set_signal_connector(SignalConnector* sc);
+
 private:
     BlobStorage blobs_;
     MetaStorage metas_;
+    SignalConnector* _signal_connector{nullptr};
 
     void update_has_blob(const std::string& id);
+    void notify_signaling(const std::string& event_type, const std::string& id, const std::string& uuid);
 };
