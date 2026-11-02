@@ -198,12 +198,12 @@ def update_region_reference(engine, session: requests.Session, region_id: int) -
     stmt = pg_insert(EveRegion).values(
         region_id=region_data['region_id'],
         name=region_data['name'],
-        description=region_data.get('description', '')
+        description=None
     ).on_conflict_do_update(
         index_elements=['region_id'],
         set_={
             'name': region_data['name'],
-            'description': region_data.get('description', '')
+            'description': None
         }
     )
     with sessionmaker(bind=engine)() as db:
@@ -320,8 +320,8 @@ def update_types_reference(engine, session: requests.Session, type_ids: List[int
                 'name': type_json['name'],
                 'group_id': type_json['group_id'],
                 'market_group_id': type_json.get('market_group_id'),
-                'description': type_json.get('description', ''),
-                'published': type_json.get('published', True)
+                'published': type_json.get('published', True),
+                'description': None
             }
             
             grp_id = type_json['group_id']
@@ -358,45 +358,57 @@ def update_types_reference(engine, session: requests.Session, type_ids: List[int
             print(f"\n⚠️ Ошибка загрузки типа {type_id}: {e}")
             continue
     
+    BATCH_SIZE = 500
+    
     with sessionmaker(bind=engine)() as db:
         if categories:
-            stmt = pg_insert(EveCategory).values(list(categories.values()))
-            stmt = stmt.on_conflict_do_update(
-                index_elements=['category_id'],
-                set_={
-                    'name': stmt.excluded.name,
-                    'published': stmt.excluded.published
-                }
-            )
-            db.execute(stmt)
+            items = list(categories.values())
+            for i in range(0, len(items), BATCH_SIZE):
+                batch = items[i:i + BATCH_SIZE]
+                stmt = pg_insert(EveCategory).values(batch)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=['category_id'],
+                    set_={
+                        'name': stmt.excluded.name,
+                        'published': stmt.excluded.published
+                    }
+                )
+                db.execute(stmt)
+                db.commit()
         
         if groups:
-            stmt = pg_insert(EveGroup).values(list(groups.values()))
-            stmt = stmt.on_conflict_do_update(
-                index_elements=['group_id'],
-                set_={
-                    'name': stmt.excluded.name,
-                    'category_id': stmt.excluded.category_id,
-                    'published': stmt.excluded.published
-                }
-            )
-            db.execute(stmt)
+            items = list(groups.values())
+            for i in range(0, len(items), BATCH_SIZE):
+                batch = items[i:i + BATCH_SIZE]
+                stmt = pg_insert(EveGroup).values(batch)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=['group_id'],
+                    set_={
+                        'name': stmt.excluded.name,
+                        'category_id': stmt.excluded.category_id,
+                        'published': stmt.excluded.published
+                    }
+                )
+                db.execute(stmt)
+                db.commit()
         
         if types:
-            stmt = pg_insert(EveType).values(list(types.values()))
-            stmt = stmt.on_conflict_do_update(
-                index_elements=['type_id'],
-                set_={
-                    'name': stmt.excluded.name,
-                    'group_id': stmt.excluded.group_id,
-                    'market_group_id': stmt.excluded.market_group_id,
-                    'description': stmt.excluded.description,
-                    'published': stmt.excluded.published
-                }
-            )
-            db.execute(stmt)
-        
-        db.commit()
+            items = list(types.values())
+            for i in range(0, len(items), BATCH_SIZE):
+                batch = items[i:i + BATCH_SIZE]
+                stmt = pg_insert(EveType).values(batch)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=['type_id'],
+                    set_={
+                        'name': stmt.excluded.name,
+                        'group_id': stmt.excluded.group_id,
+                        'market_group_id': stmt.excluded.market_group_id,
+                        'published': stmt.excluded.published,
+                        'description': None
+                    }
+                )
+                db.execute(stmt)
+                db.commit()
     
     print(f"   ✅ Категорий: {len(categories)}, групп: {len(groups)}, типов: {len(types)}")
     return True
@@ -481,8 +493,14 @@ def get_all_market_orders(region_id: int, order_type: str = 'all') -> Optional[L
             
             raw_data, _ = get_market_orders_raw(session, region_id, page, order_type)
             if raw_data is None:
-                print(f"\n⚠️ Не удалось получить страницу {page} после всех попыток. Пропускаем её.")
-                continue
+                print(f"\n⚠️ Не удалось получить страницу {page}. Повторная попытка через 5 секунд...")
+                time.sleep(5)
+                raw_data, _ = get_market_orders_raw(session, region_id, page, order_type)
+                if raw_data is None:
+                    print(f"❌ Страница {page} недоступна после повторной попытки. Пропускаем.")
+                    continue
+                else:
+                    print(f"✅ Повторная попытка успешна для страницы {page}")
             
             all_orders.extend(raw_data)
             
@@ -615,7 +633,6 @@ if __name__ == "__main__":
         "dodixie": 10000032,
         "rens": 10000030
     }
-    
     for reg_name, reg_id in regions.items():
         try:
             load_region(reg_id, reg_name)
